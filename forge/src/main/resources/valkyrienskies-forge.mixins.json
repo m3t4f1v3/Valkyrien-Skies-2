@@ -37,7 +37,7 @@
     "compat.create.client.MixinContraptionRenderInfo",
     "compat.create.client.MixinFlwContraption",
     "compat.create.client.MixinSuperGlueSelectionHandler",
-    "compat.sodium.MixinRenderSectionManager"
+    "compat.sodium.MixinRenderSectionManager",
     "compat.create.client.MixinTrackBlockOutline",
     "compat.sodium.MixinRenderSectionManager",
     "compat.tis3d.MixinCasingTileEntityRender",
