@@ -2,14 +2,24 @@ package org.valkyrienskies.mod.mixin.mod_compat.create;
 
 import com.simibubi.create.content.contraptions.Contraption;
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.Level;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.valkyrienskies.core.api.ships.LoadedServerShip;
+import org.valkyrienskies.mod.common.VSGameUtilsKt;
+import org.valkyrienskies.mod.common.util.SplittingDisablerAttachment;
 
 @Mixin(Contraption.class)
 public class MixinContraption {
+    @Shadow
+    public BlockPos anchor;
+
     @Redirect(method = "onEntityCreated", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/Level;addFreshEntity(Lnet/minecraft/world/entity/Entity;)Z"))
     private boolean wrapOp(Level level, Entity entity) {
         // BlockPos anchor = blockFace.getConnectedPos();
@@ -22,5 +32,31 @@ public class MixinContraption {
             entity.moveTo(anchor.getX() + .5, anchor.getY(), anchor.getZ() + .5);
         }
         return added;
+    }
+
+    @Inject(method = "removeBlocksFromWorld", at = @At("HEAD"))
+    private void preRemoveBlocksFromWorld(Level world, BlockPos pos, CallbackInfo ci) {
+        if (world instanceof ServerLevel sWorld && this.anchor != null) {
+            LoadedServerShip ship = VSGameUtilsKt.getShipObjectManagingPos(sWorld, this.anchor);
+            if (ship != null) {
+                SplittingDisablerAttachment attachment = ship.getAttachment(SplittingDisablerAttachment.class);
+                if (attachment != null) {
+                    attachment.disableSplitting();
+                }
+            }
+        }
+    }
+
+    @Inject(method = "removeBlocksFromWorld", at = @At("TAIL"))
+    private void postRemoveBlocksFromWorld(Level world, BlockPos pos, CallbackInfo ci) {
+        if (world instanceof ServerLevel sWorld && this.anchor != null) {
+            LoadedServerShip ship = VSGameUtilsKt.getShipObjectManagingPos(sWorld, this.anchor);
+            if (ship != null) {
+                SplittingDisablerAttachment attachment = ship.getAttachment(SplittingDisablerAttachment.class);
+                if (attachment != null) {
+                    attachment.enableSplitting();
+                }
+            }
+        }
     }
 }

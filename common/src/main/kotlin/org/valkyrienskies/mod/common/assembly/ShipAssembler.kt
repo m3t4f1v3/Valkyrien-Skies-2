@@ -7,9 +7,9 @@ import net.minecraft.world.level.block.state.BlockState
 import org.joml.Vector3d
 import org.joml.Vector3i
 import org.joml.Vector3ic
+import org.valkyrienskies.core.api.VsBeta
 import org.valkyrienskies.core.api.ships.ServerShip
 import org.valkyrienskies.core.api.ships.Ship
-import org.valkyrienskies.core.api.ships.getAttachment
 import org.valkyrienskies.core.impl.game.ShipTeleportDataImpl
 import org.valkyrienskies.mod.common.BlockStateInfo.onSetBlock
 import org.valkyrienskies.mod.common.dimensionId
@@ -32,6 +32,7 @@ object ShipAssembler {
     }
 
 
+    @OptIn(VsBeta::class)
     fun assembleToShip(level: Level, blocks: List<BlockPos>, removeOriginal: Boolean, scale: Double = 1.0, shouldDisableSplitting: Boolean = false): ServerShip {
         assert(level is ServerLevel) { "Can't create ships clientside!" }
         val sLevel: ServerLevel = level as ServerLevel
@@ -73,7 +74,7 @@ object ShipAssembler {
             .createNewShipAtBlock(contraptionWorldPos, false, scale, level.dimensionId)
 
         if (shouldDisableSplitting) {
-            level.shipObjectWorld.loadedShips.getById(newShip.id)?.getAttachment<SplittingDisablerAttachment>()?.disableSplitting()
+            level.shipObjectWorld.loadedShips.getById(newShip.id)?.getAttachment(SplittingDisablerAttachment::class.java)?.disableSplitting()
 
         }
 
@@ -125,7 +126,7 @@ object ShipAssembler {
                 .teleportShip(newShip as ServerShip, ShipTeleportDataImpl(newPos = shipPos, newPosInShip = shipCenterPos))
         }
         if (shouldDisableSplitting) {
-            level.shipObjectWorld.loadedShips.getById(newShip.id)?.getAttachment<SplittingDisablerAttachment>()?.enableSplitting()
+            level.shipObjectWorld.loadedShips.getById(newShip.id)?.getAttachment(SplittingDisablerAttachment::class.java)?.enableSplitting()
         }
 
         return newShip as ServerShip

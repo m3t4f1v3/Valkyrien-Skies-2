@@ -22,6 +22,7 @@ import org.valkyrienskies.mod.common.entity.ShipMountingEntity
 import org.valkyrienskies.mod.common.entity.VSPhysicsEntity
 import org.valkyrienskies.mod.common.networking.VSGamePackets
 import org.valkyrienskies.mod.common.util.GameTickForceApplier
+import org.valkyrienskies.mod.common.util.ShipSettings
 import org.valkyrienskies.mod.common.util.SplitHandler
 import org.valkyrienskies.mod.common.util.SplittingDisablerAttachment
 
@@ -55,7 +56,9 @@ object ValkyrienSkiesMod {
     val vsCoreClient get() = vsCore as VSCoreClient
 
     @JvmStatic
-    val api = VsApiImpl()
+    val api by lazy {
+        VsApiImpl(vsCore)
+    }
 
     @JvmStatic
     lateinit var splitHandler: SplitHandler
@@ -70,6 +73,14 @@ object ValkyrienSkiesMod {
         core.registerConfigLegacy("vs", VSGameConfig::class.java)
 
         splitHandler = SplitHandler(this.vsCore.hooks.enableBlockEdgeConnectivity, this.vsCore.hooks.enableBlockCornerConnectivity)
+
+        core.registerAttachment(ShipSettings::class.java)
+        core.registerAttachment(GameTickForceApplier::class.java) {
+            useLegacySerializer()
+        }
+        core.registerAttachment(SplittingDisablerAttachment::class.java) {
+            useLegacySerializer()
+        }
 
         VSEvents.ShipLoadEvent.on { event ->
             event.ship.setAttachment(GameTickForceApplier())
