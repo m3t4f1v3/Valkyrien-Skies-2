@@ -15,6 +15,7 @@ import org.valkyrienskies.core.api.ships.setAttachment
 import org.valkyrienskies.core.apigame.VSCore
 import org.valkyrienskies.core.apigame.VSCoreClient
 import org.valkyrienskies.core.impl.hooks.VSEvents
+import org.valkyrienskies.mod.api.SeatedControllingPlayer
 import org.valkyrienskies.mod.api_impl.events.VsApiImpl
 import org.valkyrienskies.mod.common.blockentity.TestHingeBlockEntity
 import org.valkyrienskies.mod.common.config.VSGameConfig
@@ -76,6 +77,9 @@ object ValkyrienSkiesMod {
 
         core.registerAttachment(ShipSettings::class.java)
         core.registerAttachment(GameTickForceApplier::class.java) {
+            useLegacySerializer()
+        }
+        core.registerAttachment(SeatedControllingPlayer::class.java) {
             useLegacySerializer()
         }
         core.registerAttachment(SplittingDisablerAttachment::class.java) {

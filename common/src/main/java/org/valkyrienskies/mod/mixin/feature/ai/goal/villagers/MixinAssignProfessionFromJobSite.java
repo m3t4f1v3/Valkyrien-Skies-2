@@ -13,10 +13,11 @@ import org.valkyrienskies.mod.common.VSGameUtilsKt;
 
 @Mixin(AssignProfessionFromJobSite.class)
 public class MixinAssignProfessionFromJobSite {
-    @WrapOperation(method = "*", at = @At(
+    @WrapOperation(method = "method_46890(Lnet/minecraft/world/entity/ai/behavior/declarative/BehaviorBuilder$Instance;Lnet/minecraft/world/entity/ai/behavior/declarative/MemoryAccessor;Lnet/minecraft/world/entity/ai/behavior/declarative/MemoryAccessor;Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/entity/npc/Villager;J)Z", at = @At(
         value = "INVOKE",
         target = "Lnet/minecraft/core/BlockPos;closerToCenterThan(Lnet/minecraft/core/Position;D)Z"))
-    private boolean onCloserToCenterThan(BlockPos instance, Position position, double v, Operation<Boolean> original, @Local
+    private static boolean onCloserToCenterThan(BlockPos instance, Position position, double v,
+        Operation<Boolean> original, @Local
         Villager villager) {
         return original.call(BlockPos.containing(VSGameUtilsKt.toWorldCoordinates(villager.level(), instance)), position, v);
     }

@@ -15,9 +15,9 @@ import org.valkyrienskies.mod.common.VSGameUtilsKt;
 
 @Mixin(GoToClosestVillage.class)
 public class MixinGoToClosestVillage {
-    @WrapOperation(method = "*", at = @At(
+    @WrapOperation(method = "method_46937", at = @At(
         value = "INVOKE", target = "Lnet/minecraft/world/entity/ai/village/poi/PoiManager;sectionsToVillage(Lnet/minecraft/core/SectionPos;)I", ordinal = 0))
-    private int onSectionsToVillageInitial(PoiManager poiManager, SectionPos sectionPos, Operation<Integer> original, @Local Villager villager) {
+    private static int onSectionsToVillageInitial(PoiManager poiManager, SectionPos sectionPos, Operation<Integer> original, @Local Villager villager) {
         int[] currentLevels = {original.call(poiManager, sectionPos)};
         VSGameUtilsKt.transformToNearbyShipsAndWorld(villager.level(), villager.getX(), villager.getY(), villager.getZ(), 100, (double x, double y, double z) -> {
             currentLevels[0] = Math.min(currentLevels[0], original.call(poiManager, SectionPos.of(BlockPos.containing(x, y, z))));
@@ -25,9 +25,9 @@ public class MixinGoToClosestVillage {
         return currentLevels[0];
     }
 
-    @WrapOperation(method = "*", at = @At(
+    @WrapOperation(method = "method_46937", at = @At(
         value = "INVOKE", target = "Lnet/minecraft/world/entity/ai/village/poi/PoiManager;sectionsToVillage(Lnet/minecraft/core/SectionPos;)I", ordinal = 1))
-    private int onSectionsToVillageVec3(PoiManager poiManager, SectionPos sectionPos, Operation<Integer> original, @Local Villager villager, @Local(ordinal = 1) Vec3 vec32) {
+    private static int onSectionsToVillageVec3(PoiManager poiManager, SectionPos sectionPos, Operation<Integer> original, @Local Villager villager, @Local(ordinal = 1) Vec3 vec32) {
         int[] currentLevels = {original.call(poiManager, sectionPos)};
         VSGameUtilsKt.transformToNearbyShipsAndWorld(villager.level(), vec32.x, vec32.y, vec32.z, 100, (double x, double y, double z) -> {
             currentLevels[0] = Math.min(currentLevels[0], original.call(poiManager, SectionPos.of(BlockPos.containing(x, y, z))));

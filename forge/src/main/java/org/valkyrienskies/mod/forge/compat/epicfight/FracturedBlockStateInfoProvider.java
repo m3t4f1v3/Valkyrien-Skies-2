@@ -1,7 +1,5 @@
 package org.valkyrienskies.mod.forge.compat.epicfight;
 
-import java.util.List;
-import kotlin.Triple;
 import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.block.state.BlockState;
@@ -11,15 +9,13 @@ import org.valkyrienskies.core.apigame.world.chunks.BlockType;
 import org.valkyrienskies.mod.common.BlockStateInfo;
 import org.valkyrienskies.mod.common.BlockStateInfoProvider;
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod;
-import org.valkyrienskies.physics_api.voxel.Lod1LiquidBlockState;
-import org.valkyrienskies.physics_api.voxel.Lod1SolidBlockState;
 import yesman.epicfight.main.EpicFightMod;
 import yesman.epicfight.world.level.block.FractureBlockState;
 
 public class FracturedBlockStateInfoProvider implements BlockStateInfoProvider {
     public static void register() {
         Registry.register(BlockStateInfo.INSTANCE.getREGISTRY(),
-            new ResourceLocation(EpicFightMod.MODID, "fractured"), new FracturedBlockStateInfoProvider());
+            ResourceLocation.tryBuild(EpicFightMod.MODID, "fractured"), new FracturedBlockStateInfoProvider());
     }
 
     @Override
@@ -43,21 +39,4 @@ public class FracturedBlockStateInfoProvider implements BlockStateInfoProvider {
         return null;
     }
 
-    @NotNull
-    @Override
-    public List<Lod1SolidBlockState> getSolidBlockStates() {
-        return List.of();
-    }
-
-    @NotNull
-    @Override
-    public List<Lod1LiquidBlockState> getLiquidBlockStates() {
-        return List.of();
-    }
-
-    @NotNull
-    @Override
-    public List<Triple<Integer, Integer, Integer>> getBlockStateData() {
-        return List.of();
-    }
 }
