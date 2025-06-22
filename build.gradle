@@ -87,22 +87,27 @@ subprojects {
         } catch (UnknownDomainObjectException ignore) {}
 
         mavenCentral()
+        maven {
+            url "https://cursemaven.com"
+            content {
+                includeModule "curse.maven", "kotlinforforge-351264"
+            }
+        }
         if (!project.block_external_repositories) {
             mavenLocal()
             maven {
                 name = "ParchmentMC"
                 url = "https://maven.parchmentmc.org"
             }
-            maven { url = "https://cursemaven.com" }
             maven { url = "https://maven.terraformersmc.com/releases/" } // Mod Menu
             maven {
                 name = 'Kotlin for Forge'
                 url = 'https://thedarkcolour.github.io/KotlinForForge/'
             }
-            maven {
-                name = 'tterrag maven'
-                url = 'https://maven.tterrag.com/'
-            }
+//            maven {
+//                name = 'tterrag maven'
+//                url = 'https://maven.tterrag.com/'
+//            }
             maven { url = "https://modmaven.dev/" } // Twilight Forest
             maven { url = "https://api.modrinth.com/maven" } // LazyDFU, Suggestion Tweaker, Create Big Cannons
             maven { url = "https://maven.shedaniel.me/" } // Cloth Config, REI
@@ -110,7 +115,7 @@ subprojects {
             maven { url = "https://mvn.devos.one/snapshots/" } // Fabric Create, Porting Lib, Forge Tags, Milk Lib
             maven { url = "https://mvn.devos.one/releases/" }
             maven { url = "https://raw.githubusercontent.com/Fuzss/modresources/main/maven/" } // Forge Config API Port
-            maven { url = "https://maven.tterrag.com/" } // Registrate, Forge Create and Flywheel
+            //maven { url = "https://maven.tterrag.com/" } // Registrate, Forge Create and Flywheel
             maven { url = "https://maven.cafeteria.dev/releases" } // Fake Player API
             maven { url = "https://maven.jamieswhiteshirt.com/libs-release" } // Reach Entity Attributes
             maven { url = "https://maven.realrobotix.me/createbigcannons/" } // Create Big Cannons
@@ -120,7 +125,8 @@ subprojects {
                     includeGroup "dev.ftb.mods"
                 }
             }
-            maven { url = "https://jitpack.io"}
+            //please dont enable unless ABSOLUTELY necessary
+            //maven { url = "https://jitpack.io"}
         }
         maven {
             name = "Valkyrien Skies Internal"
@@ -135,14 +141,15 @@ subprojects {
     }
 
     // Remove automatically added repos
-    if (project.block_external_repositories) {
-        repositories.removeIf {
-            def url = it.url.toString()
-            url.contains("maven.minecraftforge.net") ||
-                url.contains("maven.fabricmc.net") ||
-                url.contains("maven.architectury.dev")
-        }
-    }
+    //please remember to uncomment this
+//    if (project.block_external_repositories) {
+//        repositories.removeIf {
+//            def url = it.url.toString()
+//            url.contains("maven.minecraftforge.net") ||
+//                url.contains("maven.fabricmc.net") ||
+//                url.contains("maven.architectury.dev")
+//        }
+//    }
 
     dependencies {
         minecraft "com.mojang:minecraft:${rootProject.minecraft_version}"
