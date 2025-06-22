@@ -13,6 +13,7 @@ import net.minecraft.BlockUtil;
 import net.minecraft.BlockUtil.FoundRectangle;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.Direction.Axis;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -21,13 +22,23 @@ import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.dimension.DimensionType;
+import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.portal.PortalInfo;
 import net.minecraft.world.level.portal.PortalShape;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.Shapes;
+import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.joml.Vector3d;
+import org.joml.Vector3dc;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -35,11 +46,15 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.At.Shift;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.valkyrienskies.core.api.ships.LoadedServerShip;
 import org.valkyrienskies.core.api.ships.properties.IShipActiveChunksSet;
 import org.valkyrienskies.core.apigame.GameServer;
+import org.valkyrienskies.core.apigame.ShipTeleportData;
+import org.valkyrienskies.core.apigame.ships.LoadedServerShipCore;
 import org.valkyrienskies.core.apigame.world.IPlayer;
 import org.valkyrienskies.core.apigame.world.ServerShipWorldCore;
 import org.valkyrienskies.core.apigame.world.VSPipeline;
+import org.valkyrienskies.core.impl.game.ShipTeleportDataImpl;
 import org.valkyrienskies.mod.common.IShipObjectWorldServerProvider;
 import org.valkyrienskies.mod.common.ShipSavedData;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
@@ -47,8 +62,10 @@ import org.valkyrienskies.mod.common.ValkyrienSkiesMod;
 import org.valkyrienskies.mod.common.config.MassDatapackResolver;
 import org.valkyrienskies.mod.common.hooks.VSGameEvents;
 import org.valkyrienskies.mod.common.util.EntityDragger;
+import org.valkyrienskies.mod.common.util.ShipSettingsKt;
 import org.valkyrienskies.mod.common.util.VSLevelChunk;
 import org.valkyrienskies.mod.common.util.VSServerLevel;
+import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
 import org.valkyrienskies.mod.common.world.ChunkManagement;
 import org.valkyrienskies.mod.compat.LoadedMods;
 import org.valkyrienskies.mod.compat.Weather2Compat;
@@ -220,7 +237,7 @@ public abstract class MixinMinecraftServer implements IShipObjectWorldServerProv
         vsPipeline.postTickGame();
         // Only drag entities after we have updated the ship positions
         for (final ServerLevel level : getAllLevels()) {
-            EntityDragger.INSTANCE.dragEntitiesWithShips(level.getAllEntities());
+            EntityDragger.INSTANCE.dragEntitiesWithShips(level.getAllEntities(), false);
             if (LoadedMods.getWeather2())
                 Weather2Compat.INSTANCE.tick(level);
         }
@@ -228,7 +245,7 @@ public abstract class MixinMinecraftServer implements IShipObjectWorldServerProv
         //TODO must reimplement
         // handleShipPortals();
     }
-/* TODO must redo
+
     @Unique
     private void handleShipPortals() {
         // Teleport ships that touch portals
@@ -245,7 +262,7 @@ public abstract class MixinMinecraftServer implements IShipObjectWorldServerProv
             final BlockPos blockPos2 = BlockPos.containing(shipPos.x() + bbRadius, shipPos.y() + bbRadius, shipPos.z() + bbRadius);
             // Only run this code if the chunks between blockPos and blockPos2 are loaded
             if (level.hasChunksAt(blockPos, blockPos2)) {
-                shipObject.decayPortalCoolDown();
+                ((LoadedServerShipCore) shipObject).decayPortalCoolDown();
 
                 final BlockPos.MutableBlockPos mutableBlockPos = new BlockPos.MutableBlockPos();
                 for (int i = blockPos.getX(); i <= blockPos2.getX(); ++i) {
@@ -255,7 +272,7 @@ public abstract class MixinMinecraftServer implements IShipObjectWorldServerProv
                             final BlockState blockState = level.getBlockState(mutableBlockPos);
                             if (blockState.getBlock() == Blocks.NETHER_PORTAL) {
                                 // Handle nether portal teleport
-                                if (!shipObject.isOnPortalCoolDown()) {
+                                if (!((LoadedServerShipCore) shipObject).isOnPortalCoolDown()) {
                                     // Move the ship between dimensions
                                     final ServerLevel destLevel = getLevel(level.dimension() == Level.NETHER ? Level.OVERWORLD : Level.NETHER);
                                     // TODO: Do we want portal time?
@@ -265,7 +282,7 @@ public abstract class MixinMinecraftServer implements IShipObjectWorldServerProv
                                         level.getProfiler().pop();
                                     }
                                 }
-                                shipObject.handleInsidePortal();
+                                ((LoadedServerShipCore) shipObject).handleInsidePortal();
                             } else if (blockState.getBlock() == Blocks.END_PORTAL) {
                                 // Handle end portal teleport
                                 final ServerLevel destLevel = level.getServer().getLevel(level.dimension() == Level.END ? Level.OVERWORLD : Level.END);
@@ -281,11 +298,10 @@ public abstract class MixinMinecraftServer implements IShipObjectWorldServerProv
         }
     }
 
- */
-/* TODO Must redo
     @Unique
     private void shipChangeDimension(@NotNull final ServerLevel srcLevel, @NotNull final ServerLevel destLevel, @Nullable final BlockPos portalEntrancePos, @NotNull final LoadedServerShip shipObject) {
-        final PortalInfo portalInfo = findDimensionEntryPoint(srcLevel, destLevel, portalEntrancePos, shipObject.getTransform().getPositionInWorld());
+        final PortalInfo
+            portalInfo = findDimensionEntryPoint(srcLevel, destLevel, portalEntrancePos, shipObject.getTransform().getPositionInWorld());
         if (portalInfo == null) {
             // Getting portal info failed? Don't teleport.
             return;
@@ -340,11 +356,44 @@ public abstract class MixinMinecraftServer implements IShipObjectWorldServerProv
                 axis = Direction.Axis.X;
                 vec3 = new Vec3(0.5, 0.0, 0.0);
             }
-            return PortalShape.createPortalInfo(destLevel, foundRectangle, axis, vec3, entityDimensions, deltaMovement, 0.0f, 0.0f);
+            return valkyrienskies$createPortalInfo(destLevel, foundRectangle, axis, vec3, entityDimensions, deltaMovement, 0.0f, 0.0f);
         }).orElse(null);
     }
 
- */
+    @Unique
+    private static PortalInfo valkyrienskies$createPortalInfo(ServerLevel serverLevel, BlockUtil.FoundRectangle foundRectangle,
+        Direction.Axis axis, Vec3 vec3, EntityDimensions entityDimensions, Vec3 vec32, float f, float g) {
+        BlockPos blockPos = foundRectangle.minCorner;
+        BlockState blockState = serverLevel.getBlockState(blockPos);
+        Direction.Axis axis2 = (Direction.Axis)blockState.getOptionalValue(BlockStateProperties.HORIZONTAL_AXIS).orElse(
+            Axis.X);
+        double d = (double)foundRectangle.axis1Size;
+        double e = (double)foundRectangle.axis2Size;
+        int i = axis == axis2 ? 0 : 90;
+        Vec3 vec33 = axis == axis2 ? vec32 : new Vec3(vec32.z, vec32.y, -vec32.x);
+        double h = (double)entityDimensions.width / (double)2.0F + (d - (double)entityDimensions.width) * vec3.x();
+        double j = (e - (double)entityDimensions.height) * vec3.y();
+        double k = (double)0.5F + vec3.z();
+        boolean bl = axis2 == Axis.X;
+        Vec3 vec34 = new Vec3((double)blockPos.getX() + (bl ? h : k), (double)blockPos.getY() + j, (double)blockPos.getZ() + (bl ? k : h));
+        Vec3 vec35 = valkyrienskies$findCollisionFreePosition(vec34, serverLevel, entityDimensions);
+        return new PortalInfo(vec35, vec33, f + (float)i, g);
+    }
+
+    @Unique
+    private static Vec3 valkyrienskies$findCollisionFreePosition(Vec3 vec3, ServerLevel serverLevel, EntityDimensions entityDimensions) {
+        if (!(entityDimensions.width > 4.0F) && !(entityDimensions.height > 4.0F)) {
+            double d = (double)entityDimensions.height / (double)2.0F;
+            Vec3 vec32 = vec3.add((double)0.0F, d, (double)0.0F);
+            VoxelShape voxelShape = Shapes.create(
+                AABB.ofSize(vec32, (double)entityDimensions.width, (double)0.0F, (double)entityDimensions.width).expandTowards((double)0.0F, (double)1.0F, (double)0.0F).inflate(1.0E-6));
+            Optional<Vec3> optional = serverLevel.findFreePosition(null, voxelShape, vec32, (double)entityDimensions.width, (double)entityDimensions.height, (double)entityDimensions.width);
+            Optional<Vec3> optional2 = optional.map((vec3x) -> vec3x.subtract((double)0.0F, d, (double)0.0F));
+            return (Vec3)optional2.orElse(vec3);
+        } else {
+            return vec3;
+        }
+    }
 
     @Unique
     private Vec3 getRelativePortalPosition(final Direction.Axis axis, final BlockUtil.FoundRectangle foundRectangle, final EntityDimensions entityDimensions, final Vec3 position) {

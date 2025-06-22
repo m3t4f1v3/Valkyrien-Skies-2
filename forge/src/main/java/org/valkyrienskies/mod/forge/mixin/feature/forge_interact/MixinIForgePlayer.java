@@ -40,6 +40,7 @@ public interface MixinIForgePlayer {
         }
     }
 
+
     @Overwrite(remap = false)
     default boolean isCloseEnough(final Entity entity, final double distance) {
         if (VSGameConfig.SERVER.getEnableInteractDistanceChecks()) {

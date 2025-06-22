@@ -77,6 +77,7 @@ dependencies {
     modCompileOnly("maven.modrinth:cc-tweaked:${cc_tweaked_version}")
 
     // EMF compat
+    //todo: fix
     modCompileOnly("curse.maven:entity-model-features-844662:5696901")
     modCompileOnly("curse.maven:entity-texture-features-fabric-568563:5697084")
 

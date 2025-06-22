@@ -2,7 +2,6 @@ package org.valkyrienskies.mod.compat
 
 import net.minecraft.server.level.ServerLevel
 import org.joml.Vector3d
-import org.valkyrienskies.core.api.ships.getAttachment
 import org.valkyrienskies.mod.common.config.VSGameConfig
 import org.valkyrienskies.mod.common.shipObjectWorld
 import org.valkyrienskies.mod.common.util.GameTickForceApplier
@@ -15,14 +14,16 @@ object Weather2Compat {
         val mgr = ServerTickHandler
             .getWeatherManagerFor(level.dimension())
 
-        val windMult = VSGameConfig.SERVER.Weather2.windMultiplier
+        // Devided by 1000 because we need a very small multiplier but the config is weird with very small decimals
+        val windMult = VSGameConfig.SERVER.Weather2.windMultiplier / 1000
         val windMax = VSGameConfig.SERVER.Weather2.windMaxVel
         val stormDampen = 1.0f - VSGameConfig.SERVER.Weather2.stormDampening
         val stormRange = VSGameConfig.SERVER.Weather2.stormRange
 
-        val vec = Vector3d()
+
         level.shipObjectWorld.loadedShips.forEach { ship ->
-            val forces = ship.getAttachment<GameTickForceApplier>()!!
+            val vec = Vector3d()
+            val forces = ship.getAttachment(GameTickForceApplier::class.java)!!
 
             val com = ship.inertiaData.centerOfMassInShip
 

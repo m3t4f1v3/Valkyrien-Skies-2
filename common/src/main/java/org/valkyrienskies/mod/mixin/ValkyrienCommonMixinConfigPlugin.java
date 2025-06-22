@@ -17,7 +17,7 @@ import org.valkyrienskies.mod.compat.VSRenderer;
 public class ValkyrienCommonMixinConfigPlugin implements IMixinConfigPlugin {
 
     private static final boolean PATH_FINDING_DEBUG =
-        "true".equals(System.getProperty("org.valkyrienskies.render_pathfinding"));
+        "false".equals(System.getProperty("org.valkyrienskies.render_pathfinding"));
     private static VSRenderer vsRenderer = null;
 
     public static VSRenderer getVSRenderer() {

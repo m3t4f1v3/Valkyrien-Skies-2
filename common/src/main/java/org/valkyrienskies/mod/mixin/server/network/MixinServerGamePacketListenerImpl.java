@@ -9,6 +9,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -28,6 +29,7 @@ import org.valkyrienskies.core.apigame.world.ServerShipWorldCore;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.config.VSGameConfig;
 import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
+import org.valkyrienskies.mod.mixinducks.world.entity.PlayerDuck;
 
 @Mixin(ServerGamePacketListenerImpl.class)
 public abstract class MixinServerGamePacketListenerImpl {
@@ -176,6 +178,20 @@ public abstract class MixinServerGamePacketListenerImpl {
         final ServerShipWorldCore world = VSGameUtilsKt.getShipObjectWorld(this.server);
         if (world != null) {
             world.onDisconnect(VSGameUtilsKt.getPlayerWrapper(this.player));
+        }
+    }
+
+    @Inject(
+        method = "handleMovePlayer",
+        at = @At("TAIL")
+    )
+    void afterHandleMovePlayer(ServerboundMovePlayerPacket serverboundMovePlayerPacket, CallbackInfo ci) {
+        if (this.player instanceof PlayerDuck duck) {
+            duck.vs_setHandledMovePacket(true);
+            if (duck.vs_getQueuedPositionUpdate() != null) {
+                this.player.setPos(duck.vs_getQueuedPositionUpdate());
+                duck.vs_setQueuedPositionUpdate(null);
+            }
         }
     }
 

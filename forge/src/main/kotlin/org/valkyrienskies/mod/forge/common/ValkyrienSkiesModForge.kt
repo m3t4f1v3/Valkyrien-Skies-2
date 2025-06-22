@@ -17,6 +17,7 @@ import net.minecraftforge.client.event.RegisterKeyMappingsEvent
 import net.minecraftforge.event.AddReloadListenerEvent
 import net.minecraftforge.event.RegisterCommandsEvent
 import net.minecraftforge.event.TagsUpdatedEvent
+import net.minecraftforge.fml.ModList
 import net.minecraftforge.fml.ModLoadingContext
 import net.minecraftforge.fml.common.Mod
 import net.minecraftforge.fml.common.Mod.EventBusSubscriber.Bus
@@ -52,6 +53,7 @@ import org.valkyrienskies.mod.common.item.PhysicsEntityCreatorItem
 import org.valkyrienskies.mod.common.item.ShipAssemblerItem
 import org.valkyrienskies.mod.common.item.ShipCreatorItem
 import org.valkyrienskies.mod.compat.clothconfig.VSClothConfig
+import org.valkyrienskies.mod.forge.compat.epicfight.FracturedBlockStateInfoProvider
 
 @Mod(MOD_ID)
 class ValkyrienSkiesModForge {
@@ -184,6 +186,10 @@ class ValkyrienSkiesModForge {
             ValkyrienSkiesMod.createCreativeTab()
         }
         deferredRegister.register(modBus)
+
+        if (ModList.get().isLoaded("epicfight")) {
+            FracturedBlockStateInfoProvider.register()
+        }
     }
 
     private fun registerResourceManagers(event: AddReloadListenerEvent) {
@@ -209,11 +215,11 @@ class ValkyrienSkiesModForge {
     }
 
     private fun registerCommands(event: RegisterCommandsEvent) {
-        VSCommands.registerServerCommands(event.dispatcher)
+        //VSCommands.registerServerCommands(event.dispatcher)
 
-        if (event.commandSelection == ALL || event.commandSelection == INTEGRATED) {
-            VSCommands.registerClientCommands(event.dispatcher)
-        }
+        //if (event.commandSelection == ALL || event.commandSelection == INTEGRATED) {
+        //    VSCommands.registerClientCommands(event.dispatcher)
+        //}
     }
 
     private fun tagsUpdated(event: TagsUpdatedEvent) {

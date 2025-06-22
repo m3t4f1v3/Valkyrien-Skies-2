@@ -4,9 +4,9 @@ buildscript {
     }
     dependencies {
         // Make sure this version matches the one included in Kotlin for Forge
-        classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.6.10'
+        classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.22'
         // OPTIONAL Gradle plugin for Kotlin Serialization
-        classpath 'org.jetbrains.kotlin:kotlin-serialization:1.6.10'
+        classpath 'org.jetbrains.kotlin:kotlin-serialization:1.9.22'
     }
 }
 
@@ -84,6 +84,7 @@ dependencies {
     modCompileOnly("maven.modrinth:cc-tweaked:${cc_tweaked_version}")
 
     // EMF compat
+    //todo: fix
     modCompileOnly("curse.maven:entity-model-features-844662:5696899")
     modCompileOnly("curse.maven:entity-texture-features-fabric-568563:5697083")
 
@@ -96,6 +97,12 @@ dependencies {
 
     // Modular Routers
     modCompileOnly("curse.maven:mr-250294:4696089")
+
+    // Modular Force Field System
+    modCompileOnly("maven.modrinth:mffs:5.1.18")
+
+    // Epic Fight
+    modCompileOnly("maven.modrinth:epic-fight:20.10.3")
 
     // Integrated Dynamics
     modCompileOnly("curse.maven:integrated-dynamics-236307:5297722")
