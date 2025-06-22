@@ -86,6 +86,8 @@ object ValkyrienSkiesMod {
             useLegacySerializer()
         }
 
+        VSEvents.collisionEndEvent
+
         VSEvents.ShipLoadEvent.on { event ->
             event.ship.setAttachment(GameTickForceApplier())
             event.ship.setAttachment(SplittingDisablerAttachment(true))
