@@ -53,6 +53,7 @@ import org.valkyrienskies.mod.common.world.ChunkManagement;
 import org.valkyrienskies.mod.compat.LoadedMods;
 import org.valkyrienskies.mod.compat.Weather2Compat;
 import org.valkyrienskies.mod.util.KrunchSupport;
+import org.valkyrienskies.mod.util.McMathUtilKt;
 
 @Mixin(MinecraftServer.class)
 public abstract class MixinMinecraftServer implements IShipObjectWorldServerProvider, GameServer {
@@ -114,6 +115,14 @@ public abstract class MixinMinecraftServer implements IShipObjectWorldServerProv
         )
     )
     private void postCreateLevels(final CallbackInfo ci) {
+        // Register blocks
+        if (!MassDatapackResolver.INSTANCE.getRegisteredBlocks()) {
+            final List<BlockState> blockStateList = new ArrayList<>(Block.BLOCK_STATE_REGISTRY.size());
+            Block.BLOCK_STATE_REGISTRY.forEach((blockStateList::add));
+            MassDatapackResolver.INSTANCE.registerAllBlockStates(blockStateList);
+            ValkyrienSkiesMod.getVsCore().registerBlockStates(MassDatapackResolver.INSTANCE.getBlockStateData());
+        }
+
         // Load ship data from the world storage
         final ShipSavedData shipSavedData = overworld().getDataStorage()
             .computeIfAbsent(ShipSavedData::load, ShipSavedData.Companion::createEmpty, ShipSavedData.SAVED_DATA_ID);
@@ -130,18 +139,6 @@ public abstract class MixinMinecraftServer implements IShipObjectWorldServerProv
         // Create ship world and VS Pipeline
         vsPipeline = shipSavedData.getPipeline();
 
-        // Register blocks
-        if (!MassDatapackResolver.INSTANCE.getRegisteredBlocks()) {
-            final List<BlockState> blockStateList = new ArrayList<>(Block.BLOCK_STATE_REGISTRY.size());
-            Block.BLOCK_STATE_REGISTRY.forEach((blockStateList::add));
-            MassDatapackResolver.INSTANCE.registerAllBlockStates(blockStateList);
-        }
-        vsPipeline.registerBlocks(
-            MassDatapackResolver.INSTANCE.getSolidBlockStates(),
-            MassDatapackResolver.INSTANCE.getLiquidBlockStates(),
-            MassDatapackResolver.INSTANCE.getBlockStateData()
-        );
-
         KrunchSupport.INSTANCE.setKrunchSupported(!vsPipeline.isUsingDummyPhysics());
 
         shipWorld = vsPipeline.getShipWorld();
@@ -151,7 +148,8 @@ public abstract class MixinMinecraftServer implements IShipObjectWorldServerProv
 
         getShipObjectWorld().addDimension(
             VSGameUtilsKt.getDimensionId(overworld()),
-            VSGameUtilsKt.getYRange(overworld())
+            VSGameUtilsKt.getYRange(overworld()),
+            McMathUtilKt.getDEFAULT_WORLD_GRAVITY()
         );
     }
 
@@ -223,8 +221,8 @@ public abstract class MixinMinecraftServer implements IShipObjectWorldServerProv
         // Only drag entities after we have updated the ship positions
         for (final ServerLevel level : getAllLevels()) {
             EntityDragger.INSTANCE.dragEntitiesWithShips(level.getAllEntities());
-
-            if (LoadedMods.getWeather2()) Weather2Compat.INSTANCE.tick(level);
+            if (LoadedMods.getWeather2())
+                Weather2Compat.INSTANCE.tick(level);
         }
 
         //TODO must reimplement
@@ -298,6 +296,7 @@ public abstract class MixinMinecraftServer implements IShipObjectWorldServerProv
             new Vector3d(),
             new Vector3d(),
             VSGameUtilsKt.getDimensionId(destLevel),
+            null,
             null
         );
         shipWorld.teleportShip(shipObject, shipTeleportData);
