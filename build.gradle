@@ -108,6 +108,10 @@ subprojects {
 //                name = 'tterrag maven'
 //                url = 'https://maven.tterrag.com/'
 //            }
+            maven {
+                name "createmod maven"
+                url "https://maven.createmod.net/"
+            }
             maven { url = "https://modmaven.dev/" } // Twilight Forest
             maven { url = "https://api.modrinth.com/maven" } // LazyDFU, Suggestion Tweaker, Create Big Cannons
             maven { url = "https://maven.shedaniel.me/" } // Cloth Config, REI

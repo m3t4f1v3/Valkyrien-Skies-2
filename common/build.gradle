@@ -44,7 +44,11 @@ dependencies {
     modCompileOnly("com.simibubi.create:create-fabric-${minecraft_version}:${create_fabric_version}")
         { exclude group: 'com.github.AlphaMode', module: 'fakeconfigtoml' }
     modCompileOnly("net.fabricmc.fabric-api:fabric-api:${fabric_api_version}")
-    modCompileOnly("dev.engine_room.flywheel:flywheel-fabric-${minecraft_version}:${flywheel_version_fabric}")
+
+//    modApi "dev.engine-room.flywheel:flywheel-fabric-api-${minecraft_version}:${flywheel_version}"
+//    modCompileOnly("dev.engine-room.flywheel:flywheel-fabric-${minecraft_version}:${flywheel_version}")
+
+    compileOnlyApi("dev.engine-room.flywheel:flywheel-common-mojmap-api-${minecraft_version}:${flywheel_version}")
 
     modCompileOnly("maven.modrinth:create-utilities:${create_utilities_version}")
     modImplementation("teamreborn:energy:${energy_version}")
