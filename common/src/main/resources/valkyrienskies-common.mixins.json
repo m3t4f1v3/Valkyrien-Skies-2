@@ -133,6 +133,8 @@
     "mod_compat.create_big_cannons.MixinPitchOrientedContraptionEntity",
     "mod_compat.create_big_cannons.MixinSSFCMVP",
     "mod_compat.create_utilities.MixinVoidLinkBehaviour",
+    "mod_compat.echochest.MixinEchoChestBlockEntity",
+    "mod_compat.echochest.MixinVibrationSystemAccessor",
     "mod_compat.ftb_chunks.MixinClaimedChunkManagerImpl",
     "mod_compat.immersive_portals.MixinIpNewChunkTrackingGraph",
     "mod_compat.reachentityattributes.MixinReachEntityAttributes",
