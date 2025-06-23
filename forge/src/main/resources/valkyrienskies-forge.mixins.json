@@ -34,14 +34,14 @@
     "client.render.MixinLevelRenderer",
     "compat.cc_tweaked.MixinSpeakerSound",
     "compat.create.client.MixinContraptionHandlerClient",
-    "compat.create.client.MixinContraptionRenderInfo",
-    "compat.create.client.MixinFlwContraption",
+    // "compat.create.client.MixinContraptionRenderInfo",
+    // "compat.create.client.MixinFlwContraption",
     "compat.create.client.MixinSuperGlueSelectionHandler",
     "compat.sodium.MixinRenderSectionManager",
     "compat.create.client.MixinTrackBlockOutline",
     "compat.sodium.MixinRenderSectionManager",
     "compat.tis3d.MixinCasingTileEntityRender",
-    "compat.tis3d.MixinRenderContextImpl"
+    "compat.tis3d.MixinRenderContextImpl",
   ],
   "injectors": {
     "defaultRequire": 1

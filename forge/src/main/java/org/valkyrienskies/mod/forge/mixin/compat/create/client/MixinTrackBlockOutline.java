@@ -108,7 +108,7 @@ public class MixinTrackBlockOutline {
     }
 
     @Redirect(method = "drawCustomBlockSelection",
-        at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/vertex/PoseStack;translate(DDD)V"))
+        at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/vertex/PoseStack;translate(DDD)V"), remap = false)
     private static void redirectTranslate(final PoseStack instance, final double d, final double e, final double f) {
         final Level level = Minecraft.getInstance().level;
         if (level != null) {
