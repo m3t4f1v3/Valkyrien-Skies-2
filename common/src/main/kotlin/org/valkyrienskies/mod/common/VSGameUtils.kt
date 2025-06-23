@@ -1,5 +1,6 @@
 package org.valkyrienskies.mod.common
 
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation
 import net.minecraft.client.Minecraft
 import net.minecraft.client.multiplayer.ClientLevel
 import net.minecraft.core.BlockPos
@@ -10,6 +11,7 @@ import net.minecraft.resources.ResourceLocation
 import net.minecraft.server.MinecraftServer
 import net.minecraft.server.level.ServerChunkCache
 import net.minecraft.server.level.ServerLevel
+import net.minecraft.util.thread.BlockableEventLoop
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.level.ChunkPos
@@ -23,6 +25,7 @@ import org.joml.Vector3ic
 import org.joml.primitives.AABBd
 import org.joml.primitives.AABBdc
 import org.valkyrienskies.core.api.ships.ClientShip
+import org.valkyrienskies.core.api.ships.LoadedServerShip
 import org.valkyrienskies.core.api.ships.LoadedShip
 import org.valkyrienskies.core.api.ships.ServerShip
 import org.valkyrienskies.core.api.ships.Ship
@@ -39,6 +42,7 @@ import org.valkyrienskies.core.util.expand
 import org.valkyrienskies.mod.common.entity.ShipMountedToData
 import org.valkyrienskies.mod.common.entity.ShipMountedToDataProvider
 import org.valkyrienskies.mod.common.util.DimensionIdProvider
+import org.valkyrienskies.mod.common.util.EntityDragger.serversideEyePosition
 import org.valkyrienskies.mod.common.util.MinecraftPlayer
 import org.valkyrienskies.mod.common.util.set
 import org.valkyrienskies.mod.common.util.toJOML
@@ -120,8 +124,28 @@ val Player.playerWrapper get() = (this as PlayerDuck).vs_getPlayer()
 /**
  * Like [Entity.squaredDistanceTo] except the destination is transformed into world coordinates if it is a ship
  */
-fun Entity.squaredDistanceToInclShips(x: Double, y: Double, z: Double) =
-    level().squaredDistanceBetweenInclShips(x, y, z, this.x, this.y, this.z)
+fun Entity.squaredDistanceToInclShips(x: Double, y: Double, z: Double): Double {
+    val eyePos = if (getShipMountedTo(this) != null) getShipMountedToData(this, null)!!.mountPosInShip.toMinecraft() else this.serversideEyePosition()
+    return level().squaredDistanceBetweenInclShips(x, y, z, eyePos.x, eyePos.y - 1.0, eyePos.z)
+}
+
+/**
+ * Meant to be used with @WrapOperation to replace distance checks in a compatible way
+ */
+fun Level?.squaredDistanceBetweenInclShips(
+    v1: Vec3,
+    v2: Vec3,
+    originalDistance: Operation<Double>?
+): Double {
+    if (originalDistance == null) {
+        return squaredDistanceBetweenInclShips(v1.x, v1.y, v1.z, v2.x, v2.y, v2.z) // fast path
+    }
+
+    val inWorldV1 = toWorldCoordinates(v1)
+    val inWorldV2 = toWorldCoordinates(v2)
+
+    return originalDistance.call(inWorldV1, inWorldV2)
+}
 
 /**
  * Calculates the squared distance between to points.
@@ -212,7 +236,7 @@ inline fun Level.transformToNearbyShipsAndWorld(
         cb(posInWorld.x(), posInWorld.y(), posInWorld.z())
     }
 
-    for (nearbyShip in shipObjectWorld.allShips.getIntersecting(aabb, dimensionId)) {
+    for (nearbyShip in shipObjectWorld.allShips.getIntersecting(aabb, this!!.dimensionId)) {
         if (nearbyShip == currentShip) continue
         val posInShip = nearbyShip.worldToShip.transformPosition(posInWorld, temp0)
         cb(posInShip.x(), posInShip.y(), posInShip.z())
@@ -269,7 +293,7 @@ fun ClientLevel?.getShipObjectManagingPos(chunkPos: ChunkPos) =
 
 // ServerWorld
 fun ServerLevel?.getShipObjectManagingPos(chunkX: Int, chunkZ: Int) =
-    getShipObjectManagingPosImpl(this, chunkX, chunkZ) as ShipObjectServer?
+    getShipObjectManagingPosImpl(this, chunkX, chunkZ) as LoadedServerShip?
 
 fun ServerLevel?.getShipObjectManagingPos(blockPos: Vec3i) =
     getShipObjectManagingPos(blockPos.x shr 4, blockPos.z shr 4)
@@ -345,6 +369,10 @@ fun Ship.toWorldCoordinates(pos: BlockPos): Vector3d =
 fun Ship.toWorldCoordinates(pos: Vec3): Vec3 =
     shipToWorld.transformPosition(pos.toJOML()).toMinecraft()
 
+fun Level?.toWorldCoordinates(pos: BlockPos): Vec3 {
+    return this?.getShipManagingPos(pos)?.toWorldCoordinates(pos)?.toMinecraft() ?: pos.toJOMLD().toMinecraft()
+}
+
 fun Level?.toWorldCoordinates(pos: Vec3): Vec3 {
     return this?.getShipManagingPos(pos)?.toWorldCoordinates(pos) ?: pos
 }
@@ -393,19 +421,39 @@ fun Level?.getWorldCoordinates(blockPos: BlockPos, pos: Vector3d): Vector3d {
 
 fun Level.getShipsIntersecting(aabb: AABB): Iterable<Ship> = getShipsIntersecting(aabb.toJOML())
 fun Level.getShipsIntersecting(aabb: AABBdc): Iterable<Ship> = allShips.getIntersecting(aabb, dimensionId)
-
 fun Level?.transformAabbToWorld(aabb: AABB): AABB = transformAabbToWorld(aabb.toJOML()).toMinecraft()
 fun Level?.transformAabbToWorld(aabb: AABBd) = this?.transformAabbToWorld(aabb, aabb) ?: aabb
-fun Level.transformAabbToWorld(aabb: AABBdc, dest: AABBd): AABBd {
+fun Level?.transformAabbToWorld(aabb: AABBdc, dest: AABBd): AABBd {
     val ship1 = getShipManagingPos(aabb.minX(), aabb.minY(), aabb.minZ())
+        ?: return dest.set(aabb)
     val ship2 = getShipManagingPos(aabb.maxX(), aabb.maxY(), aabb.maxZ())
+        ?: return dest.set(aabb)
 
     // if both endpoints of the aabb are in the same ship, do the transform
-    if (ship1 == ship2 && ship1 != null) {
+    if (ship1.id == ship2.id) {
         return aabb.transform(ship1.shipToWorld, dest)
     }
 
     return dest.set(aabb)
+}
+
+/**
+ * Execute [runnable] immediately iff the thread invoking this is the same as the game thread.
+ * Otherwise, schedule [runnable] to run on the next tick.
+ */
+fun Level.executeOrSchedule(runnable: Runnable) {
+    val blockableEventLoop: BlockableEventLoop<Runnable> = if (!this.isClientSide) {
+        this.server!! as BlockableEventLoop<Runnable>
+    } else {
+        Minecraft.getInstance()
+    }
+    if (blockableEventLoop.isSameThread) {
+        // For some reason MinecraftServer wants to schedule even when it's the same thread, so we need to add our own
+        // logic
+        runnable.run()
+    } else {
+        blockableEventLoop.execute(runnable)
+    }
 }
 
 fun getShipMountedToData(passenger: Entity, partialTicks: Float? = null): ShipMountedToData? {

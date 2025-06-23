@@ -15,6 +15,7 @@ import org.valkyrienskies.core.api.ships.setAttachment
 import org.valkyrienskies.core.apigame.VSCore
 import org.valkyrienskies.core.apigame.VSCoreClient
 import org.valkyrienskies.core.impl.hooks.VSEvents
+import org.valkyrienskies.mod.api.SeatedControllingPlayer
 import org.valkyrienskies.mod.api_impl.events.VsApiImpl
 import org.valkyrienskies.mod.common.blockentity.TestHingeBlockEntity
 import org.valkyrienskies.mod.common.config.VSGameConfig
@@ -22,6 +23,9 @@ import org.valkyrienskies.mod.common.entity.ShipMountingEntity
 import org.valkyrienskies.mod.common.entity.VSPhysicsEntity
 import org.valkyrienskies.mod.common.networking.VSGamePackets
 import org.valkyrienskies.mod.common.util.GameTickForceApplier
+import org.valkyrienskies.mod.common.util.ShipSettings
+import org.valkyrienskies.mod.common.util.SplitHandler
+import org.valkyrienskies.mod.common.util.SplittingDisablerAttachment
 
 object ValkyrienSkiesMod {
     const val MOD_ID = "valkyrienskies"
@@ -31,9 +35,11 @@ object ValkyrienSkiesMod {
     lateinit var TEST_FLAP: Block
     lateinit var TEST_WING: Block
     lateinit var TEST_SPHERE: Block
+    lateinit var CONNECTION_CHECKER_ITEM: Item
     lateinit var SHIP_CREATOR_ITEM: Item
     lateinit var SHIP_ASSEMBLER_ITEM: Item
     lateinit var SHIP_CREATOR_ITEM_SMALLER: Item
+    lateinit var AREA_ASSEMBLER_ITEM: Item
     lateinit var PHYSICS_ENTITY_CREATOR_ITEM: Item
     lateinit var SHIP_MOUNTING_ENTITY_TYPE: EntityType<ShipMountingEntity>
     lateinit var PHYSICS_ENTITY_TYPE: EntityType<VSPhysicsEntity>
@@ -51,7 +57,12 @@ object ValkyrienSkiesMod {
     val vsCoreClient get() = vsCore as VSCoreClient
 
     @JvmStatic
-    val api = VsApiImpl()
+    val api by lazy {
+        VsApiImpl(vsCore)
+    }
+
+    @JvmStatic
+    lateinit var splitHandler: SplitHandler
 
     fun init(core: VSCore) {
         this.vsCore = core
@@ -61,8 +72,25 @@ object ValkyrienSkiesMod {
         VSGamePackets.registerHandlers()
 
         core.registerConfigLegacy("vs", VSGameConfig::class.java)
-        VSEvents.shipLoadEvent.on { event ->
+
+        splitHandler = SplitHandler(this.vsCore.hooks.enableBlockEdgeConnectivity, this.vsCore.hooks.enableBlockCornerConnectivity)
+
+        core.registerAttachment(ShipSettings::class.java)
+        core.registerAttachment(GameTickForceApplier::class.java) {
+            useLegacySerializer()
+        }
+        core.registerAttachment(SeatedControllingPlayer::class.java) {
+            useLegacySerializer()
+        }
+        core.registerAttachment(SplittingDisablerAttachment::class.java) {
+            useLegacySerializer()
+        }
+
+        VSEvents.collisionEndEvent
+
+        VSEvents.ShipLoadEvent.on { event ->
             event.ship.setAttachment(GameTickForceApplier())
+            event.ship.setAttachment(SplittingDisablerAttachment(true))
         }
     }
 
@@ -75,9 +103,12 @@ object ValkyrienSkiesMod {
                 output.accept(TEST_HINGE.asItem())
                 output.accept(TEST_FLAP.asItem())
                 output.accept(TEST_WING.asItem())
+                output.accept(TEST_SPHERE.asItem())
+                output.accept(CONNECTION_CHECKER_ITEM)
                 output.accept(SHIP_CREATOR_ITEM)
                 output.accept(SHIP_ASSEMBLER_ITEM)
                 output.accept(SHIP_CREATOR_ITEM_SMALLER)
+                output.accept(AREA_ASSEMBLER_ITEM)
                 output.accept(PHYSICS_ENTITY_CREATOR_ITEM)
             }
             .build()
