@@ -10,10 +10,7 @@ import dev.engine_room.flywheel.api.visual.SectionTrackedVisual.SectionCollector
 import dev.engine_room.flywheel.api.visual.ShaderLightVisual
 import dev.engine_room.flywheel.api.visual.TickableVisual
 import dev.engine_room.flywheel.api.visualization.VisualizationContext
-import dev.engine_room.flywheel.impl.task.TaskExecutorImpl
 import dev.engine_room.flywheel.impl.visualization.VisualManagerImpl
-import dev.engine_room.flywheel.lib.task.ForEachPlan
-import dev.engine_room.flywheel.lib.task.IfElsePlan
 import dev.engine_room.flywheel.lib.task.MapContextPlan
 import dev.engine_room.flywheel.lib.task.NestedPlan
 import dev.engine_room.flywheel.lib.task.RunnablePlan
@@ -42,7 +39,7 @@ class EmbeddingShipVisual(val effect: ShipEffect, val visualContext: Visualizati
         ).toBlockPos()
     )
     //TODO uses impl prone to change will prob break
-    val storage = ShipBlockEntityStorage(embedding)
+    val storage = ShipBlockEntityStorage()
     val manager = VisualManagerImpl(storage).apply { effect.manager = this }
     val camera = ShipEffectCamera(ship)
     val frustum = FrustumIntersection()
@@ -59,7 +56,7 @@ class EmbeddingShipVisual(val effect: ShipEffect, val visualContext: Visualizati
         } else if (renderingShipVisual != null) {
             if (ship.shipRenderer != FLYWHEEL) {
                 renderingShipVisual!!.delete()
-                renderingShipVisual = null;
+                renderingShipVisual = null
             } else {
                 renderingShipVisual!!.update(partialTick)
             }
@@ -71,13 +68,13 @@ class EmbeddingShipVisual(val effect: ShipEffect, val visualContext: Visualizati
     }
 
     override fun planTick(): Plan<TickableVisual.Context> =
-        manager.tickPlan()
+        manager.tickPlan(visualContext)
 
     override fun planFrame(): Plan<Context> =
         NestedPlan.of(
             RunnablePlan.of(::updateEmbedding),
             RunnablePlan.of(::updateSections),
-            MapContextPlan.map(::newContext).to(manager.framePlan()),
+            MapContextPlan.map(::newContext).to(manager.framePlan(visualContext)),
             IfNotNullPlan({renderingShipVisual}, RenderingShipVisual::planFrame)
         )
 

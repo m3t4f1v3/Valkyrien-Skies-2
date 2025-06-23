@@ -2,7 +2,7 @@ package org.valkyrienskies.mod.compat.flywheel.model
 
 import dev.engine_room.flywheel.api.model.Model
 import dev.engine_room.flywheel.api.task.Plan
-import dev.engine_room.flywheel.lib.model.baked.MultiBlockModelBuilder
+import dev.engine_room.flywheel.lib.model.baked.BlockModelBuilder
 import dev.engine_room.flywheel.lib.task.ForEachPlan
 import net.minecraft.client.multiplayer.ClientLevel
 import net.minecraft.core.BlockPos
@@ -15,10 +15,8 @@ import net.minecraft.world.level.ColorResolver
 import net.minecraft.world.level.block.entity.BlockEntity
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.lighting.LevelLightEngine
-import net.minecraft.world.level.lighting.LightEngine
 import net.minecraft.world.level.material.FluidState
 import org.valkyrienskies.mod.compat.flywheel.model.FlywheelSectionModelBuilder.BuildingContext
-import java.util.NoSuchElementException
 
 class MultiBlockModelSectionBuilder : FlywheelSectionModelBuilder {
     override fun createBuildingPlan(newModel: (SectionPos, Model?) -> Unit): Plan<BuildingContext> =
@@ -29,15 +27,15 @@ class MultiBlockModelSectionBuilder : FlywheelSectionModelBuilder {
 
     fun buildChunk(newModel: (SectionPos, Model?) -> Unit) = { pos: SectionPos, ctx: BuildingContext ->
         newModel(pos, run {
-            val chunk = ctx.level.getChunk(pos.x, pos.z);
+            val chunk = ctx.level.getChunk(pos.x, pos.z)
             val section = chunk.getSection(ctx.level.getSectionIndexFromSectionY(pos.y))
 
             if (section.hasOnlyAir()) return@run null
 
             //ctx.level.lightEngine.queueSectionData()
 
-            MultiBlockModelBuilder.create(wrapLevel(ctx.level, ctx.lightEngine, pos.origin()), AllSectionPositions).apply {
-                enableFluidRendering()
+            BlockModelBuilder.create(wrapLevel(ctx.level, ctx.lightEngine, pos.origin()), AllSectionPositions).apply {
+                renderFluids(true)
             }.build()
         })
     }

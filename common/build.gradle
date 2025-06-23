@@ -46,7 +46,7 @@ dependencies {
     modCompileOnly("net.fabricmc.fabric-api:fabric-api:${fabric_api_version}")
 
 //    modApi "dev.engine-room.flywheel:flywheel-fabric-api-${minecraft_version}:${flywheel_version}"
-//    modCompileOnly("dev.engine-room.flywheel:flywheel-fabric-${minecraft_version}:${flywheel_version}")
+    modCompileOnly("dev.engine-room.flywheel:flywheel-fabric-${minecraft_version}:${flywheel_version}")
 
     compileOnlyApi("dev.engine-room.flywheel:flywheel-common-mojmap-api-${minecraft_version}:${flywheel_version}")
 

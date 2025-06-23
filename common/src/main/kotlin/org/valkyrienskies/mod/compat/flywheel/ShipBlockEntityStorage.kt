@@ -9,13 +9,13 @@ import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.entity.BlockEntity
 
 //TODO uses impl prone to change will prob break
-class ShipBlockEntityStorage(ctx: VisualizationContext) : Storage<BlockEntity>(ctx) {
+class ShipBlockEntityStorage() : Storage<BlockEntity>() {
 
-    override fun createRaw(obj: BlockEntity, partialTick: Float): BlockEntityVisual<*>? {
+    override fun createRaw(ctx: VisualizationContext, obj: BlockEntity, partialTick: Float): BlockEntityVisual<*>? {
         val visualizer = VisualizationHelper.getVisualizer(obj)
             ?: return null
 
-        val visual = visualizer.createVisual(visualizationContext, obj, partialTick)
+        val visual = visualizer.createVisual(ctx, obj, partialTick)
         return visual
     }
 
