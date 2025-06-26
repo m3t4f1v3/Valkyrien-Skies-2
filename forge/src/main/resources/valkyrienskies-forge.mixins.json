@@ -19,7 +19,6 @@
     "compat.modular_routers.MixinRouterMenu",
     "compat.tfc.MixinTFCChunkGenerator",
     "compat.thermalexpansion.MixinTileCoFH",
-    "compat.tis3d.MixinInfraredPacketEntity",
     "compat.twilightforest.ChunkGeneratorTwilightMixin",
     "compat.mffs.MixinFrequencyGrid",
     "compat.mffs.MixinClientPacketHandler",
@@ -39,9 +38,7 @@
     "compat.create.client.MixinSuperGlueSelectionHandler",
     "compat.sodium.MixinRenderSectionManager",
     "compat.create.client.MixinTrackBlockOutline",
-    "compat.sodium.MixinRenderSectionManager",
-    "compat.tis3d.MixinCasingTileEntityRender",
-    "compat.tis3d.MixinRenderContextImpl"
+    "compat.sodium.MixinRenderSectionManager"
   ],
   "injectors": {
     "defaultRequire": 1
