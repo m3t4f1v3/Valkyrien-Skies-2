@@ -1,15 +1,23 @@
 package org.valkyrienskies.mod.common.util
 
+import net.minecraft.client.multiplayer.ClientLevel
 import net.minecraft.client.player.LocalPlayer
+import net.minecraft.core.Direction
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.util.Mth
 import net.minecraft.world.entity.Entity
+import net.minecraft.world.entity.player.Player
+import net.minecraft.world.level.ClipContext
+import net.minecraft.world.phys.HitResult
 import net.minecraft.world.phys.Vec3
 import org.joml.Vector3d
 import org.joml.Vector3dc
 import org.valkyrienskies.core.api.ships.ClientShip
 import org.valkyrienskies.core.api.ships.Ship
+import org.valkyrienskies.mod.api.toJOML
+import org.valkyrienskies.mod.api.toMinecraft
 import org.valkyrienskies.mod.common.entity.handling.VSEntityManager
+import org.valkyrienskies.mod.common.getShipObjectManagingPos
 import org.valkyrienskies.mod.common.shipObjectWorld
 import org.valkyrienskies.mod.common.util.EntityLerper.yawToWorld
 import kotlin.math.asin
@@ -202,6 +210,113 @@ object EntityDragger {
         return default
     }
 
+    @JvmStatic
+    fun backOff(vec3: Vec3, ship: ClientShip, player: Player, cLevel: ClientLevel): Vec3 {
+        var d = vec3.x
+        var e = vec3.y
+        var f = vec3.z
+
+        while (d != 0.0 && !isValidWalkablePosition(cLevel, ship, player, d, Direction.EAST)) {
+            if (d < 0.025 && d >= -0.025) {
+                d = 0.0
+            } else if (d > 0.0) {
+                d -= 0.025
+            } else {
+                d += 0.025
+            }
+        }
+
+        while (f != 0.0 && !isValidWalkablePosition(cLevel, ship, player, f, Direction.SOUTH)) {
+            if (f < 0.025 && f >= -0.025) {
+                f = 0.0
+            } else if (f > 0.0) {
+                f -= 0.025
+            } else {
+                f += 0.025
+            }
+        }
+
+        while (e != 0.0 && !isValidWalkablePosition(cLevel, ship, player, e, Direction.UP)) {
+            if (e < 0.025 && e >= -0.025) {
+                e = 0.0
+            } else if (e > 0.0) {
+                e -= 0.025
+            } else {
+                e += 0.025
+            }
+        }
+
+        while (d != 0.0 && f != 0.0 && e != 0.0 &&
+            !isValidWalkablePosition(cLevel, ship, player, d, Direction.EAST) &&
+            !isValidWalkablePosition(cLevel, ship, player, f, Direction.SOUTH) &&
+            !isValidWalkablePosition(cLevel, ship, player, e, Direction.UP)) {
+            if (d < 0.025 && d >= -0.025) {
+                d = 0.0
+            } else if (d > 0.0) {
+                d -= 0.025
+            } else {
+                d += 0.025
+            }
+
+            if (f < 0.025 && f >= -0.025) {
+                f = 0.0
+            } else if (f > 0.0) {
+                f -= 0.025
+            } else {
+                f += 0.025
+            }
+
+            if (e < 0.025 && e >= -0.025) {
+                e = 0.0
+            } else if (e > 0.0) {
+                e -= 0.025
+            } else {
+                e += 0.025
+            }
+        }
+
+        return Vec3(d, vec3.y, f)
+    }
+
+    private fun isValidWalkablePosition(
+        level: ClientLevel, ship: ClientShip, player: Player, step: Double, dir: Direction
+    ): Boolean {
+        val clipContext = stepTowardsEdge(level, ship, player, step, dir)
+        val result = level.clip(clipContext)
+        if (result.type != HitResult.Type.BLOCK) {
+            return false
+        }
+        //get the normal of the hit face in worldspace
+        val hitShip = level.getShipObjectManagingPos(result.blockPos)
+        if (hitShip != null) {
+            val hitSide = result.direction.normal.toJOMLD()
+            val upDir: Vector3dc = Vector3d(0.0, 1.0, 0.0)
+            val hitSideInWorld = hitShip.shipToWorld.transformDirection(hitSide, Vector3d())
+            // If the hit side is not facing up, we can't walk on it
+            if (hitSideInWorld.dot(upDir) < 0.5) {
+                return false
+            }
+        }
+
+        return true
+    }
+
+    private fun stepTowardsEdge(
+        level: ClientLevel?, ship: ClientShip, player: Player, step: Double, dir: Direction
+    ): ClipContext {
+        val potentialPosition = player.position().add(Vector3d(dir.step()).mul(step).toMinecraft())
+        val potentialPosInShip: Vector3dc = ship.worldToShip.transformPosition(potentialPosition.toJOML(), Vector3d())
+        val downDirInShip: Vector3dc? = ship.worldToShip.transformDirection(
+            Vector3d(0.0, -(player.maxUpStep()).toDouble(), 0.0), Vector3d()
+        )
+
+        val maxDistPos: Vector3dc = potentialPosInShip.add(downDirInShip, Vector3d())
+
+        return ClipContext(
+            potentialPosInShip.toMinecraft(), maxDistPos.toMinecraft(), ClipContext.Block.COLLIDER,
+            ClipContext.Fluid.NONE, player
+        )
+    }
     /**
      * Check if the given entity should be dragged. Shipyard entities and ones marked as non-draggable return false.
      */
