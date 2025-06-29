@@ -1,13 +1,12 @@
 package org.valkyrienskies.mod.common.util
 
-import net.minecraft.client.multiplayer.ClientLevel
-import net.minecraft.client.player.LocalPlayer
 import net.minecraft.core.Direction
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.util.Mth
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.level.ClipContext
+import net.minecraft.world.level.Level
 import net.minecraft.world.phys.HitResult
 import net.minecraft.world.phys.Vec3
 import org.joml.Vector3d
@@ -135,7 +134,7 @@ object EntityDragger {
                             entity.yHeadRot = Mth.wrapDegrees(entity.yHeadRot + addedYRot.toFloat())
                         }
                     } else {
-                        if (!entity.isControlledByLocalInstance && entity !is LocalPlayer) {
+                        if (!entity.isControlledByLocalInstance && entity !is Player) {
                             entity.yRot = Mth.wrapDegrees(entity.yRot + addedYRot.toFloat())
                             entity.yHeadRot = Mth.wrapDegrees(entity.yHeadRot + addedYRot.toFloat())
                         } else {
@@ -211,7 +210,7 @@ object EntityDragger {
     }
 
     @JvmStatic
-    fun backOff(vec3: Vec3, ship: ClientShip, player: Player, cLevel: ClientLevel): Vec3 {
+    fun backOff(vec3: Vec3, ship: Ship, player: Player, cLevel: Level): Vec3 {
         var d = vec3.x
         var e = vec3.y
         var f = vec3.z
@@ -279,7 +278,7 @@ object EntityDragger {
     }
 
     private fun isValidWalkablePosition(
-        level: ClientLevel, ship: ClientShip, player: Player, step: Double, dir: Direction
+        level: Level, ship: Ship, player: Player, step: Double, dir: Direction
     ): Boolean {
         val clipContext = stepTowardsEdge(level, ship, player, step, dir)
         val result = level.clip(clipContext)
@@ -302,7 +301,7 @@ object EntityDragger {
     }
 
     private fun stepTowardsEdge(
-        level: ClientLevel?, ship: ClientShip, player: Player, step: Double, dir: Direction
+        level: Level?, ship: Ship, player: Player, step: Double, dir: Direction
     ): ClipContext {
         val potentialPosition = player.position().add(Vector3d(dir.step()).mul(step).toMinecraft())
         val potentialPosInShip: Vector3dc = ship.worldToShip.transformPosition(potentialPosition.toJOML(), Vector3d())
