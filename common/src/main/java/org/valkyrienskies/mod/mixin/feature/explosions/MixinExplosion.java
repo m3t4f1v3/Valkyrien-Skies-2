@@ -25,6 +25,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.valkyrienskies.core.api.ships.ServerShip;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
+import org.valkyrienskies.mod.common.ValkyrienSkiesMod;
 import org.valkyrienskies.mod.common.config.VSGameConfig;
 import org.valkyrienskies.mod.common.util.GameTickForceApplier;
 import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
@@ -92,11 +93,10 @@ public abstract class MixinExplosion {
                             forceVector.mul(distanceMult); //Multiply by distance falloff
                             forceVector.mul(powerMult); //Multiply by radius, roughly equivalent to power
 
-                            final GameTickForceApplier forceApplier =
-                                ship.getAttachment(GameTickForceApplier.class);
+                            final GameTickForceApplier forceApplier = ValkyrienSkiesMod.getOrCreateGTFA(ship.getChunkClaimDimension());
                             final Vector3dc shipCoords = ship.getShipTransform().getShipPositionInShipCoordinates();
                             if (forceVector.isFinite()) {
-                                forceApplier.applyInvariantForceToPos(forceVector,
+                                forceApplier.applyInvariantForceToPos(ship.getId(), forceVector,
                                     VectorConversionsMCKt.toJOML(Vec3.atCenterOf(blockPos)).sub(shipCoords));
                             }
                         }

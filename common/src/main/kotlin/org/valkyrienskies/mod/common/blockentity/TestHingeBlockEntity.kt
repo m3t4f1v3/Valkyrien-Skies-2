@@ -10,6 +10,7 @@ class TestHingeBlockEntity(blockPos: BlockPos, blockState: BlockState) : BlockEn
     ValkyrienSkiesMod.TEST_HINGE_BLOCK_ENTITY_TYPE, blockPos, blockState
 ) {
     var otherHingePos: BlockPos? = null
+    @Volatile
     var constraintId: VSJointId? = null
 
     fun tick() {
