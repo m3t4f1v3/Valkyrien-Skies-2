@@ -14,6 +14,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.valkyrienskies.core.api.ships.ClientShip;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.compat.flywheel.FlywheelCompat;
+import org.valkyrienskies.mod.compat.flywheel.FlywheelCompat.FlywheelVersion;
 import org.valkyrienskies.mod.compat.flywheel.ShipEffect;
 
 @Mixin(ClientChunkCache.class)
@@ -24,7 +25,7 @@ public class MixinClientChunkCache {
 
     @Inject(method = "onLightUpdate", at = @At("HEAD"))
     private void vs_flywheel$onLightUpdate(LightLayer layer, SectionPos pos, CallbackInfo ci) {
-        if (!FlywheelCompat.INSTANCE.isFlywheelInstalled()) return;
+        if (FlywheelCompat.INSTANCE.isFlywheelInstalled() != FlywheelVersion.V1) return;
 
         ClientShip ship = (ClientShip) VSGameUtilsKt.getShipManagingPos(level, pos.getX(), pos.getZ());
         if (ship != null) {

@@ -86,6 +86,9 @@ dependencies {
     modImplementation("dev.engine-room.flywheel:flywheel-forge-${minecraft_version}:${flywheel_version}")
     modImplementation("com.tterrag.registrate:Registrate:${registrate_version}")
 
+    compileOnly("com.simibubi.create:create-${minecraft_version}:${old_create_forge_version}:slim") { transitive = false }
+    compileOnly("com.jozufozu.flywheel:flywheel-forge-${minecraft_version}:${old_flywheel_forge_version}") { transitive = false }
+
     // Weather2 1.20.1
     modImplementation("curse.maven:weather-storms-tornadoes-237746:5244118")
     modImplementation("curse.maven:coroutil-237749:5096038")

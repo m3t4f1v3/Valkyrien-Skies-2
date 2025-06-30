@@ -14,6 +14,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.valkyrienskies.core.api.ships.ClientShip;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.compat.flywheel.FlywheelCompat;
+import org.valkyrienskies.mod.compat.flywheel.FlywheelCompat.FlywheelVersion;
 import org.valkyrienskies.mod.compat.flywheel.ShipEffect;
 
 @Mixin(BlockEntity.class)
@@ -28,7 +29,7 @@ public abstract class MixinBlockEntity {
     @Inject(method = "setRemoved()V", at = @At("TAIL"))
     private void vs_flywheel$removeVisual(CallbackInfo ci) {
         if (!level.isClientSide) return;
-        if (!FlywheelCompat.INSTANCE.isFlywheelInstalled()) return;
+        if (FlywheelCompat.INSTANCE.isFlywheelInstalled() != FlywheelVersion.V1) return;
         if (!VisualizationHelper.canVisualize((BlockEntity) (Object) this)) return;
         if (VisualizationManager.get(level) == null) return;
 

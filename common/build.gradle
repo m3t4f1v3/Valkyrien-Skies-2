@@ -49,7 +49,12 @@ dependencies {
 //    modApi "dev.engine-room.flywheel:flywheel-fabric-api-${minecraft_version}:${flywheel_version}"
     modCompileOnly("dev.engine-room.flywheel:flywheel-fabric-${minecraft_version}:${flywheel_version}")
 
+
     compileOnlyApi("dev.engine-room.flywheel:flywheel-common-mojmap-api-${minecraft_version}:${flywheel_version}")
+
+    //this is GIGA SUSPICIOUS but we need it for maintaining old compat
+    compileOnlyDependenciesMetadata("com.simibubi.create:create-fabric-${minecraft_version}:${old_create_fabric_version}")
+    modCompileOnly("com.jozufozu.flywheel:flywheel-fabric-${minecraft_version}:${old_flywheel_version}")
 
     modCompileOnly("maven.modrinth:create-utilities:${create_utilities_version}")
     modImplementation("teamreborn:energy:${energy_version}")

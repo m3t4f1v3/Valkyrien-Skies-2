@@ -10,17 +10,22 @@ import org.valkyrienskies.core.impl.hooks.VSEvents
 import org.valkyrienskies.mod.common.getShipManagingPos
 
 object FlywheelCompat {
-    val isFlywheelInstalled: Boolean by lazy {
+    val isFlywheelInstalled: FlywheelVersion by lazy {
         try {
             Class.forName("dev.engine_room.flywheel.api.Flywheel")
-            true
+            FlywheelVersion.V1
         } catch (e: ClassNotFoundException) {
-            false
+            try {
+                Class.forName("com.jozufozu.flywheel.Flywheel")
+                FlywheelVersion.V06
+            } catch (e: ClassNotFoundException) {
+                FlywheelVersion.NONE
+            }
         }
     }
 
     fun initClient() {
-        if (!isFlywheelInstalled) return
+        if (isFlywheelInstalled != FlywheelVersion.V1) return
 
         VSEvents.shipLoadEventClient.on { e ->
             VisualizationHelper.queueAdd(ShipEffect(e.ship, Minecraft.getInstance().level!!))
@@ -32,7 +37,7 @@ object FlywheelCompat {
     }
 
     private fun getEffect(blockEntity: BlockEntity): ShipEffect? {
-        if (!isFlywheelInstalled) return null
+        if (isFlywheelInstalled != FlywheelVersion.V1) return null
         if (blockEntity.level?.isClientSide != true) return null
         if (!VisualizationManager.supportsVisualization(blockEntity.level)) return null
         if (!VisualizationHelper.canVisualize(blockEntity)) return null
@@ -54,4 +59,10 @@ object FlywheelCompat {
     }
 
     lateinit var viewProjection: Matrix4f
+
+    enum class FlywheelVersion {
+        V1,
+        V06,
+        NONE
+    }
 }

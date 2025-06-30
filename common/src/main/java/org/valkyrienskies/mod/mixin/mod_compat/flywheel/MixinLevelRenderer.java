@@ -16,6 +16,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.valkyrienskies.mod.compat.flywheel.FlywheelCompat;
+import org.valkyrienskies.mod.compat.flywheel.FlywheelCompat.FlywheelVersion;
 
 @Mixin(LevelRenderer.class)
 public class MixinLevelRenderer {
@@ -30,7 +31,7 @@ public class MixinLevelRenderer {
 
     @Inject(method = "setBlockDirty(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/block/state/BlockState;)V", at = @At("TAIL"))
     private void vs_flywheel$checkUpdate(BlockPos pos, BlockState oldState, BlockState newState, CallbackInfo ci) {
-        if (!FlywheelCompat.INSTANCE.isFlywheelInstalled()) return;
+        if (FlywheelCompat.INSTANCE.isFlywheelInstalled() != FlywheelVersion.V1) return;
 
         BlockEntity blockEntity = level.getBlockEntity(pos);
         if (blockEntity == null) return;

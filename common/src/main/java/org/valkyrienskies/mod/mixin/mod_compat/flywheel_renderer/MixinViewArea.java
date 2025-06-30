@@ -17,6 +17,7 @@ import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.config.ShipRenderer;
 import org.valkyrienskies.mod.common.config.ShipRendererKt;
 import org.valkyrienskies.mod.compat.flywheel.FlywheelCompat;
+import org.valkyrienskies.mod.compat.flywheel.FlywheelCompat.FlywheelVersion;
 import org.valkyrienskies.mod.compat.flywheel.ShipEffect;
 
 @Mixin(ViewArea.class)
@@ -45,7 +46,7 @@ public class MixinViewArea {
         var ship = (ClientShip) VSGameUtilsKt.getShipManagingPos(level, x, z);
         if (ship == null) return;
         if (ShipRendererKt.getShipRenderer(ship) != ShipRenderer.FLYWHEEL) return;
-        if (!FlywheelCompat.INSTANCE.isFlywheelInstalled())
+        if (FlywheelCompat.INSTANCE.isFlywheelInstalled() != FlywheelVersion.V1)
             throw new IllegalStateException("Trying to render with flywheel, but no flywheel installed");
 
         ShipEffect.Companion.getShipEffect(ship).setDirty(x, y, z, important);

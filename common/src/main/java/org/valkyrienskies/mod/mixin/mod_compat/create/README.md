@@ -1,6 +1,6 @@
 # Create Compat
 
-This package contains the Create compatibility code
+This package contains the Create compatibility code FOR v6+
 
 ## Attributions
 

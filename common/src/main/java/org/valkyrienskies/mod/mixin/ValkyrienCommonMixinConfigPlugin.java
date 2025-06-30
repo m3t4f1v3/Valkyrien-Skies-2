@@ -88,7 +88,7 @@ public class ValkyrienCommonMixinConfigPlugin implements IMixinConfigPlugin {
             return PATH_FINDING_DEBUG;
         }
 
-        if (mixinClassName.contains("org.valkyrienskies.mod.mixin.mod_compat.create.client.trackOutlines")) {
+        if (mixinClassName.contains("org.valkyrienskies.mod.mixin.mod_compat.common_create.client.trackOutlines")) {
             //interactive has its own track outline stuff so disable fixed version of VS2's track outline stuff
             if (classExists("org.valkyrienskies.create_interactive.mixin.client.MixinTrackBlockOutline")) {
                 MixinService.getService().getLogger("mixin")
@@ -96,6 +96,23 @@ public class ValkyrienCommonMixinConfigPlugin implements IMixinConfigPlugin {
                         mixinClassName.substring(mixinClassName.lastIndexOf(".") + 1));
                 return false;
             }
+        }
+
+        if (mixinClassName.contains("org.valkyrienskies.mod.mixin.mod_compat.common_create") ||
+        mixinClassName.contains("org.valkyrienskies.mod.fabric.mixin.mod_compat.common_create") ||
+        mixinClassName.contains("org.valkyrienskies.mod.forge.mixin.mod_compat.common_create")) {
+            // Only load this mixin if Create is present
+            return LoadedMods.getCreate() || LoadedMods.getOldCreate();
+        }
+        if (mixinClassName.contains("org.valkyrienskies.mod.mixin.mod_compat.old_create") ||
+            mixinClassName.contains("org.valkyrienskies.mod.fabric.mixin.mod_compat.old_create") ||
+            mixinClassName.contains("org.valkyrienskies.mod.forge.mixin.mod_compat.old_create")) {
+            return LoadedMods.getOldCreate(); // Only load this mixin if immersive portals is present
+        }
+        if (mixinClassName.contains("org.valkyrienskies.mod.mixin.mod_compat.create") ||
+            mixinClassName.contains("org.valkyrienskies.mod.fabric.mixin.mod_compat.create") ||
+            mixinClassName.contains("org.valkyrienskies.mod.forge.mixin.mod_compat.create")) {
+            return LoadedMods.getCreate(); // Only load this mixin if Create is present
         }
 
         // Only load this mixin when ETF is installed

@@ -14,6 +14,12 @@ object LoadedMods {
     @JvmStatic
     val immersivePortals by CompatInfo("qouteall.imm_ptl.core.IPModMain")
 
+    @JvmStatic
+    val create by CompatInfo("com.simibubi.create.foundation.render.AllInstanceTypes")
+
+    @JvmStatic
+    val oldCreate by CompatInfo("com.simibubi.create.foundation.render.AllInstanceFormats")
+
     class CompatInfo(private val className: String) : ReadOnlyProperty<Any?, Boolean> {
         private var isLoaded: Boolean? = null
 
