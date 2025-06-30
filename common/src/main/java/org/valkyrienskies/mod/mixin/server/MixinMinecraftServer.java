@@ -414,6 +414,14 @@ public abstract class MixinMinecraftServer implements IShipObjectWorldServerProv
             vsPipeline.setDeleteResources(true);
             vsPipeline.setArePhysicsRunning(true);
         }
+    }
+
+    // Only clear these after stopping the server so we can use them when saving
+    @Inject(
+        method = "stopServer",
+        at = @At("RETURN")
+    )
+    private void postStopServer(final CallbackInfo ci) {
         dimensionToLevelMap.clear();
         shipWorld.setGameServer(null);
         shipWorld = null;

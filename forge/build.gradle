@@ -24,6 +24,14 @@ architectury {
     forge()
 }
 
+sourceSets {
+    main {
+        resources {
+            srcDir "$buildDir/generated/resources"
+        }
+    }
+}
+
 loom {
     accessWidenerPath = project(":common").loom.accessWidenerPath
 
@@ -188,7 +196,16 @@ dependencies {
     // endregion
 }
 
+// Copy the VS common access widener to the generated resources folder
+def generatedResourcesDir = layout.buildDirectory.dir("generated/resources")
+
+tasks.register("copyAccessWidener", Copy) {
+    from(project(":common").file("src/main/resources/valkyrienskies-common.accesswidener"))
+    into(generatedResourcesDir)
+}
+
 processResources {
+    dependsOn("copyAccessWidener")
     inputs.property "version", project.version
 
     filesMatching("META-INF/mods.toml") {
@@ -221,6 +238,8 @@ jar {
 }
 
 sourcesJar {
+    dependsOn("copyAccessWidener")
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     def commonSources = project(":common").sourcesJar
     dependsOn commonSources
     from commonSources.archiveFile.map { zipTree(it) }

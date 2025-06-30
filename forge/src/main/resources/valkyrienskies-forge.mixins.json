@@ -19,7 +19,6 @@
     "compat.modular_routers.MixinRouterMenu",
     "compat.tfc.MixinTFCChunkGenerator",
     "compat.thermalexpansion.MixinTileCoFH",
-    "compat.tis3d.MixinInfraredPacketEntity",
     "compat.twilightforest.ChunkGeneratorTwilightMixin",
     "compat.mffs.MixinFrequencyGrid",
     "compat.mffs.MixinClientPacketHandler",

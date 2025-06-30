@@ -231,13 +231,15 @@ public abstract class MixinServerLevel implements IShipObjectWorldServerProvider
         final DistanceManagerAccessor distanceManagerAccessor = (DistanceManagerAccessor) chunkSource.chunkMap.getDistanceManager();
 
         for (final ChunkHolder chunkHolder : chunkMapAccessor.callGetChunks()) {
-            final Optional<LevelChunk> worldChunkOptional =
-                chunkHolder.getTickingChunkFuture().getNow(ChunkHolder.UNLOADED_LEVEL_CHUNK).left();
-            // Only load chunks that are present and that have tickets
-            if (worldChunkOptional.isPresent() && distanceManagerAccessor.getTickets().containsKey(chunkHolder.getPos().toLong())) {
-                // Only load chunks that have a ticket
-                final LevelChunk worldChunk = worldChunkOptional.get();
-                vs$loadChunk(worldChunk, voxelShapeUpdates);
+            // Only load chunks that haven't been loaded before, and have a ticket
+            if (!vs$knownChunks.containsKey(chunkHolder.getPos()) && distanceManagerAccessor.getTickets().containsKey(chunkHolder.getPos().toLong())) {
+                final Optional<LevelChunk> worldChunkOptional =
+                    chunkHolder.getTickingChunkFuture().getNow(ChunkHolder.UNLOADED_LEVEL_CHUNK).left();
+                if (worldChunkOptional.isPresent()) {
+                    // Only load chunks that have a ticket
+                    final LevelChunk worldChunk = worldChunkOptional.get();
+                    vs$loadChunk(worldChunk, voxelShapeUpdates);
+                }
             }
         }
 
