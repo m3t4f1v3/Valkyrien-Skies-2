@@ -36,8 +36,10 @@ import org.valkyrienskies.mod.common.block.TestChairBlock
 import org.valkyrienskies.mod.common.block.TestFlapBlock
 import org.valkyrienskies.mod.common.block.TestHingeBlock
 import org.valkyrienskies.mod.common.block.TestSphereBlock
+import org.valkyrienskies.mod.common.block.TestThrusterBlock
 import org.valkyrienskies.mod.common.block.TestWingBlock
 import org.valkyrienskies.mod.common.blockentity.TestHingeBlockEntity
+import org.valkyrienskies.mod.common.blockentity.TestThrusterBlockEntity
 import org.valkyrienskies.mod.common.command.VSCommands
 import org.valkyrienskies.mod.common.config.MassDatapackResolver
 import org.valkyrienskies.mod.common.config.VSEntityHandlerDataLoader
@@ -66,6 +68,7 @@ class ValkyrienSkiesModForge {
     private val TEST_FLAP_REGISTRY: RegistryObject<Block>
     private val TEST_WING_REGISTRY: RegistryObject<Block>
     private val TEST_SPHERE_REGISTRY: RegistryObject<Block>
+    private val TEST_THRUSTER_REGISTRY: RegistryObject<Block>
     private val CONNECTION_CHECKER_ITEM_REGISTRY: RegistryObject<Item>
     private val SHIP_CREATOR_ITEM_REGISTRY: RegistryObject<Item>
     private val SHIP_CREATOR_SMALLER_ITEM_REGISTRY: RegistryObject<Item>
@@ -75,6 +78,7 @@ class ValkyrienSkiesModForge {
     private val PHYSICS_ENTITY_TYPE_REGISTRY: RegistryObject<EntityType<VSPhysicsEntity>>
     private val SHIP_ASSEMBLER_ITEM_REGISTRY: RegistryObject<Item>
     private val TEST_HINGE_BLOCK_ENTITY_TYPE_REGISTRY: RegistryObject<BlockEntityType<TestHingeBlockEntity>>
+    private val TEST_THRUSTER_BLOCK_ENTITY_TYPE_REGISTRY: RegistryObject<BlockEntityType<TestThrusterBlockEntity>>
 
     init {
         val isClient = FMLEnvironment.dist.isClient
@@ -121,6 +125,7 @@ class ValkyrienSkiesModForge {
         TEST_FLAP_REGISTRY = registerBlockAndItem("test_flap") { TestFlapBlock }
         TEST_WING_REGISTRY = registerBlockAndItem("test_wing") { TestWingBlock }
         TEST_SPHERE_REGISTRY = registerBlockAndItem("test_sphere") { TestSphereBlock }
+        TEST_THRUSTER_REGISTRY = registerBlockAndItem("test_thruster") { TestThrusterBlock }
         SHIP_CREATOR_ITEM_REGISTRY =
             ITEMS.register("ship_creator") {
                 ShipCreatorItem(Properties(),
@@ -180,6 +185,9 @@ class ValkyrienSkiesModForge {
         TEST_HINGE_BLOCK_ENTITY_TYPE_REGISTRY = BLOCK_ENTITIES.register("test_hinge_block_entity") {
             BlockEntityType.Builder.of(::TestHingeBlockEntity, TestHingeBlock).build(null)
         }
+        TEST_THRUSTER_BLOCK_ENTITY_TYPE_REGISTRY = BLOCK_ENTITIES.register("test_thruster_block_entity") {
+            BlockEntityType.Builder.of(::TestThrusterBlockEntity, TestThrusterBlock).build(null)
+        }
 
         val deferredRegister = DeferredRegister.create(Registries.CREATIVE_MODE_TAB, MOD_ID)
         deferredRegister.register("general") {
@@ -232,6 +240,7 @@ class ValkyrienSkiesModForge {
         ValkyrienSkiesMod.TEST_FLAP = TEST_FLAP_REGISTRY.get()
         ValkyrienSkiesMod.TEST_WING = TEST_WING_REGISTRY.get()
         ValkyrienSkiesMod.TEST_SPHERE = TEST_SPHERE_REGISTRY.get()
+        ValkyrienSkiesMod.TEST_THRUSTER = TEST_THRUSTER_REGISTRY.get()
         ValkyrienSkiesMod.CONNECTION_CHECKER_ITEM = CONNECTION_CHECKER_ITEM_REGISTRY.get()
         ValkyrienSkiesMod.SHIP_CREATOR_ITEM = SHIP_CREATOR_ITEM_REGISTRY.get()
         ValkyrienSkiesMod.SHIP_ASSEMBLER_ITEM = SHIP_ASSEMBLER_ITEM_REGISTRY.get()
@@ -241,5 +250,6 @@ class ValkyrienSkiesModForge {
         ValkyrienSkiesMod.SHIP_MOUNTING_ENTITY_TYPE = SHIP_MOUNTING_ENTITY_REGISTRY.get()
         ValkyrienSkiesMod.PHYSICS_ENTITY_TYPE = PHYSICS_ENTITY_TYPE_REGISTRY.get()
         ValkyrienSkiesMod.TEST_HINGE_BLOCK_ENTITY_TYPE = TEST_HINGE_BLOCK_ENTITY_TYPE_REGISTRY.get()
+        ValkyrienSkiesMod.TEST_THRUSTER_BLOCK_ENTITY_TYPE = TEST_THRUSTER_BLOCK_ENTITY_TYPE_REGISTRY.get()
     }
 }
