@@ -37,8 +37,6 @@
     "compat.sodium.MixinRenderSectionManager",
     "compat.old_create.client.MixinContraptionRenderInfo",
     "compat.old_create.client.MixinFlwContraption",
-    "compat.tis3d.MixinCasingTileEntityRender",
-    "compat.tis3d.MixinRenderContextImpl"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -11,9 +11,7 @@ import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.valkyrienskies.core.api.ships.Ship;
 import org.valkyrienskies.mod.common.VSClientGameUtils;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
@@ -37,17 +35,6 @@ public abstract class MixinDeployTool extends SchematicToolBase {
         )
     )
     private void redirectTranslate(PoseStack ms, double _x, double _y, double _z) {
-    }
-
-    @Inject(
-        method = "renderTool(Lcom/mojang/blaze3d/vertex/PoseStack;Lcom/simibubi/create/foundation/render/SuperRenderTypeBuffer;Lnet/minecraft/world/phys/Vec3;)V",
-        at = @At(
-            value = "INVOKE",
-            target = "Lcom/mojang/blaze3d/vertex/PoseStack;translate(DDD)V",
-            ordinal = 0
-        )
-    )
-    private void mixinRenderTool(PoseStack ms, Object buffer, Vec3 camera, CallbackInfo ci) {
         float pt = AnimationTickHolder.getPartialTicks();
         double x = Mth.lerp(pt, lastChasingSelectedPos.x, chasingSelectedPos.x);
         double y = Mth.lerp(pt, lastChasingSelectedPos.y, chasingSelectedPos.y);
@@ -59,10 +46,12 @@ public abstract class MixinDeployTool extends SchematicToolBase {
         int centerX = (int) center.x;
         int centerZ = (int) center.z;
 
+        Vec3 camera = Minecraft.getInstance().gameRenderer.getMainCamera().getPosition();
         if (ship != null) {
             VSClientGameUtils.transformRenderWithShip(ship.getTransform(), ms, x - centerX, y, z - centerZ, camera.x, camera.y, camera.z);
         } else {
             ms.translate(x - centerX - camera.x, y - camera.y, z - centerZ - camera.z);
         }
     }
+
 }

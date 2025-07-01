@@ -20,7 +20,7 @@ import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
         "com.simibubi.create.content.kinetics.simpleRelays.CogwheelBlockItem$IntegratedSmallCogHelper"
 })
 public class MixinCogwheelBlockItem {
-    @Redirect(method = "getOffset", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/phys/BlockHitResult;getLocation()Lnet/minecraft/world/phys/Vec3;"))
+    @Redirect(method = "*", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/phys/BlockHitResult;getLocation()Lnet/minecraft/world/phys/Vec3;"))
     private Vec3 redirectGetLocation(BlockHitResult instance) {
         Vec3 result = instance.getLocation();
         Level world = Minecraft.getInstance().level;

@@ -19,7 +19,7 @@ import org.valkyrienskies.mod.common.VSClientGameUtils;
 public class MixinGhostBlockRenderer {
 
     @Redirect(
-        method = "render",
+        method = "*",
         at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/vertex/PoseStack;translate(DDD)V", ordinal = 0)
     )
     private void redirectTranslate(

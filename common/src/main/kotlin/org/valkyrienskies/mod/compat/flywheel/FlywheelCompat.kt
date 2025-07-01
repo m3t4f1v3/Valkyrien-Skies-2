@@ -1,8 +1,10 @@
 package org.valkyrienskies.mod.compat.flywheel
 
 import dev.engine_room.flywheel.api.visualization.VisualizationManager
+import dev.engine_room.flywheel.impl.visualization.VisualManagerImpl
 import dev.engine_room.flywheel.lib.visualization.VisualizationHelper
 import net.minecraft.client.Minecraft
+import net.minecraft.core.SectionPos
 import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.entity.BlockEntity
 import org.joml.Matrix4f
@@ -40,6 +42,15 @@ object FlywheelCompat {
 
         val ship = blockEntity.level!!.getShipManagingPos(blockEntity.blockPos) ?: return null
         return ShipEffect.getShipEffect(ship as ClientShip)
+    }
+
+    fun setShipEffectDirty(ship: ClientShip, x: Int, y: Int, z: Int, important: Boolean = false) {
+        ShipEffect.Companion.getShipEffect(ship).setDirty(x, y, z, important);
+    }
+
+    fun onLightUpdate(ship: ClientShip, pos: SectionPos) {
+        var manager = (ShipEffect.getShipEffect(ship).manager) as VisualManagerImpl<*, *>?
+        manager?.onLightUpdate(pos.asLong());
     }
 
     fun addBlockEntity(blockEntity: BlockEntity) {

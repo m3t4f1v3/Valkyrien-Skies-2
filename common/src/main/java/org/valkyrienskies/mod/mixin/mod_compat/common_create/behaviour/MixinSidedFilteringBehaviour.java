@@ -13,7 +13,7 @@ import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
 @Mixin(SidedFilteringBehaviour.class)
 public class MixinSidedFilteringBehaviour {
     @Redirect(
-            method = "testHit",
+            method = "*",
             at = @At(
                     value = "INVOKE",
                     target = "Lnet/minecraft/world/phys/Vec3;subtract(Lnet/minecraft/world/phys/Vec3;)Lnet/minecraft/world/phys/Vec3;"

@@ -19,7 +19,7 @@ public class MixinValueBox {
     protected BlockPos pos;
 
     @WrapOperation(
-        method = "render",
+        method = "*",
         at = @At(
             value = "INVOKE",
             target = "Lcom/mojang/blaze3d/vertex/PoseStack;translate(DDD)V",

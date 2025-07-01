@@ -32,7 +32,7 @@ public abstract class MixinControlledContraptionEntity extends AbstractContrapti
         return vec3;
     }
 
-    @Redirect(method = "shouldActorTrigger", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/phys/Vec3;equals(Ljava/lang/Object;)Z"))
+    @Redirect(method = "*", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/phys/Vec3;equals(Ljava/lang/Object;)Z"))
     private boolean redirectEquals(Vec3 instance, Object vec3) {
         Vec3 other = (Vec3) vec3;
         other = flatten(other);

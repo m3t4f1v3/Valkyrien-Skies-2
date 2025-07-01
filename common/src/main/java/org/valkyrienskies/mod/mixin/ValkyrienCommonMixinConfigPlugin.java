@@ -91,7 +91,7 @@ public class ValkyrienCommonMixinConfigPlugin implements IMixinConfigPlugin {
 
         if (mixinClassName.contains("org.valkyrienskies.mod.mixin.mod_compat.flywheel")) {
             // Only load this mixin if Flywheel v1 is present
-            return LoadedMods.getFlywheel() != FlywheelVersion.V1;
+            return LoadedMods.getFlywheel() == FlywheelVersion.V1;
         }
         if (mixinClassName.contains("org.valkyrienskies.mod.mixin.mod_compat.flywheel_renderer")) {
             // Only load this mixin if Flywheel v1 is present
@@ -112,21 +112,15 @@ public class ValkyrienCommonMixinConfigPlugin implements IMixinConfigPlugin {
             }
         }
 
-        if (mixinClassName.contains("org.valkyrienskies.mod.mixin.mod_compat.common_create") ||
-        mixinClassName.contains("org.valkyrienskies.mod.fabric.mixin.mod_compat.common_create") ||
-        mixinClassName.contains("org.valkyrienskies.mod.forge.mixin.mod_compat.common_create")) {
+        if (mixinClassName.contains("org.valkyrienskies.mod.mixin.mod_compat.common_create")) {
             // Only load this mixin if Create is present
             return LoadedMods.getCreate() || LoadedMods.getOldCreate();
         }
-        if (mixinClassName.contains("org.valkyrienskies.mod.mixin.mod_compat.old_create") ||
-            mixinClassName.contains("org.valkyrienskies.mod.fabric.mixin.mod_compat.old_create") ||
-            mixinClassName.contains("org.valkyrienskies.mod.forge.mixin.mod_compat.old_create")) {
-            return LoadedMods.getOldCreate(); // Only load this mixin if immersive portals is present
+        if (mixinClassName.contains("org.valkyrienskies.mod.mixin.mod_compat.old_create")) {
+            return LoadedMods.getOldCreate();
         }
-        if (mixinClassName.contains("org.valkyrienskies.mod.mixin.mod_compat.create") ||
-            mixinClassName.contains("org.valkyrienskies.mod.fabric.mixin.mod_compat.create") ||
-            mixinClassName.contains("org.valkyrienskies.mod.forge.mixin.mod_compat.create")) {
-            return LoadedMods.getCreate(); // Only load this mixin if Create is present
+        if (mixinClassName.contains("org.valkyrienskies.mod.mixin.mod_compat.create")) {
+            return LoadedMods.getCreate();
         }
 
         // Only load this mixin when ETF is installed

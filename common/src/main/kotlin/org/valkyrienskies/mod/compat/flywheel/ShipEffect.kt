@@ -1,6 +1,5 @@
 package org.valkyrienskies.mod.compat.flywheel
 
-import com.simibubi.create.content.trains.track.TrackBlockOutline.result
 import dev.engine_room.flywheel.api.visual.Effect
 import dev.engine_room.flywheel.api.visual.EffectVisual
 import dev.engine_room.flywheel.api.visualization.VisualManager

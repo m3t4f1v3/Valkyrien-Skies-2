@@ -16,7 +16,7 @@ import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
         "com.simibubi.create.content.kinetics.simpleRelays.CogwheelBlockItem$DiagonalCogHelper"
 })
 public class MixinCogwheelBlockItemHitOnShaft {
-    @Redirect(method = "hitOnShaft", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/phys/BlockHitResult;getLocation()Lnet/minecraft/world/phys/Vec3;"))
+    @Redirect(method = "*", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/phys/BlockHitResult;getLocation()Lnet/minecraft/world/phys/Vec3;"), require = 0)
     private Vec3 redirectGetLocation(BlockHitResult instance) {
         Vec3 result = instance.getLocation();
         Level world = Minecraft.getInstance().level;

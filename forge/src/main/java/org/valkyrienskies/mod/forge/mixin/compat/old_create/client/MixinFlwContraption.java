@@ -1,6 +1,7 @@
 package org.valkyrienskies.mod.forge.mixin.compat.old_create.client;
 
 import com.simibubi.create.content.contraptions.AbstractContraptionEntity;
+import com.simibubi.create.content.contraptions.Contraption;
 import com.simibubi.create.content.contraptions.render.ContraptionRenderInfo;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.AABB;
@@ -48,8 +49,8 @@ public class MixinFlwContraption {
         method = "beginFrame"
     )
     private AABB transformLightboxToWorld(final AABB aabb, final double negCamX, final double negCamY,
-        final double negCamZ) {
-        return VSGameUtilsKt.transformAabbToWorld(((ContraptionRenderInfo) (Object) this).getContraption().entity.level(), aabb).move(negCamX, negCamY, negCamZ);
+        final double negCamZ) throws NoSuchFieldException, IllegalAccessException {
+        return VSGameUtilsKt.transformAabbToWorld(((Contraption) ((ContraptionRenderInfo) (Object) this).getClass().getField("contraption").get(((ContraptionRenderInfo) (Object) this))).entity.level(), aabb).move(negCamX, negCamY, negCamZ);
     }
 }
 

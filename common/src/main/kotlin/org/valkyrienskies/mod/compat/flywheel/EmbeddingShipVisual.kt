@@ -28,6 +28,7 @@ import org.valkyrienskies.mod.common.config.shipRenderer
 import org.valkyrienskies.mod.common.util.toBlockPos
 import org.valkyrienskies.mod.common.util.toFloat
 import org.valkyrienskies.mod.common.util.toJOMLD
+import org.valkyrienskies.mod.compat.LoadedMods
 
 class EmbeddingShipVisual(val effect: ShipEffect, val visualContext: VisualizationContext) :
     EffectVisual<ShipEffect>, DynamicVisual, TickableVisual, ShaderLightVisual, LightUpdatedVisual

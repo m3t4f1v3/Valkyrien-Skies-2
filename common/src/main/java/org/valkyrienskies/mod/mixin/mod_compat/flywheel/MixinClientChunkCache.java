@@ -1,6 +1,5 @@
 package org.valkyrienskies.mod.mixin.mod_compat.flywheel;
 
-import dev.engine_room.flywheel.impl.visualization.VisualManagerImpl;
 import net.minecraft.client.multiplayer.ClientChunkCache;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.SectionPos;
@@ -15,7 +14,7 @@ import org.valkyrienskies.core.api.ships.ClientShip;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.compat.LoadedMods;
 import org.valkyrienskies.mod.compat.LoadedMods.FlywheelVersion;
-import org.valkyrienskies.mod.compat.flywheel.ShipEffect;
+import org.valkyrienskies.mod.compat.flywheel.FlywheelCompat;
 
 @Mixin(ClientChunkCache.class)
 public class MixinClientChunkCache {
@@ -29,8 +28,7 @@ public class MixinClientChunkCache {
 
         ClientShip ship = (ClientShip) VSGameUtilsKt.getShipManagingPos(level, pos.getX(), pos.getZ());
         if (ship != null) {
-            var manager = ((VisualManagerImpl) ShipEffect.Companion.getShipEffect(ship).getManager$valkyrienskies_120());
-            if (manager != null) manager.onLightUpdate(pos.asLong());
+            FlywheelCompat.INSTANCE.onLightUpdate(ship, pos);
         }
 
     }

@@ -18,7 +18,7 @@ import org.valkyrienskies.mod.common.config.ShipRenderer;
 import org.valkyrienskies.mod.common.config.ShipRendererKt;
 import org.valkyrienskies.mod.compat.LoadedMods;
 import org.valkyrienskies.mod.compat.LoadedMods.FlywheelVersion;
-import org.valkyrienskies.mod.compat.flywheel.ShipEffect;
+import org.valkyrienskies.mod.compat.flywheel.FlywheelCompat;
 
 @Mixin(ViewArea.class)
 public class MixinViewArea {
@@ -49,7 +49,7 @@ public class MixinViewArea {
         if (LoadedMods.getFlywheel() != FlywheelVersion.V1)
             throw new IllegalStateException("Trying to render with flywheel, but no flywheel installed");
 
-        ShipEffect.Companion.getShipEffect(ship).setDirty(x, y, z, important);
+        FlywheelCompat.INSTANCE.setShipEffectDirty(ship, x, y, z, important);
     }
 
     @Inject(method = "getRenderChunkAt", at = @At("HEAD"), cancellable = true)
