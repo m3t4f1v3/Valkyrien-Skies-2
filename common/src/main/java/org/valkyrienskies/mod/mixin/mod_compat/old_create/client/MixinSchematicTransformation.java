@@ -1,10 +1,9 @@
 package org.valkyrienskies.mod.mixin.mod_compat.old_create.client;
 
+import com.jozufozu.flywheel.util.AnimationTickHolder;
 import com.jozufozu.flywheel.util.transform.TransformStack;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.simibubi.create.content.schematics.client.SchematicTransformation;
-import com.simibubi.create.foundation.utility.AnimationTickHolder;
-import com.simibubi.create.foundation.utility.VecHelper;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.phys.Vec3;
@@ -16,6 +15,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 import org.valkyrienskies.core.api.ships.Ship;
 import org.valkyrienskies.mod.common.VSClientGameUtils;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
+import org.valkyrienskies.mod.compat.CreateCompat;
 
 /**
  * SchematicTransformation is responsible for the render transform of the schematic preview
@@ -49,7 +49,7 @@ public abstract class MixinSchematicTransformation {
 
         if (ship != null) {
             float pt = AnimationTickHolder.getPartialTicks();
-            Vec3 pos = VecHelper.lerp(pt, prevChasingPos, chasingPos);
+            Vec3 pos = CreateCompat.lerp(pt, prevChasingPos, chasingPos);
             Vec3 camera = pos.subtract(orig);
             VSClientGameUtils.transformRenderWithShip(ship.getTransform(), ms, pos.x, pos.y, pos.z, camera.x, camera.y, camera.z);
             return instance;

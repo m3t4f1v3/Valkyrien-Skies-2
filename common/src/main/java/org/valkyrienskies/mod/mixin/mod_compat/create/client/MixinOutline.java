@@ -1,4 +1,4 @@
-package org.valkyrienskies.mod.mixin.mod_compat.old_create.client;
+package org.valkyrienskies.mod.mixin.mod_compat.create.client;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;

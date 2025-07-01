@@ -1,11 +1,10 @@
 package org.valkyrienskies.mod.mixin.mod_compat.old_create.client;
 
+import com.jozufozu.flywheel.util.AnimationTickHolder;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.simibubi.create.content.contraptions.AbstractContraptionEntity;
 import com.simibubi.create.content.contraptions.Contraption;
 import com.simibubi.create.content.contraptions.render.ContraptionMatrices;
-import com.simibubi.create.content.contraptions.render.ContraptionRenderInfo;
-import com.simibubi.create.foundation.utility.AnimationTickHolder;
 import net.minecraft.util.Mth;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -17,9 +16,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.valkyrienskies.core.api.ships.ClientShip;
 import org.valkyrienskies.mod.common.VSClientGameUtils;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
+import org.valkyrienskies.mod.mixin.mod_compat.old_create.accessors.ContraptionMatricesAccessor;
 
 @Pseudo
-@Mixin(ContraptionRenderInfo.class)
+@Mixin(targets = "com.simibubi.create.content.contraptions.render.ContraptionRenderInfo")
 public class MixinContraptionRenderInfo {
 
     @Shadow
@@ -47,7 +47,7 @@ public class MixinContraptionRenderInfo {
                     camY,
                     camZ
             );
-            matrices.setup(viewProjection, entity);
+            ((ContraptionMatricesAccessor) matrices).callSetup(viewProjection, entity);
             viewProjection.popPose();
             ci.cancel();
         }

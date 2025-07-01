@@ -1,10 +1,9 @@
 package org.valkyrienskies.mod.mixin.mod_compat.old_create.client;
 
+import com.jozufozu.flywheel.util.AnimationTickHolder;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.simibubi.create.content.schematics.client.tools.DeployTool;
 import com.simibubi.create.content.schematics.client.tools.SchematicToolBase;
-import com.simibubi.create.foundation.render.SuperRenderTypeBuffer;
-import com.simibubi.create.foundation.utility.AnimationTickHolder;
 import net.minecraft.client.Minecraft;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.AABB;
@@ -48,7 +47,7 @@ public abstract class MixinDeployTool extends SchematicToolBase {
             ordinal = 0
         )
     )
-    private void mixinRenderTool(PoseStack ms, SuperRenderTypeBuffer buffer, Vec3 camera, CallbackInfo ci) {
+    private void mixinRenderTool(PoseStack ms, Object buffer, Vec3 camera, CallbackInfo ci) {
         float pt = AnimationTickHolder.getPartialTicks();
         double x = Mth.lerp(pt, lastChasingSelectedPos.x, chasingSelectedPos.x);
         double y = Mth.lerp(pt, lastChasingSelectedPos.y, chasingSelectedPos.y);

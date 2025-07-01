@@ -48,4 +48,10 @@ object CreateCompat {
             return Vec3(x * cos - y * sin, y * cos + x * sin, z)
         return vec
     }
+
+    @JvmStatic
+    fun lerp(p: Float, from: Vec3, to: Vec3): Vec3 {
+        return from.add(to.subtract(from)
+            .scale(p.toDouble()))
+    }
 }

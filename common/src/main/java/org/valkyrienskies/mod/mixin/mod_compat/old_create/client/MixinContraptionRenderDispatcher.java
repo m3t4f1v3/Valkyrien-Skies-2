@@ -2,7 +2,6 @@ package org.valkyrienskies.mod.mixin.mod_compat.old_create.client;
 
 import com.jozufozu.flywheel.util.transform.TransformStack;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.simibubi.create.content.contraptions.render.ContraptionRenderDispatcher;
 import net.minecraft.core.Vec3i;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
@@ -11,7 +10,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 import org.valkyrienskies.mod.common.VSClientGameUtils;
 
 @Pseudo
-@Mixin(ContraptionRenderDispatcher.class)
+@Mixin(targets = "com.simibubi.create.content.contraptions.render.ContraptionRenderDispatcher")
 public abstract class MixinContraptionRenderDispatcher {
 
     @Redirect(

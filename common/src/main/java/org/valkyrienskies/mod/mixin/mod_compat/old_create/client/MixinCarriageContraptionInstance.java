@@ -8,7 +8,6 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.simibubi.create.content.trains.entity.CarriageContraptionEntity;
-import com.simibubi.create.content.trains.entity.CarriageContraptionInstance;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.Level;
@@ -26,7 +25,7 @@ import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
 
 @Pseudo
-@Mixin(CarriageContraptionInstance.class)
+@Mixin(targets = "com.simibubi.create.content.trains.entity.CarriageContraptionInstance")
 public abstract class MixinCarriageContraptionInstance extends EntityInstance {
 
     public MixinCarriageContraptionInstance(MaterialManager materialManager, Entity entity) {

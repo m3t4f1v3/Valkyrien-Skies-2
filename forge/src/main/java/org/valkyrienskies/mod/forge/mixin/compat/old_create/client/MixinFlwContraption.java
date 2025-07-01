@@ -1,11 +1,7 @@
 package org.valkyrienskies.mod.forge.mixin.compat.old_create.client;
 
-
-import com.jozufozu.flywheel.core.virtual.VirtualRenderWorld;
 import com.simibubi.create.content.contraptions.AbstractContraptionEntity;
-import com.simibubi.create.content.contraptions.Contraption;
 import com.simibubi.create.content.contraptions.render.ContraptionRenderInfo;
-import com.simibubi.create.content.contraptions.render.FlwContraption;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.AABB;
 import org.joml.Matrix4f;
@@ -20,14 +16,8 @@ import org.valkyrienskies.mod.common.VSClientGameUtils;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 
 @Pseudo
-@Mixin(FlwContraption.class)
-public class MixinFlwContraption extends ContraptionRenderInfo {
-
-    public MixinFlwContraption(
-        final Contraption contraption,
-        final VirtualRenderWorld renderWorld) {
-        super(contraption, renderWorld);
-    }
+@Mixin(targets = "com.simibubi.create.content.contraptions.render.FlwContraption")
+public class MixinFlwContraption {
 
     @Inject(at = @At("HEAD"), method = "setupModelViewPartial", cancellable = true, remap = false)
     private static void beforeSetupModelViewPartial(final Matrix4f matrix, final Matrix4f modelMatrix,
@@ -59,7 +49,7 @@ public class MixinFlwContraption extends ContraptionRenderInfo {
     )
     private AABB transformLightboxToWorld(final AABB aabb, final double negCamX, final double negCamY,
         final double negCamZ) {
-        return VSGameUtilsKt.transformAabbToWorld(this.contraption.entity.level(), aabb).move(negCamX, negCamY, negCamZ);
+        return VSGameUtilsKt.transformAabbToWorld(((ContraptionRenderInfo) (Object) this).getContraption().entity.level(), aabb).move(negCamX, negCamY, negCamZ);
     }
 }
 
