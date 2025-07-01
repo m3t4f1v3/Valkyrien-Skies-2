@@ -1,7 +1,5 @@
 package org.valkyrienskies.mod.mixin.mod_compat.flywheel;
 
-import dev.engine_room.flywheel.api.visualization.VisualizationManager;
-import dev.engine_room.flywheel.lib.visualization.VisualizationHelper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -13,8 +11,9 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.valkyrienskies.core.api.ships.ClientShip;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
+import org.valkyrienskies.mod.compat.LoadedMods;
+import org.valkyrienskies.mod.compat.LoadedMods.FlywheelVersion;
 import org.valkyrienskies.mod.compat.flywheel.FlywheelCompat;
-import org.valkyrienskies.mod.compat.flywheel.FlywheelCompat.FlywheelVersion;
 import org.valkyrienskies.mod.compat.flywheel.ShipEffect;
 
 @Mixin(BlockEntity.class)
@@ -29,9 +28,8 @@ public abstract class MixinBlockEntity {
     @Inject(method = "setRemoved()V", at = @At("TAIL"))
     private void vs_flywheel$removeVisual(CallbackInfo ci) {
         if (!level.isClientSide) return;
-        if (FlywheelCompat.INSTANCE.isFlywheelInstalled() != FlywheelVersion.V1) return;
-        if (!VisualizationHelper.canVisualize((BlockEntity) (Object) this)) return;
-        if (VisualizationManager.get(level) == null) return;
+        if (LoadedMods.getFlywheel() != FlywheelVersion.V1) return;
+        if (!FlywheelCompat.INSTANCE.validate((BlockEntity) (Object) this, level)) return;
 
         ClientShip ship = (ClientShip) VSGameUtilsKt.getShipObjectManagingPos(level, this.getBlockPos());
         if (ship == null) return;

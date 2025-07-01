@@ -3,29 +3,19 @@ package org.valkyrienskies.mod.compat.flywheel
 import dev.engine_room.flywheel.api.visualization.VisualizationManager
 import dev.engine_room.flywheel.lib.visualization.VisualizationHelper
 import net.minecraft.client.Minecraft
+import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.entity.BlockEntity
 import org.joml.Matrix4f
 import org.valkyrienskies.core.api.ships.ClientShip
 import org.valkyrienskies.core.impl.hooks.VSEvents
 import org.valkyrienskies.mod.common.getShipManagingPos
+import org.valkyrienskies.mod.compat.LoadedMods
+import org.valkyrienskies.mod.compat.LoadedMods.FlywheelVersion
 
 object FlywheelCompat {
-    val isFlywheelInstalled: FlywheelVersion by lazy {
-        try {
-            Class.forName("dev.engine_room.flywheel.api.Flywheel")
-            FlywheelVersion.V1
-        } catch (e: ClassNotFoundException) {
-            try {
-                Class.forName("com.jozufozu.flywheel.Flywheel")
-                FlywheelVersion.V06
-            } catch (e: ClassNotFoundException) {
-                FlywheelVersion.NONE
-            }
-        }
-    }
 
     fun initClient() {
-        if (isFlywheelInstalled != FlywheelVersion.V1) return
+        if (LoadedMods.flywheel != FlywheelVersion.V1) return
 
         VSEvents.shipLoadEventClient.on { e ->
             VisualizationHelper.queueAdd(ShipEffect(e.ship, Minecraft.getInstance().level!!))
@@ -36,8 +26,14 @@ object FlywheelCompat {
         }
     }
 
+    fun validate(blockEntity: BlockEntity, level: Level): Boolean {
+        if (!VisualizationHelper.canVisualize(blockEntity)) return false
+        if (VisualizationManager.get(level) == null) return false
+        return true
+    }
+
     private fun getEffect(blockEntity: BlockEntity): ShipEffect? {
-        if (isFlywheelInstalled != FlywheelVersion.V1) return null
+        if (LoadedMods.flywheel != FlywheelVersion.V1) return null
         if (blockEntity.level?.isClientSide != true) return null
         if (!VisualizationManager.supportsVisualization(blockEntity.level)) return null
         if (!VisualizationHelper.canVisualize(blockEntity)) return null
@@ -59,10 +55,4 @@ object FlywheelCompat {
     }
 
     lateinit var viewProjection: Matrix4f
-
-    enum class FlywheelVersion {
-        V1,
-        V06,
-        NONE
-    }
 }

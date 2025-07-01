@@ -9,6 +9,7 @@ import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
 import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 import org.spongepowered.asm.service.MixinService;
 import org.valkyrienskies.mod.compat.LoadedMods;
+import org.valkyrienskies.mod.compat.LoadedMods.FlywheelVersion;
 import org.valkyrienskies.mod.compat.VSRenderer;
 
 /**
@@ -86,6 +87,19 @@ public class ValkyrienCommonMixinConfigPlugin implements IMixinConfigPlugin {
         }
         if (mixinClassName.contains("org.valkyrienskies.mod.mixin.feature.render_pathfinding")) {
             return PATH_FINDING_DEBUG;
+        }
+
+        if (mixinClassName.contains("org.valkyrienskies.mod.mixin.mod_compat.flywheel")) {
+            // Only load this mixin if Flywheel v1 is present
+            return LoadedMods.getFlywheel() != FlywheelVersion.V1;
+        }
+        if (mixinClassName.contains("org.valkyrienskies.mod.mixin.mod_compat.flywheel_renderer")) {
+            // Only load this mixin if Flywheel v1 is present
+            return LoadedMods.getFlywheel() == FlywheelVersion.V1;
+        }
+        if (mixinClassName.contains("org.valkyrienskies.mod.mixin.mod_compat.old_flywheel")) {
+            // Only load this mixin if Flywheel v1 is present
+            return LoadedMods.getFlywheel() == FlywheelVersion.V06;
         }
 
         if (mixinClassName.contains("org.valkyrienskies.mod.mixin.mod_compat.common_create.client.trackOutlines")) {

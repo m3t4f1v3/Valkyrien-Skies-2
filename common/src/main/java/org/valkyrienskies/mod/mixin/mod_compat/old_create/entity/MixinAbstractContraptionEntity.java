@@ -190,12 +190,6 @@ public abstract class MixinAbstractContraptionEntity extends Entity implements M
     public abstract boolean isStalled();
 
     @Shadow
-    protected abstract boolean shouldActorTrigger(MovementContext context, StructureBlockInfo blockInfo, Object actor, Vec3 actorPosition, BlockPos gridPosition);
-
-    @Shadow
-    protected abstract boolean isActorActive(MovementContext context, Object actor);
-
-    @Shadow
     protected abstract void onContraptionStalled();
 
     @Inject(method = "tickActors", at = @At("HEAD"), cancellable = true, remap = false)
@@ -222,12 +216,12 @@ public abstract class MixinAbstractContraptionEntity extends Entity implements M
                 .add((Vec3) actor.getClass().getMethod("getActiveAreaOffset", MovementContext.class).invoke(actor, context)), 1);
             final BlockPos gridPosition = vs$getTargetPos(actor, context, BlockPos.containing(actorPosition), actorPosition); // BlockPos.containing(actorPosition);
             final boolean newPosVisited =
-                !context.stall && shouldActorTrigger(context, blockInfo, actor, actorPosition, gridPosition);
+                !context.stall && ((AbstractContraptionEntity) (Object) this).getClass().getMethod("shouldActorTrigger", MovementContext.class, StructureBlockInfo.class, actor.getClass(), Vec3.class, BlockPos.class).invoke((AbstractContraptionEntity)(Object)this, context, blockInfo, actor, actorPosition, gridPosition).equals(true);
 
             context.rotation = v -> applyRotation(v, 1);
             context.position = actorPosition;
             try {
-                if (!isActorActive(context, actor) && !actor.getClass().getMethod("mustTickWhileDisabled").invoke(actor).equals(true))
+                if (!((AbstractContraptionEntity)(Object)this).getClass().getMethod("isActorActive", MovementContext.class, actor.getClass()).invoke((AbstractContraptionEntity)(Object)this, context, actor).equals(true) && !actor.getClass().getMethod("mustTickWhileDisabled").invoke(actor).equals(true))
                     continue;
             } catch (InvocationTargetException ignored) {
 

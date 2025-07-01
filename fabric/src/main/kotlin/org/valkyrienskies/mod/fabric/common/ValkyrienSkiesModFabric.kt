@@ -4,7 +4,6 @@ import net.fabricmc.api.EnvType
 import net.fabricmc.api.ModInitializer
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper
 import net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry
-import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback
 import net.fabricmc.fabric.api.event.lifecycle.v1.CommonLifecycleEvents
 import net.fabricmc.fabric.api.`object`.builder.v1.block.entity.FabricBlockEntityTypeBuilder
 import net.fabricmc.fabric.api.resource.IdentifiableResourceReloadListener
@@ -48,6 +47,7 @@ import org.valkyrienskies.mod.common.item.ConnectionCheckerItem
 import org.valkyrienskies.mod.common.item.PhysicsEntityCreatorItem
 import org.valkyrienskies.mod.common.item.ShipAssemblerItem
 import org.valkyrienskies.mod.common.item.ShipCreatorItem
+import org.valkyrienskies.mod.compat.LoadedMods
 import org.valkyrienskies.mod.compat.flywheel.FlywheelCompat
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executor
@@ -233,7 +233,9 @@ class ValkyrienSkiesModFabric : ModInitializer {
             KeyBindingHelper.registerKeyBinding(it)
         }
 
-        FlywheelCompat.initClient()
+        if (LoadedMods.flywheel == LoadedMods.FlywheelVersion.V1) {
+            FlywheelCompat.initClient()
+        }
     }
 
     private fun registerBlockAndItem(registryName: String, block: Block): Item {
