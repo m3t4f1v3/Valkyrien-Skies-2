@@ -36,7 +36,7 @@
     "compat.common_create.client.MixinTrackBlockOutline",
     "compat.sodium.MixinRenderSectionManager",
     "compat.old_create.client.MixinContraptionRenderInfo",
-    "compat.old_create.client.MixinFlwContraption",
+    "compat.old_create.client.MixinFlwContraption"
   ],
   "injectors": {
     "defaultRequire": 1
