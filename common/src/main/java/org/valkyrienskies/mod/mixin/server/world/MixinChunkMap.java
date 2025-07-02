@@ -16,6 +16,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.storage.DimensionDataStorage;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -23,6 +24,7 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+import org.valkyrienskies.core.api.ships.Ship;
 import org.valkyrienskies.core.apigame.world.IPlayer;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.util.MinecraftPlayer;
@@ -79,7 +81,7 @@ public abstract class MixinChunkMap {
      *
      * @author Tri0de
      */
-    @Inject(method = "getPlayers", at = @At("TAIL"), cancellable = true)
+    @Inject(method = "getPlayers", at = @At("RETURN"), cancellable = true)
     private void postGetPlayersWatchingChunk(final ChunkPos chunkPos, final boolean onlyOnWatchDistanceEdge,
         final CallbackInfoReturnable<List<ServerPlayer>> cir) {
 
@@ -118,5 +120,19 @@ public abstract class MixinChunkMap {
     @WrapOperation(method = "playerIsCloseEnoughForSpawning", at = @At(value = "INVOKE", target = "Lnet/minecraft/server/level/ChunkMap;euclideanDistanceSquared(Lnet/minecraft/world/level/ChunkPos;Lnet/minecraft/world/entity/Entity;)D"))
     private double onEuclideanDistanceSquared(ChunkPos d0, Entity d1, Operation<Double> original) {
         return original.call(new ChunkPos(BlockPos.containing(VSGameUtilsKt.toWorldCoordinates(level, d0.getMiddleBlockPosition(63)))), d1);
+    }
+
+    /**
+     * Only save ship chunks that actually have something in them to avoid massive lag when closing/saving the game
+     */
+    @Inject(method = "save", at = @At("HEAD"), cancellable = true)
+    private void preSave(ChunkAccess chunkAccess, CallbackInfoReturnable<Boolean> cir) {
+        final ChunkPos pos = chunkAccess.getPos();
+        final Ship ship = VSGameUtilsKt.getShipManagingPos(level, pos);
+        if (ship != null) {
+            if (!ship.getActiveChunksSet().contains(pos.x, pos.z)) {
+                cir.setReturnValue(false);
+            }
+        }
     }
 }
