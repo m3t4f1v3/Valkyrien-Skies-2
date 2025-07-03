@@ -4,11 +4,12 @@ import com.mojang.brigadier.StringReader
 import com.mojang.brigadier.exceptions.DynamicCommandExceptionType
 import com.mojang.brigadier.exceptions.SimpleCommandExceptionType
 import com.mojang.brigadier.suggestion.SuggestionsBuilder
+import net.minecraft.commands.CommandSourceStack
+import net.minecraft.commands.SharedSuggestionProvider
 import net.minecraft.network.chat.Component
 import org.valkyrienskies.core.api.ships.properties.ShipId
-import org.valkyrienskies.mod.mixinducks.feature.command.VSCommandSource
 
-class ShipArgumentParser(private val source: VSCommandSource?, private var selectorOnly: Boolean) {
+class ShipArgumentParser(private val source: SharedSuggestionProvider?, private var selectorOnly: Boolean) {
     var suggestionProvider: (SuggestionsBuilder) -> Unit = {}
     var slug: String? = null
     var limit: Int? = null
@@ -179,7 +180,7 @@ class ShipArgumentParser(private val source: VSCommandSource?, private var selec
         builder.suggest("]")
     }
 
-    private fun suggest(builder: (SuggestionsBuilder, VSCommandSource) -> Unit) {
+    private fun suggest(builder: (SuggestionsBuilder, SharedSuggestionProvider) -> Unit) {
         if (source != null) suggestionProvider = { builder(it, source) }
     }
 
