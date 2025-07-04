@@ -46,6 +46,8 @@
     "feature.dismount_dead_entities.MixinLivingEntity",
     "feature.dispensers.MixinDefaultDispenseItemBehavior",
     "feature.distance_replace.MixinEntity",
+    "feature.enchantment_table.MixinEnchantmentTableBlock",
+    "feature.enchantment_table.MixinEnchantmentTableBlockEntity",
     "feature.entity_collision.MixinEntity",
     "feature.entity_collision.MixinLivingEntity",
     "feature.entity_collision.MixinPlayer",

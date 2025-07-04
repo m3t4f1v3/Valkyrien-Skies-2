@@ -22,6 +22,7 @@
     "compat.tfc.MixinTFCChunkGenerator",
     "compat.thermalexpansion.MixinTileCoFH",
     "compat.twilightforest.ChunkGeneratorTwilightMixin",
+    "feature.enchanting_table.MixinEnchantmentMenu",
     "feature.forge_interact.MixinIForge2Player",
     "feature.forge_interact.MixinIForgePlayer",
     "feature.shipyard_entities.MixinPersistentEntitySectionManager",
@@ -34,9 +35,9 @@
     "compat.common_create.client.MixinContraptionHandlerClient",
     "compat.common_create.client.MixinSuperGlueSelectionHandler",
     "compat.common_create.client.MixinTrackBlockOutline",
-    "compat.sodium.MixinRenderSectionManager",
     "compat.old_create.client.MixinContraptionRenderInfo",
-    "compat.old_create.client.MixinFlwContraption"
+    "compat.old_create.client.MixinFlwContraption",
+    "compat.sodium.MixinRenderSectionManager"
   ],
   "injectors": {
     "defaultRequire": 1
