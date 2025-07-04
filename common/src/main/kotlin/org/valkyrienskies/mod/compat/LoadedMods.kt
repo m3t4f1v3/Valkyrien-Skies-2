@@ -23,7 +23,7 @@ object LoadedMods {
     @JvmStatic
     val flywheel: FlywheelVersion by lazy {
         try {
-            Class.forName("dev.engine_room.flywheel.api.Flywheel")
+            Class.forName("dev.engine_room.flywheel.backend.FlwBackend")
             FlywheelVersion.V1
         } catch (e: ClassNotFoundException) {
             try {

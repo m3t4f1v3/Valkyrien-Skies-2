@@ -43,7 +43,6 @@
     "feature.clip_replace.MixinLevel",
     "feature.commands.MixinArgumentTypeInfos",
     "feature.conduit_fix.ConduitMixin",
-    "feature.container_distance_check.MixinContainer",
     "feature.dismount_dead_entities.MixinLivingEntity",
     "feature.dispensers.MixinDefaultDispenseItemBehavior",
     "feature.distance_replace.MixinEntity",

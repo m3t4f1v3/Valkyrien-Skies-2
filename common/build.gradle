@@ -42,7 +42,8 @@ dependencies {
     //Common create compat,
     //We just use a version from a platform and hope the classes exist on both versions and mixins apply correctly
     modCompileOnly("com.simibubi.create:create-fabric-${minecraft_version}:${create_fabric_version}")
-        { exclude group: 'com.github.AlphaMode', module: 'fakeconfigtoml' }
+        { exclude group: 'com.github.AlphaMode', module: 'fakeconfigtoml'
+          exclude group: 'dev.engine-room.flywheel' }
     modCompileOnly("net.fabricmc.fabric-api:fabric-api:${fabric_api_version}")
     modCompileOnly("net.createmod.ponder:Ponder-Fabric-${minecraft_version}:${ponder_version_fabric}") { transitive = false }
     modCompileOnly("net.createmod.ponder:Ponder-Common-${minecraft_version}:${ponder_version_fabric}")
