@@ -35,3 +35,5 @@ accessible  class   net/minecraft/world/entity/animal/Bee$BeeLocateHiveGoal
 accessible  class   net/minecraft/world/entity/animal/Bee$BeeGrowCropGoal
 accessible  class   net/minecraft/world/entity/animal/Bee$BaseBeeGoal
 
+# For flywheel lighting engine
+mutable field   net/minecraft/world/level/lighting/LevelLightEngine   blockEngine    Lnet/minecraft/world/level/lighting/LightEngine;

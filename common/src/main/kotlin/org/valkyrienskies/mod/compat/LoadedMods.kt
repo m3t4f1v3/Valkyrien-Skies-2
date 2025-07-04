@@ -14,6 +14,27 @@ object LoadedMods {
     @JvmStatic
     val immersivePortals by CompatInfo("qouteall.imm_ptl.core.IPModMain")
 
+    @JvmStatic
+    val create by CompatInfo("com.simibubi.create.foundation.render.AllInstanceTypes")
+
+    @JvmStatic
+    val oldCreate by CompatInfo("com.simibubi.create.foundation.render.AllInstanceFormats")
+
+    @JvmStatic
+    val flywheel: FlywheelVersion by lazy {
+        try {
+            Class.forName("dev.engine_room.flywheel.api.Flywheel")
+            FlywheelVersion.V1
+        } catch (e: ClassNotFoundException) {
+            try {
+                Class.forName("com.jozufozu.flywheel.Flywheel")
+                FlywheelVersion.V06
+            } catch (_: ClassNotFoundException) {
+                FlywheelVersion.NONE
+            }
+        }
+    }
+
     class CompatInfo(private val className: String) : ReadOnlyProperty<Any?, Boolean> {
         private var isLoaded: Boolean? = null
 
@@ -28,5 +49,11 @@ object LoadedMods {
             }
             return isLoaded!!
         }
+    }
+
+    enum class FlywheelVersion {
+        V1,
+        V06,
+        NONE
     }
 }

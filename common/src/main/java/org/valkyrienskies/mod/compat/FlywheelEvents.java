@@ -4,10 +4,16 @@ import com.jozufozu.flywheel.backend.instancing.InstanceWorld;
 import java.util.Collections;
 import java.util.Set;
 import java.util.WeakHashMap;
+import org.valkyrienskies.mod.common.ValkyrienSkiesMod;
+import org.valkyrienskies.mod.compat.LoadedMods.FlywheelVersion;
+import org.valkyrienskies.mod.compat.flywheel.FlywheelCompat;
+import org.valkyrienskies.mod.mixinducks.MixinBlockEntityInstanceManagerDuck;
 
 public class FlywheelEvents {
     static {
-        registerEvents();
+        if (LoadedMods.getFlywheel() == FlywheelVersion.V06) {
+            registerEvents();
+        }
     }
 
     private static final Set<InstanceWorld> weakLoadedInstanceWorlds =
@@ -16,12 +22,11 @@ public class FlywheelEvents {
         );
 
     private static synchronized void registerEvents() {
-        // TODO api fix
-//        ShipUnloadEventClient.Companion.on(event -> {
-//            for (final InstanceWorld instanceWorld : weakLoadedInstanceWorlds) {
-//                ((MixinBlockEntityInstanceManagerDuck) instanceWorld.getBlockEntityInstanceManager()).vs$removeShipManager(event.getShip());
-//            }
-//        });
+        ValkyrienSkiesMod.getVsCore().getShipUnloadEventClient().on(event -> {
+            for (final InstanceWorld instanceWorld : weakLoadedInstanceWorlds) {
+                ((MixinBlockEntityInstanceManagerDuck) instanceWorld.getBlockEntityInstanceManager()).vs$removeShipManager(event.getShip());
+            }
+        });
     }
 
     public static void onInstanceWorldLoad(final InstanceWorld instanceWorld) {

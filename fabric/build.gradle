@@ -82,10 +82,17 @@ dependencies {
     modCompileOnly("curse.maven:entity-texture-features-fabric-568563:5697084")
 
     // Create compat
-    modCompileOnly("com.simibubi.create:create-fabric-${minecraft_version}:${create_fabric_version}") {
+    modImplementation("com.simibubi.create:create-fabric-${minecraft_version}:${create_fabric_version}") {
         exclude group: 'com.github.AlphaMode', module: 'fakeconfigtoml'
+        exclude(group: 'dev.engine-room')
     }
-    modCompileOnly("com.jozufozu.flywheel:flywheel-fabric-${minecraft_version}:${flywheel_version_fabric}")
+    modCompileOnly("net.createmod.ponder:Ponder-Common-${minecraft_version}:${ponder_version_fabric}") { transitive = false }
+    modApi("dev.engine-room.flywheel:flywheel-fabric-api-${minecraft_version}:${flywheel_version}")
+    modImplementation("dev.engine-room.flywheel:flywheel-fabric-${minecraft_version}:${flywheel_version}")
+
+    //modCompileOnly("com.simibubi.create:create-fabric-${minecraft_version}:${old_create_fabric_version}")
+    modCompileOnly("com.jozufozu.flywheel:flywheel-fabric-${minecraft_version}:${old_flywheel_version}")
+
     modCompileOnly("com.tterrag.registrate_fabric:Registrate:${registrate_version}")
 
     //modImplementation("io.github.fabricators_of_create.Porting-Lib:Porting-Lib:$port_lib_version")
