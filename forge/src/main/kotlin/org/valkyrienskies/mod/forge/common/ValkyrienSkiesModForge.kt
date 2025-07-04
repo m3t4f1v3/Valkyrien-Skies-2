@@ -218,11 +218,11 @@ class ValkyrienSkiesModForge {
     }
 
     private fun registerCommands(event: RegisterCommandsEvent) {
-        //VSCommands.registerServerCommands(event.dispatcher)
+        VSCommands.registerServerCommands(event.dispatcher)
 
-        //if (event.commandSelection == ALL || event.commandSelection == INTEGRATED) {
-        //    VSCommands.registerClientCommands(event.dispatcher)
-        //}
+        if (event.commandSelection == ALL || event.commandSelection == INTEGRATED) {
+            VSCommands.registerClientCommands(event.dispatcher)
+        }
     }
 
     private fun tagsUpdated(event: TagsUpdatedEvent) {

@@ -171,9 +171,9 @@ class ValkyrienSkiesModFabric : ModInitializer {
             ValkyrienSkiesMod.createCreativeTab()
         )
 
-        // CommandRegistrationCallback.EVENT.register { dispatcher ,d, _ ->
-        //     VSCommands.registerServerCommands(dispatcher)
-        // }
+        CommandRegistrationCallback.EVENT.register { dispatcher ,d, _ ->
+            VSCommands.registerServerCommands(dispatcher)
+        }
 
         // registering data loaders
         val loader1 = MassDatapackResolver.loader // the get makes a new instance so get it only once
