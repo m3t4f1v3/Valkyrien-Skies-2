@@ -35,6 +35,18 @@ You can download official releases of Valkyrien Skies from our [website](https:/
 ### Running Forge in dev environment
 Occasionally forge will break in strange ways. When this occurs, delete all the `build` folders, delete the `.gradle` folder of the `forge` project, and then refresh gradle.
 
+#### cpw.mods.securejarhandler Issue
+Additionally, as of a recent version of Forge, they changed their dependencies and now the generated buildscript by IntelliJ can fail. If it complains about cpw.mods, follow these steps:
+
+1. Go to your user .gradle directory, located in C:/Users/**/.gradle
+2. Navigate to caches\modules-2\files-2.1\cpw.mods\securejarhandler
+3. If it's using 1.0.8, delete it and refresh gradle.
+4. Now, edit the Minecraft Client (:forge) run configuration:
+5. Replace the mention of 1.0.8/(hash)/securejarhandler-1.0.8.jar with:
+   `caches\modules-2\files-2.1\cpw.mods\securejarhandler\2.1.10\51e6a22c6c716beb11e244bf5b8be480f51dd6b5\securejarhandler-2.1.10.jar`
+
+Forge should now run in dev.
+
 ### Change JVM arguments for small computers
 `Error occurred during initialization of VM
 Could not reserve enough space for 4194304KB object heap`
