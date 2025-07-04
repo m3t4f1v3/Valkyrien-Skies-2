@@ -95,6 +95,9 @@ object ValkyrienSkiesMod {
         VSEvents.ShipLoadEvent.on { event ->
             //event.ship.setAttachment(GameTickForceApplier())
             event.ship.setAttachment(SplittingDisablerAttachment(true))
+            //event.ship.dragController?.disableDrag()
+            //event.ship.dragController?.disableLift()
+            //event.ship.dragController?.disableRotDrag()
         }
 
         this.vsCore.physTickEvent.on { event ->

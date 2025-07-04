@@ -44,15 +44,15 @@ object TestThrusterBlock : DirectionalBlock(Properties.of().strength(10.0f, 1200
                 if (bl2) {
                     level.scheduleTick(blockPos, this, 4)
                 } else {
-                    level.setBlock(blockPos, blockState.cycle<Boolean?>(LIT) as BlockState, 2)
+                    level.setBlock(blockPos, blockState.cycle<Boolean>(LIT) as BlockState, 2)
                 }
             }
         }
     }
 
     override fun tick(blockState: BlockState, serverLevel: ServerLevel, blockPos: BlockPos, randomSource: RandomSource) {
-        if (blockState.getValue<Boolean?>(LIT) as Boolean && !serverLevel.hasNeighborSignal(blockPos)) {
-            serverLevel.setBlock(blockPos, blockState.cycle<Boolean?>(LIT) as BlockState, 2)
+        if (blockState.getValue<Boolean>(LIT) && !serverLevel.hasNeighborSignal(blockPos)) {
+            serverLevel.setBlock(blockPos, blockState.cycle<Boolean>(LIT) as BlockState, 2)
         }
         if (serverLevel.getBlockEntity(blockPos) is TestThrusterBlockEntity) {
             val blockEntity = serverLevel.getBlockEntity(blockPos) as TestThrusterBlockEntity
@@ -60,7 +60,7 @@ object TestThrusterBlock : DirectionalBlock(Properties.of().strength(10.0f, 1200
                 blockEntity.added = true
                 DebugPhysicsTickables.add(blockEntity)
             }
-            blockEntity.isActive = blockState.getValue<Boolean?>(LIT) as Boolean
+            blockEntity.isActive = blockState.getValue<Boolean>(LIT) as Boolean
             blockEntity.shipMountedTo = serverLevel.getShipObjectManagingPos(blockPos)?.id ?: -1L
         }
     }
