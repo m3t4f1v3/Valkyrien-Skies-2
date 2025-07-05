@@ -37,7 +37,6 @@ import org.valkyrienskies.mod.common.ValkyrienSkiesMod.MOD_ID
 import org.valkyrienskies.mod.common.block.TestChairBlock
 import org.valkyrienskies.mod.common.block.TestFlapBlock
 import org.valkyrienskies.mod.common.block.TestHingeBlock
-import org.valkyrienskies.mod.common.block.TestSphereBlock
 import org.valkyrienskies.mod.common.block.TestWingBlock
 import org.valkyrienskies.mod.common.blockentity.TestHingeBlockEntity
 import org.valkyrienskies.mod.common.command.VSCommands
@@ -69,7 +68,6 @@ class ValkyrienSkiesModForge {
     private val TEST_HINGE_REGISTRY: RegistryObject<Block>
     private val TEST_FLAP_REGISTRY: RegistryObject<Block>
     private val TEST_WING_REGISTRY: RegistryObject<Block>
-    private val TEST_SPHERE_REGISTRY: RegistryObject<Block>
     private val CONNECTION_CHECKER_ITEM_REGISTRY: RegistryObject<Item>
     private val SHIP_CREATOR_ITEM_REGISTRY: RegistryObject<Item>
     private val SHIP_CREATOR_SMALLER_ITEM_REGISTRY: RegistryObject<Item>
@@ -127,7 +125,6 @@ class ValkyrienSkiesModForge {
         TEST_HINGE_REGISTRY = registerBlockAndItem("test_hinge") { TestHingeBlock }
         TEST_FLAP_REGISTRY = registerBlockAndItem("test_flap") { TestFlapBlock }
         TEST_WING_REGISTRY = registerBlockAndItem("test_wing") { TestWingBlock }
-        TEST_SPHERE_REGISTRY = registerBlockAndItem("test_sphere") { TestSphereBlock }
         SHIP_CREATOR_ITEM_REGISTRY =
             ITEMS.register("ship_creator") {
                 ShipCreatorItem(Properties(),
@@ -253,7 +250,6 @@ class ValkyrienSkiesModForge {
         ValkyrienSkiesMod.TEST_HINGE = TEST_HINGE_REGISTRY.get()
         ValkyrienSkiesMod.TEST_FLAP = TEST_FLAP_REGISTRY.get()
         ValkyrienSkiesMod.TEST_WING = TEST_WING_REGISTRY.get()
-        ValkyrienSkiesMod.TEST_SPHERE = TEST_SPHERE_REGISTRY.get()
         ValkyrienSkiesMod.CONNECTION_CHECKER_ITEM = CONNECTION_CHECKER_ITEM_REGISTRY.get()
         ValkyrienSkiesMod.SHIP_CREATOR_ITEM = SHIP_CREATOR_ITEM_REGISTRY.get()
         ValkyrienSkiesMod.SHIP_ASSEMBLER_ITEM = SHIP_ASSEMBLER_ITEM_REGISTRY.get()
