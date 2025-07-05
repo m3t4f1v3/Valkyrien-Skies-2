@@ -1,5 +1,7 @@
 package org.valkyrienskies.mod.common
 
+import net.minecraft.client.renderer.entity.BatRenderer
+import net.minecraft.client.renderer.entity.EntityRendererProvider.Context
 import net.minecraft.core.registries.Registries
 import net.minecraft.network.chat.Component
 import net.minecraft.resources.ResourceKey
@@ -110,4 +112,5 @@ object ValkyrienSkiesMod {
             }
             .build()
     }
+
 }

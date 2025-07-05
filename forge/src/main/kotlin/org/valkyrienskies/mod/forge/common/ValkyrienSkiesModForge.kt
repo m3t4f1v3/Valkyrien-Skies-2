@@ -17,6 +17,7 @@ import net.minecraftforge.client.event.RegisterKeyMappingsEvent
 import net.minecraftforge.event.AddReloadListenerEvent
 import net.minecraftforge.event.RegisterCommandsEvent
 import net.minecraftforge.event.TagsUpdatedEvent
+import net.minecraftforge.event.entity.EntityAttributeCreationEvent
 import net.minecraftforge.fml.ModList
 import net.minecraftforge.fml.ModLoadingContext
 import net.minecraftforge.fml.common.Mod
@@ -29,6 +30,7 @@ import net.minecraftforge.registries.RegistryObject
 import org.valkyrienskies.core.apigame.VSCoreFactory
 import org.valkyrienskies.core.impl.config_impl.VSCoreConfig
 import org.valkyrienskies.mod.client.EmptyRenderer
+import org.valkyrienskies.mod.client.VSPhysicsEntityModel
 import org.valkyrienskies.mod.client.VSPhysicsEntityRenderer
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod.MOD_ID
@@ -96,11 +98,13 @@ class ValkyrienSkiesModForge {
 
         BLOCKS.register(modBus)
         ITEMS.register(modBus)
+
         ENTITIES.register(modBus)
         BLOCK_ENTITIES.register(modBus)
         if (isClient) {
             modBus.addListener(::registerKeyBindings)
             modBus.addListener(::entityRenderers)
+            modBus.addListener(::registerLayerDefinitions)
             if (LoadedMods.flywheel == LoadedMods.FlywheelVersion.V1) FlywheelCompat.initClient()
         }
         modBus.addListener(::loadComplete)
@@ -172,17 +176,21 @@ class ValkyrienSkiesModForge {
             EntityType.Builder.of(
                 ::VSPhysicsEntity,
                 MobCategory.MISC
-            ).sized(.3f, .3f)
+            ).sized(1f, 1f)
                 .setUpdateInterval(1)
                 .clientTrackingRange(10)
                 .build(ResourceLocation(MOD_ID, "vs_physics_entity").toString())
         }
+        modBus.addListener(::registerAttributes)
+
 
         SHIP_ASSEMBLER_ITEM_REGISTRY =
             ITEMS.register("ship_assembler") { ShipAssemblerItem(Properties()) }
         TEST_HINGE_BLOCK_ENTITY_TYPE_REGISTRY = BLOCK_ENTITIES.register("test_hinge_block_entity") {
             BlockEntityType.Builder.of(::TestHingeBlockEntity, TestHingeBlock).build(null)
         }
+
+
 
         val deferredRegister = DeferredRegister.create(Registries.CREATIVE_MODE_TAB, MOD_ID)
         deferredRegister.register("general") {
@@ -209,6 +217,17 @@ class ValkyrienSkiesModForge {
     private fun entityRenderers(event: EntityRenderersEvent.RegisterRenderers) {
         event.registerEntityRenderer(SHIP_MOUNTING_ENTITY_REGISTRY.get(), ::EmptyRenderer)
         event.registerEntityRenderer(PHYSICS_ENTITY_TYPE_REGISTRY.get(), ::VSPhysicsEntityRenderer)
+    }
+
+    private fun registerLayerDefinitions(event: EntityRenderersEvent.RegisterLayerDefinitions) {
+        event.registerLayerDefinition(
+            VSPhysicsEntityModel.LAYER_LOCATION,
+            VSPhysicsEntityModel.Companion::createBodyLayer
+        )
+    }
+
+    fun registerAttributes(event: EntityAttributeCreationEvent) {
+        event.put(PHYSICS_ENTITY_TYPE_REGISTRY.get(), VSPhysicsEntity.createAttributes().build())
     }
 
     private fun registerBlockAndItem(registryName: String, blockSupplier: () -> Block): RegistryObject<Block> {
