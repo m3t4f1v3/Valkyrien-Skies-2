@@ -1,48 +1,25 @@
 package org.valkyrienskies.mod.mixin.mod_compat.common_create.blockentity;
 
 import com.simibubi.create.content.fluids.hosePulley.HosePulleyBlockEntity;
-import com.simibubi.create.content.fluids.hosePulley.HosePulleyFluidHandler;
-import com.simibubi.create.content.fluids.transfer.FluidDrainingBehaviour;
-import com.simibubi.create.content.fluids.transfer.FluidFillingBehaviour;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
-import com.simibubi.create.foundation.fluid.SmartFluidTank;
-import com.simibubi.create.foundation.utility.animation.LerpedFloat;
 import java.util.Iterator;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.valkyrienskies.core.api.ships.Ship;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
 
 @Mixin(HosePulleyBlockEntity.class)
 public class MixinHosePulleyBlockEntity extends KineticBlockEntity {
-    @Shadow
-    LerpedFloat offset;
-    @Shadow
-    boolean isMoving;
-
-    @Shadow
-    private SmartFluidTank internalTank;
-    @Shadow
-    private FluidDrainingBehaviour drainer;
-    @Shadow
-    private FluidFillingBehaviour filler;
-    @Shadow
-    private HosePulleyFluidHandler handler;
-
-    @Inject(method = "<init>", at = @At("RETURN"))
-    private void HosePulleyFluidHandler(BlockEntityType typeIn, BlockPos pos, BlockState state, CallbackInfo ci) {
-        handler = new HosePulleyFluidHandler(internalTank, filler, drainer,
-            () -> valkyrienskies$worldAwareBelow(worldPosition, (int) Math.ceil(offset.getValue())), () -> !this.isMoving);
+    @Redirect(method = "lambda$new$0", at = @At(value = "INVOKE", target = "Lnet/minecraft/core/BlockPos;below(I)Lnet/minecraft/core/BlockPos;"))
+    private BlockPos lambdaBelow(BlockPos blockPos, int i) {
+        return valkyrienskies$worldAwareBelow(blockPos, i);
     }
 
     @Redirect(method = "onSpeedChanged",at = @At(value = "INVOKE", target = "Lnet/minecraft/core/BlockPos;below(I)Lnet/minecraft/core/BlockPos;"))
@@ -51,18 +28,18 @@ public class MixinHosePulleyBlockEntity extends KineticBlockEntity {
     }
 
     @Redirect(method = "tick",at = @At(value = "INVOKE", target = "Lnet/minecraft/core/BlockPos;below(I)Lnet/minecraft/core/BlockPos;"))
-    private BlockPos tickBelow(BlockPos instance, int i) {
-        return valkyrienskies$worldAwareBelow(instance, i);
+    private BlockPos tickBelow(BlockPos blockPos, int i) {
+        return valkyrienskies$worldAwareBelow(blockPos, i);
     }
 
     @Redirect(method = "lazyTick",at = @At(value = "INVOKE", target = "Lnet/minecraft/core/BlockPos;below(I)Lnet/minecraft/core/BlockPos;"))
-    private BlockPos lazyTickBelow(BlockPos instance, int i) {
-        return valkyrienskies$worldAwareBelow(instance, i);
+    private BlockPos lazyTickBelow(BlockPos blockPos, int i) {
+        return valkyrienskies$worldAwareBelow(blockPos, i);
     }
 
     @Unique
-    private BlockPos valkyrienskies$worldAwareBelow(BlockPos instance, int i) {
-        BlockPos truePosition = worldPosition.below(i);
+    private BlockPos valkyrienskies$worldAwareBelow(BlockPos blockPos, int i) {
+        BlockPos truePosition = blockPos.below(i);
         // Peeking a bit further than we should. Necessary for regular hose functionality on own ship
         if (!level.getBlockState(truePosition).canBeReplaced()) {
             return truePosition;
