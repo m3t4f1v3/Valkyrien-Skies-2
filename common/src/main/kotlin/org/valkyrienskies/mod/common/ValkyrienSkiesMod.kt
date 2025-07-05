@@ -11,12 +11,15 @@ import net.minecraft.world.item.Item
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.entity.BlockEntityType
+import org.valkyrienskies.core.api.world.properties.DimensionId
 import org.valkyrienskies.core.apigame.VSCore
 import org.valkyrienskies.core.apigame.VSCoreClient
 import org.valkyrienskies.core.impl.hooks.VSEvents
 import org.valkyrienskies.mod.api.SeatedControllingPlayer
 import org.valkyrienskies.mod.api_impl.events.VsApiImpl
+import org.valkyrienskies.mod.common.blockentity.DebugPhysicsTickables
 import org.valkyrienskies.mod.common.blockentity.TestHingeBlockEntity
+import org.valkyrienskies.mod.common.blockentity.TestThrusterBlockEntity
 import org.valkyrienskies.mod.common.config.VSGameConfig
 import org.valkyrienskies.mod.common.entity.ShipMountingEntity
 import org.valkyrienskies.mod.common.entity.VSPhysicsEntity
@@ -34,6 +37,7 @@ object ValkyrienSkiesMod {
     lateinit var TEST_FLAP: Block
     lateinit var TEST_WING: Block
     lateinit var TEST_SPHERE: Block
+    lateinit var TEST_THRUSTER: Block
     lateinit var CONNECTION_CHECKER_ITEM: Item
     lateinit var SHIP_CREATOR_ITEM: Item
     lateinit var SHIP_ASSEMBLER_ITEM: Item
@@ -43,6 +47,9 @@ object ValkyrienSkiesMod {
     lateinit var SHIP_MOUNTING_ENTITY_TYPE: EntityType<ShipMountingEntity>
     lateinit var PHYSICS_ENTITY_TYPE: EntityType<VSPhysicsEntity>
     lateinit var TEST_HINGE_BLOCK_ENTITY_TYPE: BlockEntityType<TestHingeBlockEntity>
+    lateinit var TEST_THRUSTER_BLOCK_ENTITY_TYPE: BlockEntityType<TestThrusterBlockEntity>
+
+    private val dimensionalGTFAs: HashMap<DimensionId, GameTickForceApplier> = HashMap()
 
     val VS_CREATIVE_TAB = ResourceKey.create(Registries.CREATIVE_MODE_TAB, ResourceLocation("valkyrienskies"))
 
@@ -75,9 +82,9 @@ object ValkyrienSkiesMod {
         splitHandler = SplitHandler(this.vsCore.hooks.enableBlockEdgeConnectivity, this.vsCore.hooks.enableBlockCornerConnectivity)
 
         core.registerAttachment(ShipSettings::class.java)
-        core.registerAttachment(GameTickForceApplier::class.java) {
-            useLegacySerializer()
-        }
+        // core.registerAttachment(GameTickForceApplier::class.java) {
+        //     useLegacySerializer()
+        // }
         core.registerAttachment(SeatedControllingPlayer::class.java) {
             useLegacySerializer()
         }
@@ -86,9 +93,34 @@ object ValkyrienSkiesMod {
         }
 
         VSEvents.ShipLoadEvent.on { event ->
-            event.ship.setAttachment(GameTickForceApplier())
+            //event.ship.setAttachment(GameTickForceApplier())
             event.ship.setAttachment(SplittingDisablerAttachment(true))
+            //event.ship.dragController?.disableDrag()
+            //event.ship.dragController?.disableLift()
+            //event.ship.dragController?.disableRotDrag()
         }
+
+        this.vsCore.physTickEvent.on { event ->
+            dimensionalGTFAs.forEach { dimensionId, gameTickForceApplier ->
+                if (event.world.dimension == dimensionId) {
+                    gameTickForceApplier.physTick(event.world, event.delta)
+                }
+            }
+            DebugPhysicsTickables.physTick(event.world, event.delta)
+        }
+
+        this.vsCore.collisionStartEvent.on { event ->
+            println("am sexing thy mother")
+        }
+
+        this.vsCore.collisionPersistEvent.on { event ->
+            println("fuck yoy")
+        }
+    }
+
+    @JvmStatic
+    fun getOrCreateGTFA(dimensionId: DimensionId): GameTickForceApplier {
+        return dimensionalGTFAs.getOrPut(dimensionId) { GameTickForceApplier() }
     }
 
     fun createCreativeTab(): CreativeModeTab {
@@ -101,6 +133,7 @@ object ValkyrienSkiesMod {
                 output.accept(TEST_FLAP.asItem())
                 output.accept(TEST_WING.asItem())
                 output.accept(TEST_SPHERE.asItem())
+                output.accept(TEST_THRUSTER.asItem())
                 output.accept(CONNECTION_CHECKER_ITEM)
                 output.accept(SHIP_CREATOR_ITEM)
                 output.accept(SHIP_ASSEMBLER_ITEM)

@@ -231,7 +231,10 @@ object TestHingeBlock :
                         shipId0, VSJointPose(attachmentLocalPos0, hingeOrientation), shipId1, VSJointPose(attachmentLocalPos1, hingeOrientation),
                         VSJointMaxForceTorque(attachmentMaxForce.toFloat(), hingeMaxTorque.toFloat())
                     )
-                    blockEntity.get().constraintId = level.shipObjectWorld.createNewConstraint(hingeConstraint)
+                    ValkyrienSkiesMod.getOrCreateGTFA(level.dimensionId).addJoint(hingeConstraint) { t ->
+                        blockEntity.get().constraintId = t
+                        return@addJoint t
+                    }
                 }
 
                 // Add position damping to make the hinge more stable
