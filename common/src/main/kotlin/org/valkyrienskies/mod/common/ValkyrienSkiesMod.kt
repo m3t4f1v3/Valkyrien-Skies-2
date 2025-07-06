@@ -24,7 +24,7 @@ import org.valkyrienskies.mod.common.config.VSGameConfig
 import org.valkyrienskies.mod.common.entity.ShipMountingEntity
 import org.valkyrienskies.mod.common.entity.VSPhysicsEntity
 import org.valkyrienskies.mod.common.networking.VSGamePackets
-import org.valkyrienskies.mod.common.util.GameTickForceApplier
+import org.valkyrienskies.mod.common.util.GameToPhysicsAdapter
 import org.valkyrienskies.mod.common.util.ShipSettings
 import org.valkyrienskies.mod.common.util.SplitHandler
 import org.valkyrienskies.mod.common.util.SplittingDisablerAttachment
@@ -49,7 +49,7 @@ object ValkyrienSkiesMod {
     lateinit var TEST_HINGE_BLOCK_ENTITY_TYPE: BlockEntityType<TestHingeBlockEntity>
     lateinit var TEST_THRUSTER_BLOCK_ENTITY_TYPE: BlockEntityType<TestThrusterBlockEntity>
 
-    private val dimensionalGTFAs: HashMap<DimensionId, GameTickForceApplier> = HashMap()
+    private val dimensionalGTPAs: HashMap<DimensionId, GameToPhysicsAdapter> = HashMap()
 
     val VS_CREATIVE_TAB = ResourceKey.create(Registries.CREATIVE_MODE_TAB, ResourceLocation("valkyrienskies"))
 
@@ -82,9 +82,6 @@ object ValkyrienSkiesMod {
         splitHandler = SplitHandler(this.vsCore.hooks.enableBlockEdgeConnectivity, this.vsCore.hooks.enableBlockCornerConnectivity)
 
         core.registerAttachment(ShipSettings::class.java)
-        // core.registerAttachment(GameTickForceApplier::class.java) {
-        //     useLegacySerializer()
-        // }
         core.registerAttachment(SeatedControllingPlayer::class.java) {
             useLegacySerializer()
         }
@@ -93,34 +90,22 @@ object ValkyrienSkiesMod {
         }
 
         VSEvents.ShipLoadEvent.on { event ->
-            //event.ship.setAttachment(GameTickForceApplier())
             event.ship.setAttachment(SplittingDisablerAttachment(true))
-            //event.ship.dragController?.disableDrag()
-            //event.ship.dragController?.disableLift()
-            //event.ship.dragController?.disableRotDrag()
         }
 
         this.vsCore.physTickEvent.on { event ->
-            dimensionalGTFAs.forEach { dimensionId, gameTickForceApplier ->
+            dimensionalGTPAs.forEach { dimensionId, gameTickForceApplier ->
                 if (event.world.dimension == dimensionId) {
                     gameTickForceApplier.physTick(event.world, event.delta)
                 }
             }
             DebugPhysicsTickables.physTick(event.world, event.delta)
         }
-
-        this.vsCore.collisionStartEvent.on { event ->
-            println("am sexing thy mother")
-        }
-
-        this.vsCore.collisionPersistEvent.on { event ->
-            println("fuck yoy")
-        }
     }
 
     @JvmStatic
-    fun getOrCreateGTFA(dimensionId: DimensionId): GameTickForceApplier {
-        return dimensionalGTFAs.getOrPut(dimensionId) { GameTickForceApplier() }
+    fun getOrCreateGTPA(dimensionId: DimensionId): GameToPhysicsAdapter {
+        return dimensionalGTPAs.getOrPut(dimensionId) { GameToPhysicsAdapter() }
     }
 
     fun createCreativeTab(): CreativeModeTab {

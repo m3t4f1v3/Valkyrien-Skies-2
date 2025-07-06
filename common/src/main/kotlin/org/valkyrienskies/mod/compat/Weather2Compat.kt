@@ -23,7 +23,7 @@ object Weather2Compat {
 
         level.shipObjectWorld.loadedShips.forEach { ship ->
             val vec = Vector3d()
-            val forces = ValkyrienSkiesMod.getOrCreateGTFA(ship.chunkClaimDimension)
+            val forces = ValkyrienSkiesMod.getOrCreateGTPA(ship.chunkClaimDimension)
 
             val com = ship.inertiaData.centerOfMassInShip
 

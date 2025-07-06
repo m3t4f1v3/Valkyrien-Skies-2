@@ -1,9 +1,7 @@
 package org.valkyrienskies.mod.common.util
 
-import net.minecraft.world.level.block.entity.BlockEntity
 import org.joml.Vector3dc
 import org.valkyrienskies.core.api.VsBeta
-import org.valkyrienskies.core.api.ships.PhysShip
 import org.valkyrienskies.core.api.ships.properties.ShipId
 import org.valkyrienskies.core.api.world.PhysLevel
 import org.valkyrienskies.core.apigame.joints.VSJoint
@@ -15,7 +13,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.function.Function
 
 @OptIn(VsBeta::class)
-class GameTickForceApplier {
+class GameToPhysicsAdapter {
     private val invForces = ConcurrentLinkedQueue<Pair<ShipId, Vector3dc>>()
     private val invTorques = ConcurrentLinkedQueue<Pair<ShipId, Vector3dc>>()
     private val rotForces = ConcurrentLinkedQueue<Pair<ShipId, Vector3dc>>()
@@ -40,6 +38,12 @@ class GameTickForceApplier {
         joints.pollUntilEmpty { joint ->
             val id = (physLevel as PhysLevelCore).addJoint(joint.first)
             joint.second.apply(id)
+        }
+        updatedJoints.pollUntilEmpty { jointAndId ->
+            (physLevel as PhysLevelCore).updateJoint(jointAndId.jointId, jointAndId.joint)
+        }
+        deletedJoints.pollUntilEmpty { jointId ->
+            (physLevel as PhysLevelCore).removeJoint(jointId)
         }
 
         toBeStatic.pollUntilEmpty { pair -> physLevel.getShipById(pair.first)?.isStatic = pair.second }
