@@ -233,7 +233,6 @@ object TestHingeBlock :
                     )
                     ValkyrienSkiesMod.getOrCreateGTPA(level.dimensionId).addJoint(hingeConstraint) { t ->
                         blockEntity.get().constraintId = t
-                        return@addJoint t
                     }
                 }
 

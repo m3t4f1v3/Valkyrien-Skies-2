@@ -10,6 +10,7 @@ import org.valkyrienskies.core.apigame.joints.VSJointId
 import org.valkyrienskies.core.apigame.world.PhysLevelCore
 import org.valkyrienskies.core.util.pollUntilEmpty
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.function.Consumer
 import java.util.function.Function
 
 @OptIn(VsBeta::class)
@@ -21,7 +22,7 @@ class GameToPhysicsAdapter {
     private val invPosForces = ConcurrentLinkedQueue<Pair<ShipId, InvForceAtPos>>()
     private val rotPosForces = ConcurrentLinkedQueue<Pair<ShipId, InvForceAtPos>>()
 
-    private val joints = ConcurrentLinkedQueue<Pair<VSJoint, Function<VSJointId, VSJointId>>>()
+    private val joints = ConcurrentLinkedQueue<Pair<VSJoint, Consumer<VSJointId>>>()
     private val updatedJoints = ConcurrentLinkedQueue<VSJointAndId>()
     private val deletedJoints = ConcurrentLinkedQueue<VSJointId>()
 
@@ -37,7 +38,7 @@ class GameToPhysicsAdapter {
 
         joints.pollUntilEmpty { joint ->
             val id = (physLevel as PhysLevelCore).addJoint(joint.first)
-            joint.second.apply(id)
+            joint.second.accept(id)
         }
         updatedJoints.pollUntilEmpty { jointAndId ->
             (physLevel as PhysLevelCore).updateJoint(jointAndId.jointId, jointAndId.joint)
@@ -77,7 +78,7 @@ class GameToPhysicsAdapter {
         toBeStatic.add(ship to b)
     }
 
-    fun addJoint(joint: VSJoint, function: Function<VSJointId, VSJointId>) {
+    fun addJoint(joint: VSJoint, function: Consumer<VSJointId>) {
         joints.add(joint to function)
     }
     fun updateJoint(jointAndId: VSJointAndId) {

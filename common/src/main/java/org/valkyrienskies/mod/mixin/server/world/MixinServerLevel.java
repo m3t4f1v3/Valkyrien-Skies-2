@@ -188,7 +188,7 @@ public abstract class MixinServerLevel implements IShipObjectWorldServerProvider
                         ship = VSGameUtilsKt.getShipObjectManagingPos(thisAsLevel, chunkX, chunkZ);
                     if (ship != null) {
                         // Sussy cast, but I don't want to expose this directly through the vs-core api
-                        final WingManager shipAsWingManager = ship.getAttachment(WingManager.class);
+                        final WingManager shipAsWingManager = ship.getWingManager();
                         final MutableBlockPos mutableBlockPos = new MutableBlockPos();
                         for (int x = 0; x < 16; x++) {
                             for (int y = 0; y < 16; y++) {
