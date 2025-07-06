@@ -166,7 +166,9 @@ public abstract class MixinMinecraftServer implements IShipObjectWorldServerProv
         getShipObjectWorld().addDimension(
             VSGameUtilsKt.getDimensionId(overworld()),
             VSGameUtilsKt.getYRange(overworld()),
-            McMathUtilKt.getDEFAULT_WORLD_GRAVITY()
+            McMathUtilKt.getDEFAULT_WORLD_GRAVITY(),
+            63.0,
+            962.0
         );
     }
 
