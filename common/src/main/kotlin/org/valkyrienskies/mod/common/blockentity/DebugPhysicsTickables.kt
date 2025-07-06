@@ -1,7 +1,7 @@
 package org.valkyrienskies.mod.common.blockentity
 
 import org.valkyrienskies.core.api.VsBeta
-import org.valkyrienskies.core.api.world.PhysWorld
+import org.valkyrienskies.core.api.world.PhysLevel
 import org.valkyrienskies.core.util.pollUntilEmpty
 import org.valkyrienskies.mod.common.util.ITestTickable
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -19,11 +19,11 @@ object DebugPhysicsTickables {
         toRemove.add(testTickable)
     }
 
-    fun physTick(physWorld: PhysWorld, delta: Double) {
+    fun physTick(physLevel: PhysLevel, delta: Double) {
         toAdd.pollUntilEmpty { tickable -> toTick.add(tickable) }
 
         toRemove.pollUntilEmpty { tickable -> toTick.remove(tickable) }
 
-        toTick.forEach { if (it.matchesDimension(physWorld.dimension)) it.physTick(physWorld, delta) }
+        toTick.forEach { if (it.matchesDimension(physLevel.dimension)) it.physTick(physLevel, delta) }
     }
 }

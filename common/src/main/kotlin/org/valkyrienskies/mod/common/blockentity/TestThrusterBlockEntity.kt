@@ -6,7 +6,7 @@ import net.minecraft.world.level.block.entity.BlockEntity
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.block.state.properties.BlockStateProperties
 import org.valkyrienskies.core.api.VsBeta
-import org.valkyrienskies.core.api.world.PhysWorld
+import org.valkyrienskies.core.api.world.PhysLevel
 import org.valkyrienskies.core.api.world.properties.DimensionId
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod
 import org.valkyrienskies.mod.common.dimensionId
@@ -41,11 +41,11 @@ class TestThrusterBlockEntity(blockPos: BlockPos, blockState: BlockState) : ITes
     }
 
     @OptIn(VsBeta::class)
-    override fun physTick(physWorld: PhysWorld, delta: Double) {
+    override fun physTick(physLevel: PhysLevel, delta: Double) {
         if (!isActive || shipMountedTo < 0) {
             return
         }
-        val ship = physWorld.getShipById(shipMountedTo) ?: return
+        val ship = physLevel.getShipById(shipMountedTo) ?: return
         
         ship.applyRotDependentForceToPos(facing.normal.toJOMLD().mul(10000.0), pos.toJOMLD().add(0.5, 0.5, 0.5).sub(ship.transform.positionInShip))
     }
