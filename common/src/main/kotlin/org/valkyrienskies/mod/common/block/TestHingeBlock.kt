@@ -32,7 +32,6 @@ import org.joml.Quaterniond
 import org.joml.Quaterniondc
 import org.joml.Vector3d
 import org.joml.Vector3dc
-import org.valkyrienskies.core.apigame.joints.VSJointMaxForceTorque
 import org.valkyrienskies.core.apigame.joints.VSJointPose
 import org.valkyrienskies.core.apigame.joints.VSRevoluteJoint
 import org.valkyrienskies.core.impl.bodies.properties.BodyKinematicsFactory
@@ -200,7 +199,7 @@ object TestHingeBlock :
                 level.setBlockAndUpdate(shipCenterPos, Blocks.IRON_BLOCK.defaultBlockState())
                 blockEntity.get().otherHingePos = shipCenterPos
 
-                val shipId0 = shipThisIsIn?.id ?: level.shipObjectWorld.dimensionToGroundBodyIdImmutable[level.dimensionId]!!
+                val shipId0 = shipThisIsIn?.id
                 val shipId1 = ship.id
 
                 // Attachment constraint
@@ -229,7 +228,7 @@ object TestHingeBlock :
                     val hingeMaxTorque = 1e10
                     val hingeConstraint = VSRevoluteJoint(
                         shipId0, VSJointPose(attachmentLocalPos0, hingeOrientation), shipId1, VSJointPose(attachmentLocalPos1, hingeOrientation),
-                        VSJointMaxForceTorque(attachmentMaxForce.toFloat(), hingeMaxTorque.toFloat())
+                        maxForceTorque = null, driveFreeSpin = true
                     )
                     ValkyrienSkiesMod.getOrCreateGTPA(level.dimensionId).addJoint(hingeConstraint) { t ->
                         blockEntity.get().constraintId = t
