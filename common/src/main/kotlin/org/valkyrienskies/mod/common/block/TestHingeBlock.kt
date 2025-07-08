@@ -34,8 +34,8 @@ import org.joml.Vector3d
 import org.joml.Vector3dc
 import org.valkyrienskies.core.apigame.joints.VSJointPose
 import org.valkyrienskies.core.apigame.joints.VSRevoluteJoint
-import org.valkyrienskies.core.impl.bodies.properties.BodyKinematicsFactory
-import org.valkyrienskies.core.impl.game.ships.ShipDataCommon
+import org.valkyrienskies.core.apigame.ships.ShipCore
+import org.valkyrienskies.mod.api.vsApi
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod
 import org.valkyrienskies.mod.common.blockentity.TestHingeBlockEntity
 import org.valkyrienskies.mod.common.dimensionId
@@ -171,7 +171,7 @@ object TestHingeBlock :
                     // Put the new ship where the old ship is
                     val newPos = shipThisIsIn.transform.shipToWorld.transformPosition(attachmentLocalPos0, Vector3d())
                     newPos.sub(shipThisIsIn.transform.shipToWorldRotation.transform(attachmentOffset1, Vector3d()))
-                    val newKinematics = BodyKinematicsFactory.create(
+                    val newKinematics = vsApi.newBodyKinematics(
                         shipThisIsIn.velocity,
                         shipThisIsIn.angularVelocity,
                         newPos,
@@ -180,11 +180,11 @@ object TestHingeBlock :
                         ship.transform.positionInShip,
                     )
                     // Update the ship transform
-                    (ship as ShipDataCommon).kinematics = newKinematics
+                    (ship as ShipCore).unsafeSetKinematics(newKinematics)
                 } else {
                     val newPos = Vector3d(attachmentLocalPos0)
                     newPos.sub(attachmentOffset1)
-                    val newKinematics = BodyKinematicsFactory.create(
+                    val newKinematics = vsApi.newBodyKinematics(
                         ship.velocity,
                         ship.angularVelocity,
                         newPos,
@@ -193,7 +193,7 @@ object TestHingeBlock :
                         ship.transform.positionInShip,
                     )
                     // Update the ship transform
-                    (ship as ShipDataCommon).kinematics = newKinematics
+                    (ship as ShipCore).unsafeSetKinematics(newKinematics)
                 }
 
                 level.setBlockAndUpdate(shipCenterPos, Blocks.IRON_BLOCK.defaultBlockState())

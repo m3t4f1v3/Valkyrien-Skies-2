@@ -9,7 +9,7 @@ import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.entity.BlockEntity
 import org.joml.Matrix4f
 import org.valkyrienskies.core.api.ships.ClientShip
-import org.valkyrienskies.core.impl.hooks.VSEvents
+import org.valkyrienskies.mod.api.vsApi
 import org.valkyrienskies.mod.common.getShipManagingPos
 import org.valkyrienskies.mod.compat.LoadedMods
 import org.valkyrienskies.mod.compat.LoadedMods.FlywheelVersion
@@ -19,11 +19,11 @@ object FlywheelCompat {
     fun initClient() {
         if (LoadedMods.flywheel != FlywheelVersion.V1) return
 
-        VSEvents.shipLoadEventClient.on { e ->
+        vsApi.shipLoadEventClient.on { e ->
             VisualizationHelper.queueAdd(ShipEffect(e.ship, Minecraft.getInstance().level!!))
         }
 
-        VSEvents.shipUnloadEventClient.on { e ->
+        vsApi.shipUnloadEventClient.on { e ->
             VisualizationHelper.queueRemove(ShipEffect.getShipEffect(e.ship))
         }
     }

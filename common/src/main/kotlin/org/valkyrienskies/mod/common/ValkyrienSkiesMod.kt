@@ -14,7 +14,6 @@ import net.minecraft.world.level.block.entity.BlockEntityType
 import org.valkyrienskies.core.api.world.properties.DimensionId
 import org.valkyrienskies.core.apigame.VSCore
 import org.valkyrienskies.core.apigame.VSCoreClient
-import org.valkyrienskies.core.impl.hooks.VSEvents
 import org.valkyrienskies.mod.api.SeatedControllingPlayer
 import org.valkyrienskies.mod.api_impl.events.VsApiImpl
 import org.valkyrienskies.mod.common.blockentity.DebugPhysicsTickables
@@ -89,7 +88,7 @@ object ValkyrienSkiesMod {
             useLegacySerializer()
         }
 
-        VSEvents.ShipLoadEvent.on { event ->
+        core.shipLoadEvent.on { event ->
             event.ship.setAttachment(SplittingDisablerAttachment(true))
         }
 

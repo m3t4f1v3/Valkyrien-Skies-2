@@ -27,7 +27,7 @@ import net.minecraftforge.registries.DeferredRegister
 import net.minecraftforge.registries.ForgeRegistries
 import net.minecraftforge.registries.RegistryObject
 import org.valkyrienskies.core.apigame.VSCoreFactory
-import org.valkyrienskies.core.impl.config_impl.VSCoreConfig
+import org.valkyrienskies.core.impl.config.VSCoreConfig
 import org.valkyrienskies.mod.client.EmptyRenderer
 import org.valkyrienskies.mod.client.VSPhysicsEntityRenderer
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod
