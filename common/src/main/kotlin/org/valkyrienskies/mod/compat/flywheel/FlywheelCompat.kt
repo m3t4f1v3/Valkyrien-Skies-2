@@ -9,8 +9,8 @@ import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.entity.BlockEntity
 import org.joml.Matrix4f
 import org.valkyrienskies.core.api.ships.ClientShip
-import org.valkyrienskies.mod.api.vsApi
 import org.valkyrienskies.mod.common.getShipManagingPos
+import org.valkyrienskies.mod.common.vsCore
 import org.valkyrienskies.mod.compat.LoadedMods
 import org.valkyrienskies.mod.compat.LoadedMods.FlywheelVersion
 
@@ -19,11 +19,11 @@ object FlywheelCompat {
     fun initClient() {
         if (LoadedMods.flywheel != FlywheelVersion.V1) return
 
-        vsApi.shipLoadEventClient.on { e ->
+        vsCore.shipLoadEventClient.on { e ->
             VisualizationHelper.queueAdd(ShipEffect(e.ship, Minecraft.getInstance().level!!))
         }
 
-        vsApi.shipUnloadEventClient.on { e ->
+        vsCore.shipUnloadEventClient.on { e ->
             VisualizationHelper.queueRemove(ShipEffect.getShipEffect(e.ship))
         }
     }
@@ -45,12 +45,12 @@ object FlywheelCompat {
     }
 
     fun setShipEffectDirty(ship: ClientShip, x: Int, y: Int, z: Int, important: Boolean = false) {
-        ShipEffect.Companion.getShipEffect(ship).setDirty(x, y, z, important);
+        ShipEffect.Companion.getShipEffect(ship).setDirty(x, y, z, important)
     }
 
     fun onLightUpdate(ship: ClientShip, pos: SectionPos) {
         var manager = (ShipEffect.getShipEffect(ship).manager) as VisualManagerImpl<*, *>?
-        manager?.onLightUpdate(pos.asLong());
+        manager?.onLightUpdate(pos.asLong())
     }
 
     fun addBlockEntity(blockEntity: BlockEntity) {

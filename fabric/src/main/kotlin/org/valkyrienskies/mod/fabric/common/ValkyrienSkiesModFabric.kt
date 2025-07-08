@@ -125,9 +125,10 @@ class ValkyrienSkiesModFabric : ModInitializer {
 
         networking.register(vsCore.hooks)
 
+        ValkyrienSkiesMod.init(vsCore)
+
         if (isClient) onInitializeClient()
 
-        ValkyrienSkiesMod.init(vsCore)
         VSEntityManager.registerContraptionHandler(ContraptionShipyardEntityHandlerFabric)
 
         registerBlockAndItem("test_chair", ValkyrienSkiesMod.TEST_CHAIR)

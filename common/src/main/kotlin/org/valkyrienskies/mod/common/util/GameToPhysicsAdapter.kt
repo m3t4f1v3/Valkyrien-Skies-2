@@ -9,6 +9,7 @@ import org.valkyrienskies.core.apigame.joints.VSJointAndId
 import org.valkyrienskies.core.apigame.joints.VSJointId
 import org.valkyrienskies.core.apigame.world.PhysLevelCore
 import org.valkyrienskies.core.util.pollUntilEmpty
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.function.Consumer
 import java.util.function.Function
@@ -22,7 +23,7 @@ class GameToPhysicsAdapter {
     private val invPosForces = ConcurrentLinkedQueue<Pair<ShipId, InvForceAtPos>>()
     private val rotPosForces = ConcurrentLinkedQueue<Pair<ShipId, InvForceAtPos>>()
 
-    private val joints = ConcurrentLinkedQueue<Pair<VSJoint, Consumer<VSJointId>>>()
+    private val joints = ConcurrentHashMap<Pair<VSJoint, Consumer<VSJointId>>, Int>()
     private val updatedJoints = ConcurrentLinkedQueue<VSJointAndId>()
     private val deletedJoints = ConcurrentLinkedQueue<VSJointId>()
 
@@ -36,9 +37,14 @@ class GameToPhysicsAdapter {
         invPosForces.pollUntilEmpty { pair -> physLevel.getShipById(pair.first)?.applyInvariantForceToPos(pair.second.force, pair.second.pos) }
         rotPosForces.pollUntilEmpty { pair -> physLevel.getShipById(pair.first)?.applyInvariantForceToPos(pair.second.force, pair.second.pos) }
 
-        joints.pollUntilEmpty { joint ->
-            val id = (physLevel as PhysLevelCore).addJoint(joint.first)
-            joint.second.accept(id)
+        val safeJoints = HashMap(joints)
+        safeJoints.forEach { newJoint, timer ->
+            if (timer > 0) {
+                joints[newJoint] = timer - 1
+            } else {
+                newJoint.second.accept((physLevel as PhysLevelCore).addJoint(newJoint.first))
+                joints.remove(newJoint)
+            }
         }
         updatedJoints.pollUntilEmpty { jointAndId ->
             (physLevel as PhysLevelCore).updateJoint(jointAndId.jointId, jointAndId.joint)
@@ -78,8 +84,8 @@ class GameToPhysicsAdapter {
         toBeStatic.add(ship to b)
     }
 
-    fun addJoint(joint: VSJoint, function: Consumer<VSJointId>) {
-        joints.add(joint to function)
+    fun addJoint(joint: VSJoint, delay: Int = 0, function: Consumer<VSJointId>) {
+        joints.put(joint to function, delay)
     }
     fun updateJoint(jointAndId: VSJointAndId) {
         updatedJoints.add(jointAndId)
