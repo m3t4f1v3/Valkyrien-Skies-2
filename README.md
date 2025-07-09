@@ -30,6 +30,10 @@ You can download official releases of Valkyrien Skies from our [website](https:/
 2. Open the project in IntelliJ, using Java 17
 3. Import the gradle project, sync gradle
 
+### A note about 'Debug' items
+The debug items present in Valkyrien Skies are not indicative of the ideal way of executing their concepts; they are nothing more than simple test items designed to make debugging development easier, as implied by their name.
+Additionally, any class with Debug in the name should not be used outside VS itself.
+
 ## Troubleshooting
 
 ### Running Forge in dev environment
