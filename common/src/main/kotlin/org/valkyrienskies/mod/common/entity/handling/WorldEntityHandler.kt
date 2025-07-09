@@ -5,6 +5,7 @@ import net.minecraft.client.renderer.MultiBufferSource
 import net.minecraft.client.renderer.entity.EntityRenderer
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.projectile.AbstractHurtingProjectile
+import net.minecraft.world.entity.projectile.ProjectileUtil
 import org.joml.Vector3d
 import org.valkyrienskies.core.api.ships.ClientShip
 import org.valkyrienskies.core.api.ships.Ship
@@ -89,6 +90,7 @@ object WorldEntityHandler : VSEntityHandler {
             entity.xPower = power.x
             entity.yPower = power.y
             entity.zPower = power.z
+            ProjectileUtil.rotateTowardsMovement(entity, 1.0f)
         }
     }
 }
