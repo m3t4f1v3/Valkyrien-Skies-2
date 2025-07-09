@@ -34,19 +34,35 @@ You can download official releases of Valkyrien Skies from our [website](https:/
 
 *(Remember that VS requires KotlinForForge in Forge development environments! The specific version can be found in `gradle.properties`.)*
 
-To include Valkyrien Skies in your mod, you can use the following gradle dependency:
+To include Valkyrien Skies in your mod, you can use the following gradle repository-
 
 ```groovy
-    modApi("org.valkyrienskies:valkyrienskies-120-//loader//:${vs2_version}")
-    implementation("org.valkyrienskies.core:api:${vscore_version}") {
-        exclude group: 'org.joml', module: ''
-    }
-    implementation("org.valkyrienskies.core:impl:${vscore_version}") {
-        exclude group: 'org.joml', module: ''
-    }
-    implementation("org.valkyrienskies.core:api-game:${vscore_version}") {
-        exclude group: 'org.joml', module: ''
-    }
+repositories {
+   //...
+   maven {
+      name = "Valkyrien Skies"
+      url = "https://maven.valkyrienskies.org"
+   }
+   //...
+}
+```
+
+and dependency-
+```groovy
+dependencies {
+   //...
+   modApi("org.valkyrienskies:valkyrienskies-120-//loader//:${vs2_version}")
+   implementation("org.valkyrienskies.core:api:${vscore_version}") {
+      exclude group: 'org.joml', module: ''
+   }
+   implementation("org.valkyrienskies.core:api-game:${vscore_version}") {
+      exclude group: 'org.joml', module: ''
+   }
+   implementation("org.valkyrienskies.core:util:${vscore_version}") {
+      exclude group: 'org.joml', module: ''
+   }
+   //...
+}
 ```
 
 Replace `-//loader//` with `-(your modloader)`, or use `-common` if you're in a multiloader project on the Common platform.
