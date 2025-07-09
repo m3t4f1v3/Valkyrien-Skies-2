@@ -41,7 +41,7 @@ public class MixinHosePulleyBlockEntity extends KineticBlockEntity {
     private BlockPos valkyrienskies$worldAwareBelow(BlockPos blockPos, int i) {
         BlockPos truePosition = blockPos.below(i);
         // Peeking a bit further than we should. Necessary for regular hose functionality on own ship
-        if (!level.getBlockState(truePosition).canBeReplaced()) {
+        if (!level.getBlockState(truePosition).canBeReplaced() || !level.getBlockState(truePosition.below(1)).canBeReplaced()) {
             return truePosition;
         }
         // If the hose is not obstructed by our own ship, check against world and other ships.
