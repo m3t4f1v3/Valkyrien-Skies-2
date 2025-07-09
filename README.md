@@ -51,7 +51,11 @@ and dependency-
 ```groovy
 dependencies {
    //...
-   modApi("org.valkyrienskies:valkyrienskies-120-//loader//:${vs2_version}")
+   modApi("org.valkyrienskies:valkyrienskies-120-//loader//:${vs2_version}") {
+      exclude group: 'com.simibubi', module: ''
+      exclude group: 'dev.engine-room', module: ''
+      exclude group: 'com.jozufozu', module: ''
+   }
    implementation("org.valkyrienskies.core:api:${vscore_version}") {
       exclude group: 'org.joml', module: ''
    }
