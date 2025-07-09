@@ -1,6 +1,7 @@
 package org.valkyrienskies.mod.common.blockentity
 
 import net.minecraft.core.BlockPos
+import net.minecraft.nbt.CompoundTag
 import net.minecraft.world.level.block.entity.BlockEntity
 import net.minecraft.world.level.block.state.BlockState
 import org.valkyrienskies.core.apigame.joints.VSJointId
@@ -10,6 +11,7 @@ class TestHingeBlockEntity(blockPos: BlockPos, blockState: BlockState) : BlockEn
     ValkyrienSkiesMod.TEST_HINGE_BLOCK_ENTITY_TYPE, blockPos, blockState
 ) {
     var otherHingePos: BlockPos? = null
+    @Volatile
     var constraintId: VSJointId? = null
 
     fun tick() {

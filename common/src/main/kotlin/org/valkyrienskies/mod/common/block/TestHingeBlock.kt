@@ -32,11 +32,10 @@ import org.joml.Quaterniond
 import org.joml.Quaterniondc
 import org.joml.Vector3d
 import org.joml.Vector3dc
-import org.valkyrienskies.core.apigame.joints.VSJointMaxForceTorque
 import org.valkyrienskies.core.apigame.joints.VSJointPose
 import org.valkyrienskies.core.apigame.joints.VSRevoluteJoint
-import org.valkyrienskies.core.impl.bodies.properties.BodyKinematicsFactory
-import org.valkyrienskies.core.impl.game.ships.ShipDataCommon
+import org.valkyrienskies.core.apigame.ships.ShipCore
+import org.valkyrienskies.mod.api.vsApi
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod
 import org.valkyrienskies.mod.common.blockentity.TestHingeBlockEntity
 import org.valkyrienskies.mod.common.dimensionId
@@ -162,17 +161,18 @@ object TestHingeBlock :
                 // The positions the hinge attaches relative to the center of mass
                 val attachmentOffset0: Vector3dc = rotationQuaternion.transform(Vector3d(0.0, 0.5 + extraHeight, 0.0))
                 val attachmentOffset1: Vector3dc = rotationQuaternion.transform(Vector3d(0.0, -0.5, 0.0))
+                val worldOffset = if (shipThisIsIn == null) Vector3d(0.5, 0.5, 0.5) else Vector3d(0.0, 0.0, 0.0)
 
-                val attachmentLocalPos0: Vector3dc = Vector3d(pos.x + 0.5, pos.y + 0.5, pos.z + 0.5).add(attachmentOffset0)
+                val attachmentLocalPos0: Vector3dc = Vector3d(pos.x.toDouble() + 0.5, pos.y.toDouble() + 0.5, pos.z.toDouble() + 0.5).add(attachmentOffset0).add(worldOffset)
                 val attachmentLocalPos1: Vector3dc =
-                    Vector3d(shipCenterPos.x + 0.5, shipCenterPos.y + 0.5, shipCenterPos.z + 0.5).add(attachmentOffset1)
+                    Vector3d(shipCenterPos.x.toDouble() + 0.5, shipCenterPos.y.toDouble() + 0.5, shipCenterPos.z.toDouble() + 0.5).add(attachmentOffset1)
 
                 // Move [ship] if we are on a ship
                 if (shipThisIsIn != null) {
                     // Put the new ship where the old ship is
                     val newPos = shipThisIsIn.transform.shipToWorld.transformPosition(attachmentLocalPos0, Vector3d())
                     newPos.sub(shipThisIsIn.transform.shipToWorldRotation.transform(attachmentOffset1, Vector3d()))
-                    val newKinematics = BodyKinematicsFactory.create(
+                    val newKinematics = vsApi.newBodyKinematics(
                         shipThisIsIn.velocity,
                         shipThisIsIn.angularVelocity,
                         newPos,
@@ -181,11 +181,11 @@ object TestHingeBlock :
                         ship.transform.positionInShip,
                     )
                     // Update the ship transform
-                    (ship as ShipDataCommon).kinematics = newKinematics
+                    (ship as ShipCore).unsafeSetKinematics(newKinematics)
                 } else {
                     val newPos = Vector3d(attachmentLocalPos0)
                     newPos.sub(attachmentOffset1)
-                    val newKinematics = BodyKinematicsFactory.create(
+                    val newKinematics = vsApi.newBodyKinematics(
                         ship.velocity,
                         ship.angularVelocity,
                         newPos,
@@ -194,13 +194,13 @@ object TestHingeBlock :
                         ship.transform.positionInShip,
                     )
                     // Update the ship transform
-                    (ship as ShipDataCommon).kinematics = newKinematics
+                    (ship as ShipCore).unsafeSetKinematics(newKinematics)
                 }
 
                 level.setBlockAndUpdate(shipCenterPos, Blocks.IRON_BLOCK.defaultBlockState())
                 blockEntity.get().otherHingePos = shipCenterPos
 
-                val shipId0 = shipThisIsIn?.id ?: level.shipObjectWorld.dimensionToGroundBodyIdImmutable[level.dimensionId]!!
+                val shipId0 = shipThisIsIn?.id
                 val shipId1 = ship.id
 
                 // Attachment constraint
@@ -229,9 +229,11 @@ object TestHingeBlock :
                     val hingeMaxTorque = 1e10
                     val hingeConstraint = VSRevoluteJoint(
                         shipId0, VSJointPose(attachmentLocalPos0, hingeOrientation), shipId1, VSJointPose(attachmentLocalPos1, hingeOrientation),
-                        VSJointMaxForceTorque(attachmentMaxForce.toFloat(), hingeMaxTorque.toFloat())
+                        maxForceTorque = null, driveFreeSpin = true
                     )
-                    blockEntity.get().constraintId = level.shipObjectWorld.createNewConstraint(hingeConstraint)
+                    ValkyrienSkiesMod.getOrCreateGTPA(level.dimensionId).addJoint(hingeConstraint, delay = 4) { t ->
+                        blockEntity.get().constraintId = t
+                    }
                 }
 
                 // Add position damping to make the hinge more stable

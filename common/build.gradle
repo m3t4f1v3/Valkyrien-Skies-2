@@ -12,7 +12,7 @@ dependencies {
     modCompileOnly("maven.modrinth:sodium:${sodium_version}")
 
     // vs-core
-    implementation("org.valkyrienskies.core:impl:${rootProject.vs_core_version}") {
+    runtimeOnly("org.valkyrienskies.core:impl:${rootProject.vs_core_version}") {
         exclude module: "netty-buffer"
         exclude module: "fastutil"
     }

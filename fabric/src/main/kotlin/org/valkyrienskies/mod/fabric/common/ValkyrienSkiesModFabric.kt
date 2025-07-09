@@ -32,8 +32,10 @@ import org.valkyrienskies.mod.common.block.TestChairBlock
 import org.valkyrienskies.mod.common.block.TestFlapBlock
 import org.valkyrienskies.mod.common.block.TestHingeBlock
 import org.valkyrienskies.mod.common.block.TestSphereBlock
+import org.valkyrienskies.mod.common.block.TestThrusterBlock
 import org.valkyrienskies.mod.common.block.TestWingBlock
 import org.valkyrienskies.mod.common.blockentity.TestHingeBlockEntity
+import org.valkyrienskies.mod.common.blockentity.TestThrusterBlockEntity
 import org.valkyrienskies.mod.common.command.VSCommands
 import org.valkyrienskies.mod.common.config.MassDatapackResolver
 import org.valkyrienskies.mod.common.config.VSEntityHandlerDataLoader
@@ -68,6 +70,7 @@ class ValkyrienSkiesModFabric : ModInitializer {
         ValkyrienSkiesMod.TEST_FLAP = TestFlapBlock
         ValkyrienSkiesMod.TEST_WING = TestWingBlock
         ValkyrienSkiesMod.TEST_SPHERE = TestSphereBlock
+        ValkyrienSkiesMod.TEST_THRUSTER = TestThrusterBlock
         ValkyrienSkiesMod.CONNECTION_CHECKER_ITEM = ConnectionCheckerItem(
             Properties(),
             { 1.0 },
@@ -108,6 +111,9 @@ class ValkyrienSkiesModFabric : ModInitializer {
         ValkyrienSkiesMod.TEST_HINGE_BLOCK_ENTITY_TYPE =
             FabricBlockEntityTypeBuilder.create(::TestHingeBlockEntity, ValkyrienSkiesMod.TEST_HINGE).build()
 
+        ValkyrienSkiesMod.TEST_THRUSTER_BLOCK_ENTITY_TYPE =
+            FabricBlockEntityTypeBuilder.create(::TestThrusterBlockEntity, ValkyrienSkiesMod.TEST_THRUSTER).build()
+
         val isClient = FabricLoader.getInstance().environmentType == EnvType.CLIENT
         val networking = VSFabricNetworking(isClient)
         val hooks = FabricHooksImpl(networking)
@@ -119,9 +125,10 @@ class ValkyrienSkiesModFabric : ModInitializer {
 
         networking.register(vsCore.hooks)
 
+        ValkyrienSkiesMod.init(vsCore)
+
         if (isClient) onInitializeClient()
 
-        ValkyrienSkiesMod.init(vsCore)
         VSEntityManager.registerContraptionHandler(ContraptionShipyardEntityHandlerFabric)
 
         registerBlockAndItem("test_chair", ValkyrienSkiesMod.TEST_CHAIR)
@@ -129,6 +136,7 @@ class ValkyrienSkiesModFabric : ModInitializer {
         registerBlockAndItem("test_flap", ValkyrienSkiesMod.TEST_FLAP)
         registerBlockAndItem("test_wing", ValkyrienSkiesMod.TEST_WING)
         registerBlockAndItem("test_sphere", ValkyrienSkiesMod.TEST_SPHERE)
+        registerBlockAndItem("test_thruster", ValkyrienSkiesMod.TEST_THRUSTER)
         Registry.register(
             BuiltInRegistries.ITEM, ResourceLocation(ValkyrienSkiesMod.MOD_ID, "connection_checker"),
             ValkyrienSkiesMod.CONNECTION_CHECKER_ITEM
@@ -164,6 +172,10 @@ class ValkyrienSkiesModFabric : ModInitializer {
         Registry.register(
             BuiltInRegistries.BLOCK_ENTITY_TYPE, ResourceLocation(ValkyrienSkiesMod.MOD_ID, "test_hinge_block_entity"),
             ValkyrienSkiesMod.TEST_HINGE_BLOCK_ENTITY_TYPE
+        )
+        Registry.register(
+            BuiltInRegistries.BLOCK_ENTITY_TYPE, ResourceLocation(ValkyrienSkiesMod.MOD_ID, "test_thruster_block_entity"),
+            ValkyrienSkiesMod.TEST_THRUSTER_BLOCK_ENTITY_TYPE
         )
 
         Registry.register(

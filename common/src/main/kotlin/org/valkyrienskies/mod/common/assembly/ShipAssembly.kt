@@ -10,10 +10,8 @@ import net.minecraft.world.level.block.entity.BlockEntity
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlaceSettings
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate
 import org.joml.Vector3d
-import org.valkyrienskies.core.api.VsBeta
 import org.valkyrienskies.core.api.ships.ServerShip
-import org.valkyrienskies.core.impl.game.ShipTeleportDataImpl
-import org.valkyrienskies.core.impl.game.ships.ShipDataCommon
+import org.valkyrienskies.core.apigame.ships.ShipCore
 import org.valkyrienskies.core.util.datastructures.DenseBlockPosSet
 import org.valkyrienskies.mod.api.vsApi
 import org.valkyrienskies.mod.common.dimensionId
@@ -23,10 +21,10 @@ import org.valkyrienskies.mod.common.shipObjectWorld
 import org.valkyrienskies.mod.common.util.toJOML
 import org.valkyrienskies.mod.common.util.toJOMLD
 import org.valkyrienskies.mod.common.util.toMinecraft
+import org.valkyrienskies.mod.common.vsCore
 import org.valkyrienskies.mod.util.relocateBlock
 import org.valkyrienskies.mod.util.updateBlock
 
-@OptIn(VsBeta::class)
 @Deprecated("Use [ShipAssembler.assembleToShip] instead")
 fun createNewShipWithBlocks(
     centerBlock: BlockPos, blocks: DenseBlockPosSet, level: ServerLevel
@@ -90,7 +88,7 @@ fun createNewShipWithBlocks(
     // well now it doesnt kekw
     //(ship as ShipDataCommon).transform = (ship.transform).withTransformFrom(positionInWorld = centerBlockPosInWorld)
 
-    (ship as ShipDataCommon).setFromTransform(vsApi.transformFactory.create(centerBlockPosInWorld, ship.transform.rotation, ship.transform.scaling, ship.transform.positionInShip))
+    (ship as ShipCore).setFromTransform(vsApi.transformFactory.create(centerBlockPosInWorld, ship.transform.rotation, ship.transform.scaling, ship.transform.positionInShip))
     level.server.executeIf(
         // This condition will return true if all modified chunks have been both loaded AND
         // chunk update packets were sent to players
@@ -136,7 +134,11 @@ fun createNewShipWithStructure(
         .add(ship.transform.positionInWorld)
     // Put the ship into the compensated position, so that all the assembled blocks stay in the same place
     level.shipObjectWorld
-        .teleportShip(ship, ShipTeleportDataImpl(newPos = centerBlockPosInWorld.add(0.5, 128.5 - centerBlockPosInWorld.y, 0.5, Vector3d()), newPosInShip = ship.inertiaData.centerOfMass))
+        .teleportShip(ship, vsCore.newShipTeleportData(
+            newPos = centerBlockPosInWorld.add(0.5, 128.5 - centerBlockPosInWorld.y, 0.5, Vector3d()),
+            newPosInShip = ship.inertiaData.centerOfMass
+        )
+        )
 
 
     for (x in lowerCorner.x..higherCorner.x) {

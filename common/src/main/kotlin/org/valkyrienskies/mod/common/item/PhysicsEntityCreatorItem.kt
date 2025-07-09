@@ -7,7 +7,6 @@ import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.context.UseOnContext
 import org.joml.Vector3d
 import org.joml.Vector3dc
-import org.valkyrienskies.core.impl.game.ships.ShipTransformImpl.Companion
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod
 import org.valkyrienskies.mod.common.dimensionId
 import org.valkyrienskies.mod.common.entity.VSPhysicsEntity
@@ -15,6 +14,7 @@ import org.valkyrienskies.mod.common.getShipManagingPos
 import org.valkyrienskies.mod.common.shipObjectWorld
 import org.valkyrienskies.mod.common.util.toJOML
 import org.valkyrienskies.mod.common.util.toJOMLD
+import org.valkyrienskies.mod.common.vsCore
 
 class PhysicsEntityCreatorItem(
     properties: Properties
@@ -45,7 +45,7 @@ class PhysicsEntityCreatorItem(
                 ctx.clickLocation.toJOML().add(offsetInGlobal)
             }
 
-            val transform = Companion.create(entityPos, Vector3d())
+            val transform = vsCore.newShipTransform(entityPos, Vector3d())
             val physicsEntityData = VSPhysicsEntity.createBasicSphereData(shipId, transform, sphereRadius)
             entity.setPhysicsEntityData(physicsEntityData)
             entity.setPos(entityPos.x(), entityPos.y(), entityPos.z())
