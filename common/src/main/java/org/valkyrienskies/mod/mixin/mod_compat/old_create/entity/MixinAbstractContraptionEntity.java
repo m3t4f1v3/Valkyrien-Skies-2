@@ -194,7 +194,7 @@ public abstract class MixinAbstractContraptionEntity extends Entity implements M
 
     @Inject(method = "tickActors", at = @At("HEAD"), cancellable = true, remap = false)
     private void preTickActors(final CallbackInfo ci)
-        throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+        throws NoSuchMethodException, InvocationTargetException, IllegalAccessException, ClassNotFoundException {
         ci.cancel();
 
         final boolean stalledPreviously = contraption.stalled;
@@ -213,36 +213,27 @@ public abstract class MixinAbstractContraptionEntity extends Entity implements M
 
             final Vec3 oldMotion = context.motion;
             final Vec3 actorPosition = toGlobalVector(CreateCompat.getCenterOf(blockInfo.pos())
-                .add((Vec3) actor.getClass().getMethod("getActiveAreaOffset", MovementContext.class).invoke(actor, context)), 1);
+                .add((Vec3) Class.forName("com.simibubi.create.content.contraptions.behaviour.MovementBehaviour").getMethod("getActiveAreaOffset", MovementContext.class).invoke(actor, context)), 1);
             final BlockPos gridPosition = vs$getTargetPos(actor, context, BlockPos.containing(actorPosition), actorPosition); // BlockPos.containing(actorPosition);
-            boolean newPosVisited = false;
-            try {
-                newPosVisited = !context.stall && ((AbstractContraptionEntity) (Object) this).getClass().getMethod("shouldActorTrigger", MovementContext.class, StructureBlockInfo.class, Class.forName("com.simibubi.create.content.contraptions.behaviour.MovementBehaviour"), Vec3.class, BlockPos.class).invoke((AbstractContraptionEntity)(Object)this, context, blockInfo, actor, actorPosition, gridPosition).equals(true);
-            } catch (InvocationTargetException | ClassNotFoundException ignored) {
-
-            }
+            final boolean newPosVisited = !context.stall && AbstractContraptionEntity.class.getMethod("shouldActorTrigger", MovementContext.class, StructureBlockInfo.class, Class.forName("com.simibubi.create.content.contraptions.behaviour.MovementBehaviour"), Vec3.class, BlockPos.class).invoke((AbstractContraptionEntity)(Object)this, context, blockInfo, actor, actorPosition, gridPosition).equals(true);
 
             context.rotation = v -> applyRotation(v, 1);
             context.position = actorPosition;
-            try {
-                if (!((AbstractContraptionEntity)(Object)this).getClass().getMethod("isActorActive", MovementContext.class, Class.forName("com.simibubi.create.content.contraptions.behaviour.MovementBehaviour")).invoke((AbstractContraptionEntity)(Object)this, context, actor).equals(true) && !actor.getClass().getMethod("mustTickWhileDisabled").invoke(actor).equals(true))
-                    continue;
-            } catch (InvocationTargetException | ClassNotFoundException ignored) {
 
-            }
+            if (!AbstractContraptionEntity.class.getMethod("isActorActive", MovementContext.class, Class.forName("com.simibubi.create.content.contraptions.behaviour.MovementBehaviour")).invoke((AbstractContraptionEntity)(Object)this, context, actor).equals(true) && Class.forName("com.simibubi.create.content.contraptions.behaviour.MovementBehaviour").getMethod("mustTickWhileDisabled").invoke(actor).equals(true)) continue;
 
             if (newPosVisited && !context.stall) {
-                actor.getClass().getMethod("visitNewPosition", MovementContext.class, BlockPos.class).invoke(actor, context, gridPosition);
+                Class.forName("com.simibubi.create.content.contraptions.behaviour.MovementBehaviour").getMethod("visitNewPosition", MovementContext.class, BlockPos.class).invoke(actor, context, gridPosition);
                 if (!isAlive())
                     break;
                 context.firstMovement = false;
             }
             if (!oldMotion.equals(context.motion)) {
-                actor.getClass().getMethod("onSpeedChanged", MovementContext.class, Vec3.class, Vec3.class).invoke(actor, context, oldMotion, context.motion);
+                Class.forName("com.simibubi.create.content.contraptions.behaviour.MovementBehaviour").getMethod("onSpeedChanged", MovementContext.class, Vec3.class, Vec3.class).invoke(actor, context, oldMotion, context.motion);
                 if (!isAlive())
                     break;
             }
-            actor.getClass().getMethod("tick", MovementContext.class).invoke(actor, context);
+            Class.forName("com.simibubi.create.content.contraptions.behaviour.MovementBehaviour").getMethod("tick", MovementContext.class).invoke(actor, context);
             if (!isAlive())
                 break;
             contraption.stalled |= context.stall;
