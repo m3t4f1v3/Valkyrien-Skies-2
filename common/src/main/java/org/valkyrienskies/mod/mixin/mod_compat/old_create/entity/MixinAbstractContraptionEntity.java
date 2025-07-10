@@ -192,6 +192,18 @@ public abstract class MixinAbstractContraptionEntity extends Entity implements M
     @Shadow
     protected abstract void onContraptionStalled();
 
+    @Unique
+    private Class<?> vs$getHighestSuperclass(Class<?> clazz) {
+        Class<?> superClass = clazz.getSuperclass();
+        if (superClass == null) return clazz;
+        Class<?> supererClass = superClass;
+        while (supererClass != null && superClass != Object.class) {
+            superClass = supererClass;
+            supererClass = superClass.getSuperclass();
+        }
+        return superClass;
+    }
+
     @Inject(method = "tickActors", at = @At("HEAD"), cancellable = true, remap = false)
     private void preTickActors(final CallbackInfo ci)
         throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
@@ -216,12 +228,12 @@ public abstract class MixinAbstractContraptionEntity extends Entity implements M
                 .add((Vec3) actor.getClass().getMethod("getActiveAreaOffset", MovementContext.class).invoke(actor, context)), 1);
             final BlockPos gridPosition = vs$getTargetPos(actor, context, BlockPos.containing(actorPosition), actorPosition); // BlockPos.containing(actorPosition);
             final boolean newPosVisited =
-                !context.stall && ((AbstractContraptionEntity) (Object) this).getClass().getMethod("shouldActorTrigger", MovementContext.class, StructureBlockInfo.class, actor.getClass(), Vec3.class, BlockPos.class).invoke((AbstractContraptionEntity)(Object)this, context, blockInfo, actor, actorPosition, gridPosition).equals(true);
+                !context.stall && ((AbstractContraptionEntity) (Object) this).getClass().getMethod("shouldActorTrigger", MovementContext.class, StructureBlockInfo.class, vs$getHighestSuperclass(actor.getClass()), Vec3.class, BlockPos.class).invoke((AbstractContraptionEntity)(Object)this, context, blockInfo, actor, actorPosition, gridPosition).equals(true);
 
             context.rotation = v -> applyRotation(v, 1);
             context.position = actorPosition;
             try {
-                if (!((AbstractContraptionEntity)(Object)this).getClass().getMethod("isActorActive", MovementContext.class, actor.getClass()).invoke((AbstractContraptionEntity)(Object)this, context, actor).equals(true) && !actor.getClass().getMethod("mustTickWhileDisabled").invoke(actor).equals(true))
+                if (!((AbstractContraptionEntity)(Object)this).getClass().getMethod("isActorActive", MovementContext.class, vs$getHighestSuperclass(actor.getClass())).invoke((AbstractContraptionEntity)(Object)this, context, actor).equals(true) && !actor.getClass().getMethod("mustTickWhileDisabled").invoke(actor).equals(true))
                     continue;
             } catch (InvocationTargetException ignored) {
 
