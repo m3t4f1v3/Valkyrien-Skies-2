@@ -4,7 +4,7 @@
 <img src="vs_logo.png" width="200" height="200">
 </p>
 <h1 align="center">
-Valkyrien Skies 2
+Valkyrien Skies
 </h1>
 <p align="center">
 <a href="https://www.valkyrienskies.org/">Website</a> - <a href="https://www.curseforge.com/minecraft/mc-mods/valkyrien-skies">CurseForge</a> - 
@@ -29,6 +29,55 @@ You can download official releases of Valkyrien Skies from our [website](https:/
    repo: `git clone --recurse-submodules https://github.com/ValkyrienSkies/Valkyrien-Skies-2`
 2. Open the project in IntelliJ, using Java 17
 3. Import the gradle project, sync gradle
+
+### Including in your mod
+
+*(Remember that VS requires KotlinForForge in Forge development environments! The specific version can be found in `gradle.properties`.)*
+
+To include Valkyrien Skies in your mod, you can use the following gradle repository-
+
+```groovy
+repositories {
+   //...
+   maven {
+      name = "Valkyrien Skies"
+      url = "https://maven.valkyrienskies.org"
+   }
+   //...
+}
+```
+
+and dependency-
+```groovy
+dependencies {
+   //...
+   modApi("org.valkyrienskies:valkyrienskies-120-//loader//:${vs2_version}") {
+      exclude group: 'com.simibubi', module: ''
+      exclude group: 'dev.engine-room', module: ''
+      exclude group: 'com.jozufozu', module: ''
+   }
+   implementation("org.valkyrienskies.core:api:${vscore_version}") {
+      exclude group: 'org.joml', module: ''
+   }
+   implementation("org.valkyrienskies.core:api-game:${vscore_version}") {
+      exclude group: 'org.joml', module: ''
+   }
+   implementation("org.valkyrienskies.core:util:${vscore_version}") {
+      exclude group: 'org.joml', module: ''
+   }
+   //...
+}
+```
+
+Replace `-//loader//` with `-(your modloader)`, or use `-common` if you're in a multiloader project on the Common platform.
+
+You can get versions of VSCore from this project's `gradle.properties` file, and specific versions of VS can be pulled using the version + beta + first 10 characters of the commit's Git hash.
+
+#### Currently, VS2 is on `2.5.0-beta.3`
+
+### A note about 'Debug' items
+The debug items present in Valkyrien Skies are not indicative of the ideal way of executing their concepts; they are nothing more than simple test items designed to make debugging development easier, as implied by their name.
+Additionally, any class with Debug in the name should not be used outside VS itself.
 
 ## Troubleshooting
 

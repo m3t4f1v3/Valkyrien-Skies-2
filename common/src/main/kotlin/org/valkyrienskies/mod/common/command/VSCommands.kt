@@ -3,38 +3,27 @@ package org.valkyrienskies.mod.common.command
 import com.mojang.brigadier.CommandDispatcher
 import com.mojang.brigadier.arguments.BoolArgumentType
 import com.mojang.brigadier.arguments.StringArgumentType
-import de.bluecolored.bluemap.core.util.Key.minecraft
-import net.minecraft.client.multiplayer.ClientSuggestionProvider
 import net.minecraft.commands.CommandRuntimeException
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands.argument
 import net.minecraft.commands.Commands.literal
 import net.minecraft.commands.SharedSuggestionProvider
-import net.minecraft.commands.arguments.EntityArgument
-import net.minecraft.commands.arguments.coordinates.BlockPosArgument
 import net.minecraft.commands.arguments.coordinates.Vec3Argument
 import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.Component.translatable
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.phys.BlockHitResult
-import org.joml.Vector3d
 import org.valkyrienskies.core.api.ships.ServerShip
 import org.valkyrienskies.core.api.world.ServerShipWorld
 import org.valkyrienskies.core.api.world.ShipWorld
 import org.valkyrienskies.core.apigame.ShipTeleportData
-import org.valkyrienskies.core.impl.game.ShipTeleportDataImpl
-import org.valkyrienskies.core.util.x
-import org.valkyrienskies.core.util.y
-import org.valkyrienskies.core.util.z
 import org.valkyrienskies.mod.common.dimensionId
 import org.valkyrienskies.mod.common.getShipManagingPos
 import org.valkyrienskies.mod.common.shipObjectWorld
 import org.valkyrienskies.mod.common.util.toJOML
-import org.valkyrienskies.mod.common.util.toJOMLD
 import org.valkyrienskies.mod.common.vsCore
 import org.valkyrienskies.mod.mixin.feature.commands.ClientSuggestionProviderAccessor
 import org.valkyrienskies.mod.util.logger
-import java.util.UUID
 
 object VSCommands {
     private val LOGGER by logger()
@@ -116,7 +105,7 @@ object VSCommands {
                                         Vec3Argument.getVec3(it, "position")
                                     val dimensionId = it.source.level.dimensionId
                                     val shipTeleportData: ShipTeleportData =
-                                        ShipTeleportDataImpl(
+                                        vsCore.newShipTeleportData(
                                             newPos = position.toJOML(),
                                             newDimension = dimensionId
                                         )
@@ -149,7 +138,7 @@ object VSCommands {
                                         val source = it.source
                                         val dimensionId = it.source.level.dimensionId
                                         val shipTeleportData: ShipTeleportData =
-                                            ShipTeleportDataImpl(
+                                            vsCore.newShipTeleportData(
                                                 newPos = position.toJOML(),
                                                 newRot = eulerAngles.toEulerRotationFromMCEntity(
                                                     source.rotation.x.toDouble(), source.rotation.y.toDouble(),
@@ -190,7 +179,7 @@ object VSCommands {
                                             val source = it.source
                                             val dimensionId = it.source.level.dimensionId
                                             val shipTeleportData: ShipTeleportData =
-                                                ShipTeleportDataImpl(
+                                                vsCore.newShipTeleportData(
                                                     newPos = position.toJOML(),
                                                     newRot = eulerAngles.toEulerRotationFromMCEntity(
                                                         source.rotation.x.toDouble(), source.rotation.y.toDouble(),
@@ -237,7 +226,7 @@ object VSCommands {
                                                 val source = it.source
                                                 val dimensionId = it.source.level.dimensionId
                                                 val shipTeleportData: ShipTeleportData =
-                                                    ShipTeleportDataImpl(
+                                                    vsCore.newShipTeleportData(
                                                         newPos = position.toJOML(),
                                                         newRot = eulerAngles.toEulerRotationFromMCEntity(
                                                             source.rotation.x.toDouble(), source.rotation.y.toDouble(),
@@ -324,7 +313,7 @@ object VSCommands {
                         serverShips.forEach { serverShip ->
                             vsCore.teleportShip(
                                 it.source.shipWorld as ServerShipWorld, serverShip,
-                                ShipTeleportDataImpl(newPos = Vector3d(entity.x, entity.y, entity.z))
+                                vsCore.newShipTeleportData(newPos = Vector3d(entity.x, entity.y, entity.z))
                             )
                         }
                         it.source.sendVSMessage(
@@ -340,7 +329,7 @@ object VSCommands {
                         serverShips.forEach { serverShip ->
                             vsCore.teleportShip(
                                 it.source.shipWorld as ServerShipWorld, serverShip,
-                                ShipTeleportDataImpl(newPos = pos.toJOMLD())
+                                vsCore.newShipTeleportData(newPos = pos.toJOMLD())
                             )
                         }
                         it.source.sendVSMessage(

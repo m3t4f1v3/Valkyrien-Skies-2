@@ -16,7 +16,6 @@ import net.minecraft.client.gui.screens.Screen
 import net.minecraft.network.chat.Component
 import org.apache.commons.lang3.StringUtils
 import org.valkyrienskies.core.impl.config.SidedVSConfigClass
-import org.valkyrienskies.core.impl.util.serialization.VSJacksonUtil
 import org.valkyrienskies.mod.common.vsCore
 import java.util.Optional
 
@@ -82,7 +81,7 @@ object VSClothConfig {
         save: (JsonNode) -> Unit,
         validate: (JsonNode) -> Set<ValidationMessage>
     ): List<AbstractConfigListEntry<*>> {
-        val mapper = VSJacksonUtil.configMapper
+        val mapper = vsCore.configMapper
         val entries = mutableListOf<AbstractConfigListEntry<*>>()
 
         val description: String? = schema["description"]?.asText()

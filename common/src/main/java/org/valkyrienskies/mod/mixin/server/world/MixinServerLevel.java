@@ -53,6 +53,7 @@ import org.valkyrienskies.mod.common.IShipObjectWorldServerProvider;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod;
 import org.valkyrienskies.mod.common.block.WingBlock;
+import org.valkyrienskies.mod.common.util.DragInfoReporter;
 import org.valkyrienskies.mod.common.util.VSServerLevel;
 import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
 import org.valkyrienskies.mod.mixin.accessors.server.level.ChunkMapAccessor;
@@ -100,7 +101,10 @@ public abstract class MixinServerLevel implements IShipObjectWorldServerProvider
             getShipObjectWorld().addDimension(
                 VSGameUtilsKt.getDimensionId((ServerLevel) (Object) this),
                 VSGameUtilsKt.getYRange((ServerLevel) (Object) this),
-                McMathUtilKt.getDEFAULT_WORLD_GRAVITY()
+                McMathUtilKt.getDEFAULT_WORLD_GRAVITY(),
+                //todo make this datagenned
+                63.0,
+                962.0
             );
         }
     }
@@ -184,7 +188,7 @@ public abstract class MixinServerLevel implements IShipObjectWorldServerProvider
                         ship = VSGameUtilsKt.getShipObjectManagingPos(thisAsLevel, chunkX, chunkZ);
                     if (ship != null) {
                         // Sussy cast, but I don't want to expose this directly through the vs-core api
-                        final WingManager shipAsWingManager = ship.getAttachment(WingManager.class);
+                        final WingManager shipAsWingManager = ship.getWingManager();
                         final MutableBlockPos mutableBlockPos = new MutableBlockPos();
                         for (int x = 0; x < 16; x++) {
                             for (int y = 0; y < 16; y++) {
@@ -274,6 +278,8 @@ public abstract class MixinServerLevel implements IShipObjectWorldServerProvider
         if (ValkyrienSkiesMod.getVsCore().getHooks().getEnableSplitting()) {
             ValkyrienSkiesMod.splitHandler.tick(ServerLevel.class.cast(this));
         }
+
+        DragInfoReporter.INSTANCE.tick((ServerLevel) (Object) this);
 
     }
 

@@ -54,7 +54,6 @@ import org.valkyrienskies.core.apigame.ships.LoadedServerShipCore;
 import org.valkyrienskies.core.apigame.world.IPlayer;
 import org.valkyrienskies.core.apigame.world.ServerShipWorldCore;
 import org.valkyrienskies.core.apigame.world.VSPipeline;
-import org.valkyrienskies.core.impl.game.ShipTeleportDataImpl;
 import org.valkyrienskies.mod.common.IShipObjectWorldServerProvider;
 import org.valkyrienskies.mod.common.ShipSavedData;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
@@ -166,7 +165,9 @@ public abstract class MixinMinecraftServer implements IShipObjectWorldServerProv
         getShipObjectWorld().addDimension(
             VSGameUtilsKt.getDimensionId(overworld()),
             VSGameUtilsKt.getYRange(overworld()),
-            McMathUtilKt.getDEFAULT_WORLD_GRAVITY()
+            McMathUtilKt.getDEFAULT_WORLD_GRAVITY(),
+            63.0,
+            962.0
         );
     }
 
@@ -306,7 +307,7 @@ public abstract class MixinMinecraftServer implements IShipObjectWorldServerProv
             // Getting portal info failed? Don't teleport.
             return;
         }
-        final ShipTeleportData shipTeleportData = new ShipTeleportDataImpl(
+        final ShipTeleportData shipTeleportData = ValkyrienSkiesMod.vsCore.newShipTeleportData(
             VectorConversionsMCKt.toJOML(portalInfo.pos),
             shipObject.getTransform().getShipToWorldRotation(),
             new Vector3d(),

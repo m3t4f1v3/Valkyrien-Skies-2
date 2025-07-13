@@ -157,6 +157,12 @@ subprojects {
 
         compileOnly("com.google.code.findbugs:jsr305:3.0.2")
     }
+
+    kotlin {
+        compilerOptions {
+            optIn.add("org.valkyrienskies.core.api.VsBeta")
+        }
+    }
 }
 
 allprojects {
