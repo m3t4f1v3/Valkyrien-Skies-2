@@ -40,10 +40,6 @@ public class MixinHosePulleyBlockEntity extends KineticBlockEntity {
     @Unique
     private BlockPos valkyrienskies$worldAwareBelow(BlockPos blockPos, int i) {
         BlockPos truePosition = blockPos.below(i);
-        // Peeking a bit further than we should. Necessary for regular hose functionality on own ship
-        if (!level.getBlockState(truePosition).canBeReplaced() || !level.getBlockState(truePosition.below(1)).canBeReplaced()) {
-            return truePosition;
-        }
         // If the hose is not obstructed by our own ship, check against world and other ships.
         AABB targetAABB = new AABB(truePosition);
         Ship hoseShip = VSGameUtilsKt.getShipManagingPos(level, worldPosition);
@@ -52,12 +48,20 @@ public class MixinHosePulleyBlockEntity extends KineticBlockEntity {
         }
         Iterable<Ship> ships = VSGameUtilsKt.getShipsIntersecting(level, targetAABB);
         // Even if many ships intersect our target position, we can only handle one.
+        boolean foundShipPos = false;
         Iterator<Ship> shipIt = ships.iterator();
         if (shipIt.hasNext()) {
             Ship fluidShip = shipIt.next();
             if (fluidShip != null && fluidShip != hoseShip) {
+                foundShipPos = true;
                 targetAABB = VectorConversionsMCKt.toMinecraft(
                     VectorConversionsMCKt.toJOML(targetAABB).transform(fluidShip.getWorldToShip()));
+            }
+        }
+        if (!foundShipPos) {
+            // Peeking a bit further than we should. Necessary for regular hose functionality on own ship
+            if (!level.getBlockState(truePosition).canBeReplaced() || !level.getBlockState(truePosition.below(1)).canBeReplaced()) {
+                return truePosition;
             }
         }
         return BlockPos.containing(targetAABB.getCenter());

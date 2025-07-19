@@ -4,7 +4,6 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
 import net.minecraft.core.BlockPos;
-import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -12,6 +11,8 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.entity.EnchantmentTableBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
+import org.joml.Matrix4d;
+import org.joml.Matrix4dc;
 import org.joml.Vector3d;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -41,14 +42,33 @@ public class MixinEnchantmentTableBlockEntity extends BlockEntity {
     }
 
     @WrapOperation(method = "bookAnimationTick", at = @At(value = "INVOKE", target = "Lnet/minecraft/util/Mth;atan2(DD)D"))
-    private static double negateShipRotation(double d, double e, Operation<Double> original, @Local(argsOnly = true) Level level, @Local(argsOnly = true) BlockPos blockPos) {
-        double result = Mth.atan2(d, e);
+    private static double adjustYaw(double d, double e, Operation<Double> original,
+        @Local(argsOnly = true) Level level,
+        @Local(argsOnly = true) BlockPos blockPos,
+        @Local Player player) {
         Ship ship = VSGameUtilsKt.getShipManagingPos(level, blockPos);
         if (ship != null) {
-            Vector3d eulers = ship.getTransform().getShipToWorldRotation().getEulerAnglesXYZ(new Vector3d());
-            result += eulers.y;
+            // Get ship's transformation matrix (local-to-world)
+            Matrix4dc shipTransform = ship.getTransform().getShipToWorld();
+            Matrix4d invTransform = new Matrix4d(shipTransform).invertAffine();
+
+            // Transform player's world position to local
+            Vector3d P_w = new Vector3d(player.getX(), player.getY(), player.getZ());
+            Vector3d P_l = new Vector3d();
+            invTransform.transformPosition(P_w, P_l);
+
+            // Table's position in local space (BlockPos is assumed local for ships)
+            Vector3d T_l = new Vector3d(blockPos.getX() + 0.5, blockPos.getY() + 0.5, blockPos.getZ() + 0.5);
+
+            // Direction in local space
+            Vector3d D_l = new Vector3d(P_l).sub(T_l);
+
+            // Compute local yaw
+            return original.call(D_l.z(), D_l.x());
+        } else {
+            // No ship: Use world coordinates (vanilla behavior)
+            return original.call(d, e);
         }
-        return result;
     }
 
     public MixinEnchantmentTableBlockEntity(BlockEntityType<?> blockEntityType,

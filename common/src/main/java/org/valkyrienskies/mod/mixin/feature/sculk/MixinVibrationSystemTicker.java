@@ -35,12 +35,17 @@ public interface MixinVibrationSystemTicker {
             implementing a custom PositionSource just for this specific case. */
             return new BlockPositionSource(
                 BlockPos.containing(
-                    VSGameUtilsKt.toWorldCoordinates(serverLevel, optPos.get()).add(0.5, 0.5, 0.5)
+                    VSGameUtilsKt.toWorldCoordinates(serverLevel, optPos.get())
                 )
             );
         } else {
             // Let it go wrong the exact way it should without this mixin.
             return trueResult;
         }
+    }
+
+    @WrapOperation(method = "tryReloadVibrationParticle", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/gameevent/vibrations/VibrationSystem$User;getPositionSource()Lnet/minecraft/world/level/gameevent/PositionSource;"))
+    private static PositionSource destReloadSourcePos(User instance, Operation<PositionSource> original, @Local(argsOnly = true) ServerLevel serverLevel) {
+        return destSourcePos(instance, original, serverLevel);
     }
 }
