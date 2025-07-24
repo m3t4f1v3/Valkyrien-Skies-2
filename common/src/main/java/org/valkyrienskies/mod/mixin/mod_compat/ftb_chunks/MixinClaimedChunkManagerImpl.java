@@ -1,6 +1,5 @@
 package org.valkyrienskies.mod.mixin.mod_compat.ftb_chunks;
 
-import dev.ftb.mods.ftbchunks.data.ClaimedChunkManagerImpl;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.Level;
@@ -17,7 +16,7 @@ import org.valkyrienskies.mod.common.config.VSGameConfig;
 import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
 
 @Pseudo
-@Mixin(ClaimedChunkManagerImpl.class)
+@Mixin(targets = "dev.ftb.mods.ftbchunks.data.ClaimedChunkManagerImpl")
 public abstract class MixinClaimedChunkManagerImpl {
     @Unique
     private Entity entity = null;
