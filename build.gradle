@@ -91,6 +91,7 @@ subprojects {
             url "https://cursemaven.com"
             content {
                 includeModule "curse.maven", "kotlinforforge-351264"
+                includeModule "curse.maven", "connectible-chains-forge-418514"
             }
         }
         if (!project.block_external_repositories) {
