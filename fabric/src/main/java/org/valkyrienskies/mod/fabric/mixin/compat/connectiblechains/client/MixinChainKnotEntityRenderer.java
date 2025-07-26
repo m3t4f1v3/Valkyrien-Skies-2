@@ -41,32 +41,31 @@ public abstract class MixinChainKnotEntityRenderer {
     @Inject(
         method = "renderChainLink",
         at = @At(
-            value = "INVOKE",
-            target = "Lcom/mojang/blaze3d/vertex/PoseStack;pushPose()V"
-        )
-    )
+            value = "NEW",
+            target = "org/joml/Vector3f" // After all the offset calculations, just before the mod starts doing math on these positions
+        ))
     private void adjustPositions(PoseStack matrices, MultiBufferSource vertexConsumerProvider, ChainData chainData, CallbackInfo ci,
-        @Local(ordinal = 0) LocalRef<Vec3> offset, @Local(ordinal = 1) LocalRef<Vec3> startPos, @Local(ordinal = 2) LocalRef<Vec3> endPos) {
+        @Local(ordinal = 1) LocalRef<Vec3> srcPos, @Local(ordinal = 2) LocalRef<Vec3> destPos) {
         if (valkyrienskies$level == null) return;
 
         // We don't have access to entities acting as chain ends so instead of `getShipManaging` we have to rely on
         // determining ships from level and coordinates. It is possible to do better with a mixin to `render`, the
         // caller of this function.
-        ClientShip startShip = VSGameUtilsKt.getShipObjectManagingPos(valkyrienskies$level, startPos.get());
-        ClientShip endShip = VSGameUtilsKt.getShipObjectManagingPos(valkyrienskies$level, endPos.get());
-        if (startShip != endShip) {
-            if (startShip != null) {
-                startPos.set(VectorConversionsMCKt.toMinecraft(startShip.getRenderTransform().getShipToWorld()
-                    .transformPosition(VectorConversionsMCKt.toJOML(startPos.get()))));
-
-                Vec3 offset_ = offset.get();
-                matrices.translate(offset_.x, offset_.y, offset_.z);
-                matrices.mulPose(new Quaternionf(startShip.getRenderTransform().getShipToWorldRotation()).invert());
-                offset.set(Vec3.ZERO);
+        ClientShip srcShip = VSGameUtilsKt.getShipObjectManagingPos(valkyrienskies$level, srcPos.get());
+        ClientShip destShip = VSGameUtilsKt.getShipObjectManagingPos(valkyrienskies$level, destPos.get());
+        if (srcShip != destShip) {
+            if (srcShip != null) {
+                srcPos.set(VectorConversionsMCKt.toMinecraft(srcShip.getRenderTransform().getShipToWorld()
+                    .transformPosition(VectorConversionsMCKt.toJOML(srcPos.get()))));
+                // As the knot is a shipyard entity it is rendered with a transform matching the one of this ship.
+                // This is undesirable as both source and destination positions are in world coordinates, so we negate
+                // the transform.
+                matrices.mulPose(new Quaternionf(srcShip.getRenderTransform().getShipToWorldRotation()).invert());
             }
-            if (endShip != null) {
-                endPos.set(VectorConversionsMCKt.toMinecraft(endShip.getRenderTransform().getShipToWorld()
-                    .transformPosition(VectorConversionsMCKt.toJOML(endPos.get()))));
+            if (destShip != null) {
+                destPos.set(VectorConversionsMCKt.toMinecraft(destShip.getRenderTransform().getShipToWorld()
+                    .transformPosition(VectorConversionsMCKt.toJOML(destPos.get()))));
+                // No complex transforms involved as the knot we're rendering is positioned in worldspace.
             }
         }
     }
