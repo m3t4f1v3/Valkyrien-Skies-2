@@ -34,12 +34,13 @@
     "compat.common_create.client.MixinContraptionHandlerClient",
     "compat.common_create.client.MixinSuperGlueSelectionHandler",
     "compat.common_create.client.MixinTrackBlockOutline",
-    "compat.sodium.MixinRenderSectionManager",
+    "compat.connectiblechains.client.MixinChainKnotEntityRenderer",
     "compat.oc2r.MixinComputerRenderer",
     "compat.oc2r.MixinMonitorRenderer",
     "compat.oc2r.MixinProjectorDepthRenderer",
     "compat.old_create.client.MixinContraptionRenderInfo",
-    "compat.old_create.client.MixinFlwContraption"
+    "compat.old_create.client.MixinFlwContraption",
+    "compat.sodium.MixinRenderSectionManager"
   ],
   "injectors": {
     "defaultRequire": 1
