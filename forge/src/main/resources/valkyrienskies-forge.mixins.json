@@ -12,6 +12,8 @@
     "compat.common_create.MixinBlocks",
     "compat.common_create.MixinChuteBlockEntity",
     "compat.common_create.MixinControlledContraptionEntity",
+    "compat.create_stuff_additions.MixinGrapplinWhiskChainsLineProcedure",
+    "compat.create_stuff_additions.MixinGrapplinWhiskItemInHandTickProcedure",
     "compat.immersivengineering.MixinBlockEntityInventory",
     "compat.integrateddynamics.MixinVoxelShapeComponents",
     "compat.mekanism.MixinRadiationManager",
