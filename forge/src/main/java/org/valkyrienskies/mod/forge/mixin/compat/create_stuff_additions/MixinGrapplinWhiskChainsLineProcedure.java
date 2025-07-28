@@ -8,11 +8,13 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
 import org.joml.Vector3d;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 
-@Mixin(targets = {"net.mcreator.createstuffadditions.procedures.GrapplinWhiskChainsLineProcedure"})
+@Pseudo
+@Mixin(targets = {"net.mcreator.createstuffadditions.procedures.GrapplinWhiskChainsLineProcedure"}, remap = false)
 public abstract class MixinGrapplinWhiskChainsLineProcedure {
     /**
      * There's no harm in skipping this check, it shouldn't happen client side anyway.
@@ -22,7 +24,8 @@ public abstract class MixinGrapplinWhiskChainsLineProcedure {
         at = @At(
             value = "INVOKE",
             target = "Lnet/minecraft/world/level/LevelAccessor;isEmptyBlock(Lnet/minecraft/core/BlockPos;)Z"
-        )
+        ),
+        require = 0
     )
     private static boolean skipAnnoyingEmptyBlockCheck(LevelAccessor instance, BlockPos blockPos) {
         return false;

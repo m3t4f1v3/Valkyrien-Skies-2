@@ -8,11 +8,13 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
 import org.joml.Vector3d;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Slice;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 
-@Mixin(targets = {"net.mcreator.createstuffadditions.procedures.GrapplinWhiskItemInHandTickProcedure"})
+@Pseudo
+@Mixin(targets = {"net.mcreator.createstuffadditions.procedures.GrapplinWhiskItemInHandTickProcedure"}, remap = false)
 public abstract class MixinGrapplinWhiskItemInHandTickProcedure {
     /**
      * This mixin repeats {@link MixinGrapplinWhiskChainsLineProcedure} but is responsible for game logic, namely players
@@ -26,7 +28,8 @@ public abstract class MixinGrapplinWhiskItemInHandTickProcedure {
             // getDouble is called 12 times in this method, we need all but the first three. Slicing should be more reliable than spamming ordinals.
             from = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/LevelAccessor;isEmptyBlock(Lnet/minecraft/core/BlockPos;)Z")
         ),
-        at = @At(value = "INVOKE", target = "Lnet/minecraft/nbt/CompoundTag;getDouble(Ljava/lang/String;)D")
+        at = @At(value = "INVOKE", target = "Lnet/minecraft/nbt/CompoundTag;getDouble(Ljava/lang/String;)D"),
+        require = 0
     )
     private static double replacePosition(CompoundTag instance, String string, Operation<Double> original,
         @Local(argsOnly = true) LevelAccessor world) {
