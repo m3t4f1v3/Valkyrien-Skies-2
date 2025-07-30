@@ -35,6 +35,7 @@
     "compat.common_create.client.MixinContraptionHandlerClient",
     "compat.common_create.client.MixinSuperGlueSelectionHandler",
     "compat.common_create.client.MixinTrackBlockOutline",
+    "compat.mekanism.MixinRenderData",
     "compat.mekanism.MixinRenderResizableCuboid",
     "compat.oc2r.MixinComputerRenderer",
     "compat.oc2r.MixinMonitorRenderer",
