@@ -138,7 +138,7 @@ dependencies {
     modCompileOnly("curse.maven:common-capabilities-247007:4987207")
 
     // Mekanism
-    modCompileOnly ("curse.maven:mekanism-268560:4644795")
+    modImplementation ("maven.modrinth:mekanism:${mekanism_version}")
 
     // Add Kotlin for Forge (3.12.0)
     forgeRuntimeLibrary("maven.modrinth:kotlin-for-forge:${kotlin_version}")
