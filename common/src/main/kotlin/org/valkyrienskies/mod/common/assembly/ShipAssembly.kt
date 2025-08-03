@@ -150,7 +150,7 @@ fun createNewShipWithStructure(
                     level.removeBlockEntity(BlockPos(x, y, z))
                     level.getChunk(x,z).setBlockState(BlockPos(x,y,z), Blocks.AIR.defaultBlockState(), false)
 
-                    level.getChunk(BlockPos(x, y, z)).setBlockState(BlockPos(x, y, z), Blocks.AIR.defaultBlockState(), false)
+                    //level.getChunk(BlockPos(x, y, z)).setBlockState(BlockPos(x, y, z), Blocks.AIR.defaultBlockState(), false)
                 }
             }
         }
