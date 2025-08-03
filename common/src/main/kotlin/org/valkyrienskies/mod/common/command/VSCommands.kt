@@ -2,6 +2,7 @@ package org.valkyrienskies.mod.common.command
 
 import com.mojang.brigadier.CommandDispatcher
 import com.mojang.brigadier.arguments.BoolArgumentType
+import com.mojang.brigadier.arguments.DoubleArgumentType
 import com.mojang.brigadier.arguments.StringArgumentType
 import net.minecraft.commands.CommandRuntimeException
 import net.minecraft.commands.CommandSourceStack
@@ -92,6 +93,22 @@ object VSCommands {
                                     throw e
                                 }
                             })
+                    )
+                )
+                //Scale a ship
+                .then(
+                    literal("scale").then(
+                        argument("ship", ShipArgument.ships())
+                            .then(argument("newScale", DoubleArgumentType.doubleArg(0.001))
+                                .executes {
+                                    vsCore.scaleShip(
+                                        it.source.shipWorld as ServerShipWorld,
+                                        ShipArgument.getShip(it, "ship") as ServerShip,
+                                        DoubleArgumentType.getDouble(it, "newScale")
+                                    )
+                                    1
+                                }
+                            )
                     )
                 )
                 .then(
