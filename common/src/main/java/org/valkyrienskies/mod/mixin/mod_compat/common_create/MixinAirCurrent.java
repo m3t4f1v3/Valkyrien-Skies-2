@@ -15,7 +15,9 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
+import org.joml.Matrix4d;
 import org.joml.Vector3d;
+import org.joml.Vector3dc;
 import org.joml.primitives.AABBd;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -23,21 +25,28 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.ModifyArg;
 import org.spongepowered.asm.mixin.injection.Redirect;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.valkyrienskies.core.api.ships.Ship;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
+import org.valkyrienskies.mod.common.entity.handling.VSEntityManager;
 import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
 import org.valkyrienskies.mod.common.world.RaycastUtilsKt;
 import org.valkyrienskies.mod.mixinducks.mod_compat.create.IExtendedAirCurrentSource;
 
-@Mixin(AirCurrent.class)
+@Mixin(value = AirCurrent.class, remap = false)
 public abstract class MixinAirCurrent {
 
     @Shadow
     @Final
     public IAirCurrentSource source;
+
+    @Shadow
+    public Direction direction;
+
+    @Unique
+    double scalingFactor = 1.0;
 
     @Unique
     private Ship getShip() {
@@ -47,6 +56,17 @@ public abstract class MixinAirCurrent {
             return VSGameUtilsKt.getShipManagingPos(source.getAirCurrentWorld(), source.getAirCurrentPos());
         else
             return null;
+    }
+
+    /**
+     * Interaction range is scaled to iterate through all blocks in shipspace and not stop halfway / overshoot.
+     * While it might be dangerous to increase or decrease interaction range for scaled ships on its own,
+     * this is negated by another mixin effectively un-scaling this value.
+     */
+    @WrapOperation(method = "rebuild", at = @At(value = "INVOKE", target = "Lcom/simibubi/create/content/kinetics/fan/AirCurrent;getFlowLimit(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;FLnet/minecraft/core/Direction;)F"))
+    private float offsetMax(Level world, BlockPos start, float max, Direction facing,
+        Operation<Float> original) {
+        return original.call(world, start, max, facing) * (float) scalingFactor;
     }
 
     @Inject(method = "getFlowLimit", at = @At("RETURN"), cancellable = true, remap = false)
@@ -96,6 +116,57 @@ public abstract class MixinAirCurrent {
         }
     }
 
+    @Inject(method = "rebuild", at = @At("TAIL"))
+    private void calcScaling(CallbackInfo ci) {
+        Ship ship = getShip();
+        if (ship != null) {
+            Vector3dc scaling = ship.getTransform().getScaling();
+            Matrix4d rescaledId = new Matrix4d().scale(1 / scaling.x(), 1 / scaling.y(), 1 / scaling.z());
+            scalingFactor = VectorConversionsMCKt.transformDirection(
+                rescaledId,
+                direction // Guaranteed to be non-null as this mixin fires after it is initialized in the same method.
+            ).length();
+        }
+    }
+
+    /**
+     * Raycasting from ships works in shipspace coordinates, so range is lower for miniships or higher for jumboships.
+     * Changing maxDistance to account for that is undesired as this value is also used for same-space processing
+     * such as depots and belts. Instead we modify whatever is necessary specifically for entity interactions.
+     */
+    @WrapOperation(method = "rebuild", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/phys/Vec3;scale(D)Lnet/minecraft/world/phys/Vec3;"))
+    private Vec3 rescaleEntityInteractionAABB(Vec3 instance, double d, Operation<Vec3> original) {
+        Vec3 result = original.call(instance, d);
+
+        Ship ship = getShip();
+        if (ship != null) {
+            result.scale(scalingFactor);
+        }
+        return result;
+    }
+
+    /**
+     * On scaled ships we move the entity position closer to the current source, so that subsequently called distance
+     * calculations that might or might not be Create-specific give a value accounted for ship-to-world scaling.
+     */
+    @WrapOperation(method = "tickAffectedEntities", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/Entity;position()Lnet/minecraft/world/phys/Vec3;"), require = 0)
+    private Vec3 transformEntityPos(Entity instance, Operation<Vec3> original) {
+        Vec3 result = original.call(instance);
+
+        Ship ship = getShip();
+        if (ship != null && !VSEntityManager.isShipyardEntity(instance)) {
+            Vector3dc sourcePos = VectorConversionsMCKt.toJOML(source.getAirCurrentPos().getCenter());
+            Vector3dc naiveEntityPos = ship.getWorldToShip().transformPosition(VectorConversionsMCKt.toJOML(result));
+            Vector3dc naiveOffset = VectorConversionsMCKt.toJOML(source.getAirCurrentPos().getCenter()).sub(naiveEntityPos);
+            Vector3dc scaling = ship.getTransform().getScaling();
+            Vector3dc adjustedEntityPos = sourcePos.add(
+                naiveOffset.mul(scaling, new Vector3d()),
+                new Vector3d()
+            );
+            return VectorConversionsMCKt.toMinecraft(adjustedEntityPos);
+        } else return result;
+    }
+
     @Redirect(method = "tickAffectedEntities", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/phys/AABB;intersects(Lnet/minecraft/world/phys/AABB;)Z"), require = 0)
     private boolean redirectIntersects(AABB instance, AABB other) {
         Ship ship = getShip();
@@ -104,21 +175,6 @@ public abstract class MixinAirCurrent {
             thisAABB.transform(ship.getWorldToShip());
             return other.intersects(thisAABB.minX, thisAABB.minY, thisAABB.minZ, thisAABB.maxX, thisAABB.maxY, thisAABB.maxZ);
         } else return instance.intersects(other);
-    }
-
-    // While getCenter is unstable between versions, it is only used as an argument of distanceTo which is only called once.
-    @ModifyArg(method = "tickAffectedEntities",
-        at = @At(value = "INVOKE", target = "Lnet/minecraft/world/phys/Vec3;distanceTo(Lnet/minecraft/world/phys/Vec3;)D", ordinal = 0),
-        index = 0
-    )
-    private Vec3 transformCenter(Vec3 center) {
-        Ship ship = getShip();
-        if (ship != null && this.source.getAirCurrentWorld() != null) {
-            Vector3d tempVec = new Vector3d();
-            ship.getTransform().getShipToWorld().transformPosition(center.x, center.y, center.z, tempVec);
-            center = VectorConversionsMCKt.toMinecraft(tempVec);
-        }
-        return center;
     }
 
     // Ordinals used here are correct both for v0.5.1 and v6 and in fact are stable all the way from Create v0.3.
@@ -130,7 +186,8 @@ public abstract class MixinAirCurrent {
         @Local(ordinal = 2) float acceleration, @Local(ordinal = 3) float maxAcceleration, @Local(ordinal = 0) Vec3i flow
     ) {
         Ship ship = getShip();
-        if (ship != null) {
+
+        if (ship != null && !VSEntityManager.isShipyardEntity(instance)) {
             Vector3d tempVec = new Vector3d();
             ship.getTransform().getShipToWorld().transformDirection(flow.getX(), flow.getY(), flow.getZ(), tempVec);
             Vec3 transformedFlow = VectorConversionsMCKt.toMinecraft(tempVec);
