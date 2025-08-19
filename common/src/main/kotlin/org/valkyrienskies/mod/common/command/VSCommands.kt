@@ -4,15 +4,19 @@ import com.mojang.brigadier.CommandDispatcher
 import com.mojang.brigadier.arguments.BoolArgumentType
 import com.mojang.brigadier.arguments.DoubleArgumentType
 import com.mojang.brigadier.arguments.StringArgumentType
+import com.mojang.brigadier.context.CommandContext
 import net.minecraft.commands.CommandRuntimeException
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands.argument
 import net.minecraft.commands.Commands.literal
 import net.minecraft.commands.SharedSuggestionProvider
 import net.minecraft.commands.arguments.coordinates.Vec3Argument
+import net.minecraft.core.BlockPos
 import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.Component.translatable
+import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.entity.Entity
+import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.phys.BlockHitResult
 import org.valkyrienskies.core.api.ships.ServerShip
 import org.valkyrienskies.core.api.world.ServerShipWorld
@@ -23,6 +27,7 @@ import org.valkyrienskies.mod.common.getShipManagingPos
 import org.valkyrienskies.mod.common.shipObjectWorld
 import org.valkyrienskies.mod.common.util.toJOML
 import org.valkyrienskies.mod.common.vsCore
+import org.valkyrienskies.mod.common.yRange
 import org.valkyrienskies.mod.mixin.feature.commands.ClientSuggestionProviderAccessor
 import org.valkyrienskies.mod.util.logger
 
@@ -45,16 +50,12 @@ object VSCommands {
                 .then(literal("delete")
                     .then(argument("ships", ShipArgument.ships())
                         .executes {
-                            try {
-                                val r = ShipArgument.getShips(it, "ships").toList() as List<ServerShip>
-                                vsCore.deleteShips(it.source.shipWorld as ServerShipWorld, r)
-                                it.source.sendVSMessage(translatable(DELETED_SHIPS_MESSAGE, r.size))
-                                r.size
-                            } catch (e: Exception) {
-                                if (e !is CommandRuntimeException) LOGGER.throwing(e)
-                                throw e
+                            deleteShip(it)
+                        }.then(argument("deleteBlocks", BoolArgumentType.bool())
+                            .executes {
+                                deleteShip(it, BoolArgumentType.getBool(it, "deleteBlocks"))
                             }
-                        }
+                        )
                     )
                 ).then(literal("rename")
                     .then(argument("ship", ShipArgument.ships())
@@ -371,6 +372,32 @@ object VSCommands {
                 }.build()
             )
         }*/
+    }
+
+    fun deleteShip(context: CommandContext<CommandSourceStack>, deleteBlocks: Boolean = false): Int {
+        val r = ShipArgument.getShips(context, "ships").toList() as List<ServerShip>
+
+        if (deleteBlocks) {
+            for (ship in r) {
+                var level = context.source.level;
+                if (level is ServerLevel) {
+                    val aabb = ship.shipAABB ?: continue
+                    // There has to be a better way to do this...
+                    for (x in aabb.minX()..aabb.maxX()) {
+                        for (y in aabb.minY()..aabb.maxY()) {
+                            for (z in aabb.minZ()..aabb.maxZ()) {
+                                // Not sure if 2 is what we want, but its what /fill uses
+                                level.setBlock(BlockPos(x, y, z), Blocks.AIR.defaultBlockState(), 2)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        vsCore.deleteShips(context.source.shipWorld as ServerShipWorld, r)
+        context.source.sendVSMessage(translatable(DELETED_SHIPS_MESSAGE, r.size))
+        return r.size
     }
 
     fun registerClientCommands(dispatcher: CommandDispatcher<CommandSourceStack>) {
