@@ -33,6 +33,8 @@ object VSCommands {
     private const val TELEPORT_SHIP_SUCCESS_MESSAGE = "command.valkyrienskies.teleport.success"
     private const val GET_SHIP_SUCCESS_MESSAGE = "command.valkyrienskies.get_ship.success"
     private const val GET_SHIP_FAIL_MESSAGE = "command.valkyrienskies.get_ship.fail"
+    const val VECTOR_ARG_FAIL_MESSAGE = "command.valkyrienskies.vector_arg.fail"
+
     private const val GET_SHIP_ONLY_USABLE_BY_ENTITIES_MESSAGE = "command.valkyrienskies.get_ship.only_usable_by_entities"
     private const val TELEPORTED_MULTIPLE_SHIPS_SUCCESS = "command.valkyrienskies.teleport.multiple_ship_success"
     private const val TELEPORT_FIRST_ARG_CAN_ONLY_INPUT_1_SHIP = "command.valkyrienskies.mc_teleport.can_only_teleport_to_one_ship"
