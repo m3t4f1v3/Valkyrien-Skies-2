@@ -1,5 +1,7 @@
 package org.valkyrienskies.mod.mixin.mod_compat.common_create;
 
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.simibubi.create.content.kinetics.fan.AirCurrent;
 import com.simibubi.create.content.kinetics.fan.AirFlowParticle;
 import com.simibubi.create.content.kinetics.fan.IAirCurrentSource;
@@ -20,7 +22,6 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 import org.valkyrienskies.core.api.ships.Ship;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
-import org.valkyrienskies.mod.compat.CreateCompat;
 import org.valkyrienskies.mod.mixinducks.mod_compat.create.IExtendedAirCurrentSource;
 
 @Mixin(AirFlowParticle.class)
@@ -58,17 +59,17 @@ public abstract class MixinAirFlowParticle extends SimpleAnimatedParticle {
         return instance.contains(x, y, z);
     }
 
-
-    @Redirect(method = "tick", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/phys/Vec3;subtract(Lnet/minecraft/world/phys/Vec3;)Lnet/minecraft/world/phys/Vec3;"), allow = 1)
-    private Vec3 redirectGetCenterOf(Vec3 instance, Vec3 vec3) {
+    @WrapOperation(method = "tick", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/phys/Vec3;subtract(Lnet/minecraft/world/phys/Vec3;)Lnet/minecraft/world/phys/Vec3;"))
+    private Vec3 transformPosToShip(Vec3 instance, Vec3 vec3, Operation<Vec3> original) {
         Ship ship = getShip();
-        Vec3 result = CreateCompat.getCenterOf(source.getAirCurrentPos());
         if (ship != null) {
-            Vector3d tempVec = new Vector3d();
-            ship.getTransform().getShipToWorld().transformPosition(result.x, result.y, result.z, tempVec);
-            result = VectorConversionsMCKt.toMinecraft(tempVec);
+            instance = VectorConversionsMCKt.toMinecraft(
+                ship.getWorldToShip().transformPosition(
+                    VectorConversionsMCKt.toJOML(instance)
+                )
+            );
         }
-        return instance.subtract(result);
+        return original.call(instance, vec3);
     }
 
     @Redirect(method = "tick", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/phys/Vec3;atLowerCornerOf(Lnet/minecraft/core/Vec3i;)Lnet/minecraft/world/phys/Vec3;"), allow = 1)
