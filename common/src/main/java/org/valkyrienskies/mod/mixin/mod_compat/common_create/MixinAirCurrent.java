@@ -76,7 +76,6 @@ public abstract class MixinAirCurrent {
                 facing
             ).length();
 
-            //startVec.add(direction.x, direction.y, direction.z);
             direction.mul(max);
             Vec3 mcStart = VectorConversionsMCKt.toMinecraft(startVec);
             BlockHitResult result = RaycastUtilsKt.clipIncludeShips(level,
@@ -124,10 +123,6 @@ public abstract class MixinAirCurrent {
                 rescaledId,
                 direction // Guaranteed to be non-null as this mixin only fires after direction is initialized.
             ).length();
-            Vector3d directionVec = ship.getTransform().getShipToWorld().transformDirection(VectorConversionsMCKt.toJOMLD(direction.getNormal()));
-
-            // Making the AABB just a bit longer for some wiggle room. Solves items not being processed when reaching the end of airflow.
-            //bounds = bounds.expandTowards(VectorConversionsMCKt.toMinecraft(directionVec.mul(2)));
         }
     }
 
@@ -151,7 +146,7 @@ public abstract class MixinAirCurrent {
      * On scaled ships we move the entity position closer to the current source, so that subsequently called distance
      * calculations that might or might not be Create-specific give a value accounted for ship-to-world scaling.
      */
-    @WrapOperation(method = "tickAffectedEntities", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/Entity;position()Lnet/minecraft/world/phys/Vec3;"), require = 0)
+    @WrapOperation(method = "tickAffectedEntities", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/Entity;position()Lnet/minecraft/world/phys/Vec3;"))
     private Vec3 transformEntityPos(Entity instance, Operation<Vec3> original) {
         Vec3 result = original.call(instance);
 
@@ -159,11 +154,10 @@ public abstract class MixinAirCurrent {
         if (ship != null && !VSEntityManager.isShipyardEntity(instance)) {
             Vector3dc sourcePos = VectorConversionsMCKt.toJOML(source.getAirCurrentPos().getCenter());
             Vector3dc naiveEntityPos = ship.getWorldToShip().transformPosition(VectorConversionsMCKt.toJOML(result));
-            //return VectorConversionsMCKt.toMinecraft(naiveEntityPos);
 
-            Vector3dc naiveOffset = VectorConversionsMCKt.toJOML(source.getAirCurrentPos().getCenter()).sub(naiveEntityPos);
-            Vector3dc adjustedEntityPos = sourcePos.add(
-                naiveOffset.mul(1 / vs_scalingFactor, new Vector3d()),
+            Vector3dc distanceFromSource = VectorConversionsMCKt.toJOML(source.getAirCurrentPos().getCenter()).sub(naiveEntityPos);
+            Vector3dc adjustedEntityPos = sourcePos.sub(
+                distanceFromSource.mul(1 / vs_scalingFactor, new Vector3d()),
                 new Vector3d()
             );
             return VectorConversionsMCKt.toMinecraft(adjustedEntityPos);
@@ -183,7 +177,7 @@ public abstract class MixinAirCurrent {
         return entity.position();
     }
 
-    @Redirect(method = "tickAffectedEntities", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/phys/AABB;intersects(Lnet/minecraft/world/phys/AABB;)Z"), require = 0)
+    @Redirect(method = "tickAffectedEntities", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/phys/AABB;intersects(Lnet/minecraft/world/phys/AABB;)Z"))
     private boolean redirectIntersects(AABB entityAABB, AABB boundsAABB) {
         Ship ship = getShip();
         if (ship != null) {

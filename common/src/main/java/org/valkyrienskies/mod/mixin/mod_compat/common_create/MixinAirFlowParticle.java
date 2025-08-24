@@ -8,7 +8,6 @@ import com.simibubi.create.content.kinetics.fan.IAirCurrentSource;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.particle.SimpleAnimatedParticle;
 import net.minecraft.client.particle.SpriteSet;
-import net.minecraft.core.Vec3i;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -45,6 +44,11 @@ public abstract class MixinAirFlowParticle extends SimpleAnimatedParticle {
             return null;
     }
 
+    /**
+     * By the time AirFlowParticle logic is called, particle position has already been transformed from ship to world.
+     * However, code for this particle refers to coordinates of a shipspace block ("air current source", really a fan)
+     * needing manual adjustment.
+     */
     @Redirect(method = "tick", at = @At(
         value = "INVOKE",
         target = "Lnet/minecraft/world/phys/AABB;contains(DDD)Z"
@@ -72,15 +76,18 @@ public abstract class MixinAirFlowParticle extends SimpleAnimatedParticle {
         return original.call(instance, vec3);
     }
 
-    @Redirect(method = "tick", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/phys/Vec3;atLowerCornerOf(Lnet/minecraft/core/Vec3i;)Lnet/minecraft/world/phys/Vec3;"), allow = 1)
-    private Vec3 redirectToLowerCorner(Vec3i pos) {
-        Vec3 result = Vec3.atLowerCornerOf(pos);
+    /**
+     * We need to preserve the original direction vector for distance calculations that happen in shipspace.
+     * Only transforming it to world when calculating the motion vector of a worldspace particle.
+     */
+    @WrapOperation(method = "tick", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/phys/Vec3;scale(D)Lnet/minecraft/world/phys/Vec3;", ordinal = 0))
+    private Vec3 transformDirectionForMotion(Vec3 dir, double d, Operation<Vec3> original) {
         Ship ship = getShip();
         if (ship != null) {
             Vector3d tempVec = new Vector3d();
-            ship.getTransform().getShipToWorld().transformDirection(result.x, result.y, result.z, tempVec);
-            result = VectorConversionsMCKt.toMinecraft(tempVec);
+            ship.getTransform().getShipToWorld().transformDirection(dir.x, dir.y, dir.z, tempVec);
+            dir = VectorConversionsMCKt.toMinecraft(tempVec);
         }
-        return result;
+        return original.call(dir, d);
     }
 }
