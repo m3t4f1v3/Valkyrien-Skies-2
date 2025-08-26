@@ -2,13 +2,17 @@ package org.valkyrienskies.mod.forge.mixin.compat.connectiblechains.client;
 
 import com.lilypuree.connectiblechains.chain.ChainLink;
 import com.lilypuree.connectiblechains.client.render.entity.ChainKnotEntityRenderer;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
 import com.llamalad7.mixinextras.sugar.ref.LocalRef;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.decoration.HangingEntity;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Quaternionf;
+import org.joml.Vector3d;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Constant;
@@ -43,6 +47,22 @@ public abstract class MixinChainKnotEntityRenderer {
                     .transformPosition(VectorConversionsMCKt.toJOML(destPos.get()))));
             }
         }
+    }
+
+    @WrapOperation(
+        method = "shouldRender(Lcom/lilypuree/connectiblechains/entity/ChainKnotEntity;Lnet/minecraft/client/renderer/culling/Frustum;DDD)Z",
+        at = @At(
+            value = "INVOKE",
+            target = "Lnet/minecraft/world/entity/Entity;shouldRender(DDD)Z"
+        )
+    )
+    private boolean adjustHolderAABB(Entity chainHolder, double x, double y, double z, Operation<Boolean> original) {
+        ClientShip ship = (ClientShip)VSGameUtilsKt.getShipManaging(chainHolder);
+        if (ship != null) {
+            Vector3d cameraPosInShip = ship.getRenderTransform().getWorldToShip().transformPosition(x, y, z, new Vector3d());
+            return original.call(chainHolder, cameraPosInShip.x, cameraPosInShip.y, cameraPosInShip.z);
+        }
+        return original.call(chainHolder, x, y, z);
     }
 
     /**

@@ -4,11 +4,16 @@ import com.github.legoatoom.connectiblechains.client.render.entity.ChainKnotEnti
 import com.github.legoatoom.connectiblechains.client.render.entity.state.ChainKnotEntityRenderState;
 import com.github.legoatoom.connectiblechains.client.render.entity.state.ChainKnotEntityRenderState.ChainData;
 import com.github.legoatoom.connectiblechains.entity.ChainKnotEntity;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
 import com.llamalad7.mixinextras.sugar.ref.LocalRef;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.culling.Frustum;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Quaternionf;
 import org.spongepowered.asm.mixin.Mixin;
@@ -36,6 +41,17 @@ public abstract class MixinChainKnotEntityRenderer {
         // We store it as a mixin field on the assumption there's only one level the renderer is handling at the same
         // time. The assumption is fairly reasonable unless Immersive Portals reuses entity renderers for different levels.
         this.valkyrienskies$level = (ClientLevel)entity.level();
+    }
+
+    @WrapOperation(
+        method = "shouldRender(Lcom/github/legoatoom/connectiblechains/entity/ChainKnotEntity;Lnet/minecraft/client/renderer/culling/Frustum;DDD)Z",
+        at = @At(
+            value = "INVOKE",
+            target = "Lnet/minecraft/client/renderer/culling/Frustum;isVisible(Lnet/minecraft/world/phys/AABB;)Z"
+        )
+    )
+    private boolean adjustHolderAABB(Frustum frustum, AABB aabb, Operation<Boolean> original, @Local Entity chainHolder) {
+        return frustum.isVisible(VSGameUtilsKt.transformRenderAABBToWorld(((ClientLevel) chainHolder.level()), chainHolder.position(), aabb));
     }
 
     @Inject(
