@@ -211,6 +211,7 @@
     "feature.ship_debug_overlay.MixinDebugScreenOverlay",
     "feature.shipyard_entities.MixinClientLevel",
     "feature.shipyard_entities.MixinEntityRenderDispatcher",
+    "feature.shipyard_entities.MixinEntityRenderer",
     "feature.sound.client.MixinChannel",
     "feature.sound.client.MixinListener",
     "feature.sound.client.MixinSimpleSoundInstance",
