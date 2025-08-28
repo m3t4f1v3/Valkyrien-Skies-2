@@ -1,4 +1,4 @@
-package org.valkyrienskies.mod.mixin.feature.block_placement_orientation;
+package org.valkyrienskies.mod.mixin.feature.block_placement;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
