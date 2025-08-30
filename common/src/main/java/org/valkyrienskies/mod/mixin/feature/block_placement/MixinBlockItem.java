@@ -70,6 +70,7 @@ public abstract class MixinBlockItem {
                 if (player != null
                     && !player.isRemoved()
                     && player.blocksBuilding
+                    && !voxelShape.isEmpty()
                     && vs_testObAab(
                         VectorConversionsMCKt.toJOML(voxelShape.bounds().move(blockPos)),
                         ship.getShipToWorld(),
