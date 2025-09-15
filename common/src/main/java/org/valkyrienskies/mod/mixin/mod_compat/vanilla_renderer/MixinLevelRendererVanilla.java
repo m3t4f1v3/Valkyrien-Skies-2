@@ -90,11 +90,9 @@ public abstract class MixinLevelRendererVanilla {
         method = "setupRender"
     )
     private boolean needsFrustumUpdate(final boolean needsFrustumUpdate) {
-        final Player player = minecraft.player;
-
-        // force frustum update if default behaviour says to OR if the player is mounted to a ship
-        return needsFrustumUpdate ||
-            (player != null && VSGameUtilsKt.getShipMountedTo(player) != null);
+        // force frustum updates so newly created ship will render instantly
+        // also allows frustum update correctly when player is moving with a ship
+        return true;
     }
 
     /**
