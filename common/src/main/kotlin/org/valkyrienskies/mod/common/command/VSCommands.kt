@@ -61,16 +61,11 @@ object VSCommands {
                     .then(argument("ship", ShipArgument.ships())
                         .then(argument("newName", StringArgumentType.string())
                             .executes {
-                                try {
-                                    vsCore.renameShip(
-                                        ShipArgument.getShip(it, "ship") as ServerShip,
-                                        StringArgumentType.getString(it, "newName")
-                                    )
-                                    1
-                                } catch (e: Exception) {
-                                    if (e !is CommandRuntimeException) LOGGER.throwing(e)
-                                    throw e
-                                }
+                                vsCore.renameShip(
+                                    ShipArgument.getShip(it, "ship") as ServerShip,
+                                    StringArgumentType.getString(it, "newName")
+                                )
+                                1
                             }
                         )
                     )
@@ -79,22 +74,17 @@ object VSCommands {
                     literal("set-static").then(
                         argument("ships", ShipArgument.ships()).then(
                             argument("is-static", BoolArgumentType.bool()).executes {
-                                try {
-                                    val r = ShipArgument.getShips(it, "ships").toList() as List<ServerShip>
-                                    val isStatic = BoolArgumentType.getBool(it, "is-static")
-                                    r.forEach { ship ->
-                                        ship.isStatic = isStatic
-                                    }
-                                    it.source.sendVSMessage(
-                                        translatable(
-                                            SET_SHIP_STATIC_SUCCESS_MESSAGE, r.size, if (isStatic) "true" else "false"
-                                        )
-                                    )
-                                    r.size
-                                } catch (e: Exception) {
-                                    if (e !is CommandRuntimeException) LOGGER.throwing(e)
-                                    throw e
+                                val r = ShipArgument.getShips(it, "ships").toList() as List<ServerShip>
+                                val isStatic = BoolArgumentType.getBool(it, "is-static")
+                                r.forEach { ship ->
+                                    ship.isStatic = isStatic
                                 }
+                                it.source.sendVSMessage(
+                                    translatable(
+                                        SET_SHIP_STATIC_SUCCESS_MESSAGE, r.size, if (isStatic) "true" else "false"
+                                    )
+                                )
+                                r.size
                             })
                     )
                 )
@@ -119,14 +109,47 @@ object VSCommands {
                         argument("ships", ShipArgument.ships()).then(
                             argument("position", Vec3Argument.vec3()).executes {
                                 // If only position is present then we execute this code
-                                try {
+
+                                val r = ShipArgument.getShips(it, "ships").toList() as List<ServerShip>
+                                val position =
+                                    Vec3Argument.getVec3(it, "position")
+                                val dimensionId = it.source.level.dimensionId
+                                val shipTeleportData: ShipTeleportData =
+                                    vsCore.newShipTeleportData(
+                                        newPos = position.toJOML(),
+                                        newDimension = dimensionId
+                                    )
+                                r.forEach { ship ->
+                                    vsCore.teleportShip(
+                                        it.source.shipWorld as ServerShipWorld,
+                                        ship, shipTeleportData
+                                    )
+                                }
+                                it.source.sendVSMessage(
+                                    translatable(TELEPORT_SHIP_SUCCESS_MESSAGE, r.size, shipTeleportData.toString())
+                                )
+                                r.size
+
+                            }.then(
+                                argument("euler-angles", RelativeVector3Argument.relativeVector3()).executes {
+                                    // If only position is present then we execute this code
+
                                     val r = ShipArgument.getShips(it, "ships").toList() as List<ServerShip>
                                     val position =
                                         Vec3Argument.getVec3(it, "position")
+                                    val eulerAngles =
+                                        RelativeVector3Argument.getRelativeVector3(
+                                            it, "euler-angles"
+                                        )
+
+                                    val source = it.source
                                     val dimensionId = it.source.level.dimensionId
                                     val shipTeleportData: ShipTeleportData =
                                         vsCore.newShipTeleportData(
                                             newPos = position.toJOML(),
+                                            newRot = eulerAngles.toEulerRotationFromMCEntity(
+                                                source.rotation.x.toDouble(), source.rotation.y.toDouble(),
+                                            ),
                                             newDimension = dimensionId
                                         )
                                     r.forEach { ship ->
@@ -139,21 +162,23 @@ object VSCommands {
                                         translatable(TELEPORT_SHIP_SUCCESS_MESSAGE, r.size, shipTeleportData.toString())
                                     )
                                     r.size
-                                } catch (e: Exception) {
-                                    if (e !is CommandRuntimeException) LOGGER.throwing(e)
-                                    throw e
-                                }
-                            }.then(
-                                argument("euler-angles", RelativeVector3Argument.relativeVector3()).executes {
-                                    // If only position is present then we execute this code
-                                    try {
+
+                                }.then(
+                                    argument("velocity", RelativeVector3Argument.relativeVector3()).executes {
+                                        // If only position is present then we execute this code
+
                                         val r = ShipArgument.getShips(it, "ships").toList() as List<ServerShip>
                                         val position =
-                                            Vec3Argument.getVec3(it, "position")
+                                            Vec3Argument.getVec3(
+                                                it, "position"
+                                            )
                                         val eulerAngles =
                                             RelativeVector3Argument.getRelativeVector3(
                                                 it, "euler-angles"
                                             )
+                                        val velocity = RelativeVector3Argument.getRelativeVector3(
+                                            it, "velocity"
+                                        )
 
                                         val source = it.source
                                         val dimensionId = it.source.level.dimensionId
@@ -163,6 +188,7 @@ object VSCommands {
                                                 newRot = eulerAngles.toEulerRotationFromMCEntity(
                                                     source.rotation.x.toDouble(), source.rotation.y.toDouble(),
                                                 ),
+                                                newVel = velocity.toVector3d(0.0, 0.0, 0.0),
                                                 newDimension = dimensionId
                                             )
                                         r.forEach { ship ->
@@ -175,14 +201,13 @@ object VSCommands {
                                             translatable(TELEPORT_SHIP_SUCCESS_MESSAGE, r.size, shipTeleportData.toString())
                                         )
                                         r.size
-                                    } catch (e: Exception) {
-                                        if (e !is CommandRuntimeException) LOGGER.throwing(e)
-                                        throw e
-                                    }
-                                }.then(
-                                    argument("velocity", RelativeVector3Argument.relativeVector3()).executes {
-                                        // If only position is present then we execute this code
-                                        try {
+
+                                    }.then(
+                                        argument(
+                                            "angular-velocity", RelativeVector3Argument.relativeVector3()
+                                        ).executes {
+                                            // If only position is present then we execute this code
+
                                             val r = ShipArgument.getShips(it, "ships").toList() as List<ServerShip>
                                             val position =
                                                 Vec3Argument.getVec3(
@@ -195,6 +220,9 @@ object VSCommands {
                                             val velocity = RelativeVector3Argument.getRelativeVector3(
                                                 it, "velocity"
                                             )
+                                            val angularVelocity = RelativeVector3Argument.getRelativeVector3(
+                                                it, "angular-velocity"
+                                            )
 
                                             val source = it.source
                                             val dimensionId = it.source.level.dimensionId
@@ -205,6 +233,7 @@ object VSCommands {
                                                         source.rotation.x.toDouble(), source.rotation.y.toDouble(),
                                                     ),
                                                     newVel = velocity.toVector3d(0.0, 0.0, 0.0),
+                                                    newOmega = angularVelocity.toVector3d(0.0, 0.0, 0.0),
                                                     newDimension = dimensionId
                                                 )
                                             r.forEach { ship ->
@@ -217,58 +246,7 @@ object VSCommands {
                                                 translatable(TELEPORT_SHIP_SUCCESS_MESSAGE, r.size, shipTeleportData.toString())
                                             )
                                             r.size
-                                        } catch (e: Exception) {
-                                            if (e !is CommandRuntimeException) LOGGER.throwing(e)
-                                            throw e
-                                        }
-                                    }.then(
-                                        argument(
-                                            "angular-velocity", RelativeVector3Argument.relativeVector3()
-                                        ).executes {
-                                            // If only position is present then we execute this code
-                                            try {
-                                                val r = ShipArgument.getShips(it, "ships").toList() as List<ServerShip>
-                                                val position =
-                                                    Vec3Argument.getVec3(
-                                                        it, "position"
-                                                    )
-                                                val eulerAngles =
-                                                    RelativeVector3Argument.getRelativeVector3(
-                                                        it, "euler-angles"
-                                                    )
-                                                val velocity = RelativeVector3Argument.getRelativeVector3(
-                                                    it, "velocity"
-                                                )
-                                                val angularVelocity = RelativeVector3Argument.getRelativeVector3(
-                                                    it, "angular-velocity"
-                                                )
 
-                                                val source = it.source
-                                                val dimensionId = it.source.level.dimensionId
-                                                val shipTeleportData: ShipTeleportData =
-                                                    vsCore.newShipTeleportData(
-                                                        newPos = position.toJOML(),
-                                                        newRot = eulerAngles.toEulerRotationFromMCEntity(
-                                                            source.rotation.x.toDouble(), source.rotation.y.toDouble(),
-                                                        ),
-                                                        newVel = velocity.toVector3d(0.0, 0.0, 0.0),
-                                                        newOmega = angularVelocity.toVector3d(0.0, 0.0, 0.0),
-                                                        newDimension = dimensionId
-                                                    )
-                                                r.forEach { ship ->
-                                                    vsCore.teleportShip(
-                                                        it.source.shipWorld as ServerShipWorld,
-                                                        ship, shipTeleportData
-                                                    )
-                                                }
-                                                it.source.sendVSMessage(
-                                                    translatable(TELEPORT_SHIP_SUCCESS_MESSAGE, r.size, shipTeleportData.toString())
-                                                )
-                                                r.size
-                                            } catch (e: Exception) {
-                                                if (e !is CommandRuntimeException) LOGGER.throwing(e)
-                                                throw e
-                                            }
                                         }
                                     )
                                 )
@@ -277,38 +255,35 @@ object VSCommands {
                     )
                 )
                 .then(literal("get-ship").executes {
-                    try {
-                        val mcCommandContext = it
 
-                        var success = false
-                        val sourceEntity: Entity? = mcCommandContext.source.entity
-                        if (sourceEntity != null) {
-                            val rayTrace = sourceEntity.pick(10.0, 1.0.toFloat(), false)
-                            if (rayTrace is BlockHitResult) {
-                                val ship = sourceEntity.level().getShipManagingPos(rayTrace.blockPos)
-                                if (ship != null) {
-                                    it.source.sendVSMessage(
-                                        translatable(GET_SHIP_SUCCESS_MESSAGE, ship.slug, ship.id)
-                                    )
-                                    success = true
-                                }
+                    val mcCommandContext = it
+
+                    var success = false
+                    val sourceEntity: Entity? = mcCommandContext.source.entity
+                    if (sourceEntity != null) {
+                        val rayTrace = sourceEntity.pick(10.0, 1.0.toFloat(), false)
+                        if (rayTrace is BlockHitResult) {
+                            val ship = sourceEntity.level().getShipManagingPos(rayTrace.blockPos)
+                            if (ship != null) {
+                                it.source.sendVSMessage(
+                                    translatable(GET_SHIP_SUCCESS_MESSAGE, ship.slug, ship.id)
+                                )
+                                success = true
                             }
-                            if (success) {
-                                1
-                            } else {
-                                it.source.sendVSMessage(translatable(GET_SHIP_FAIL_MESSAGE))
-                                0
-                            }
+                        }
+                        if (success) {
+                            1
                         } else {
-                            it.source.sendVSMessage(
-                                translatable(GET_SHIP_ONLY_USABLE_BY_ENTITIES_MESSAGE)
-                            )
+                            it.source.sendVSMessage(translatable(GET_SHIP_FAIL_MESSAGE))
                             0
                         }
-                    } catch (e: Exception) {
-                        if (e !is CommandRuntimeException) LOGGER.throwing(e)
-                        throw e
+                    } else {
+                        it.source.sendVSMessage(
+                            translatable(GET_SHIP_ONLY_USABLE_BY_ENTITIES_MESSAGE)
+                        )
+                        0
                     }
+
                 })
 
         )
