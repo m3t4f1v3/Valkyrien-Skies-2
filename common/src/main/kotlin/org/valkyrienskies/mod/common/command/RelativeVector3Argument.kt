@@ -48,8 +48,10 @@ class RelativeVector3Argument : ArgumentType<RelativeVector3> {
         private val DUMMY_EULER_ANGLES =
             RelativeVector3(RelativeValue(0.0, false), RelativeValue(0.0, false), RelativeValue(0.0, false))
 
+        @JvmStatic
         fun relativeVector3() = RelativeVector3Argument()
 
+        @JvmStatic
         fun getRelativeVector3(commandContext: CommandContext<CommandSourceStack?>, string: String?): RelativeVector3 {
             return commandContext.getArgument(
                 string,

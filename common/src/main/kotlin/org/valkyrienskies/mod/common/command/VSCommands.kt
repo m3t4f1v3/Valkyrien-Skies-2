@@ -28,7 +28,6 @@ import org.valkyrienskies.mod.common.getShipManagingPos
 import org.valkyrienskies.mod.common.shipObjectWorld
 import org.valkyrienskies.mod.common.util.toJOML
 import org.valkyrienskies.mod.common.vsCore
-import org.valkyrienskies.mod.common.yRange
 import org.valkyrienskies.mod.mixin.feature.commands.ClientSuggestionProviderAccessor
 import org.valkyrienskies.mod.util.logger
 
@@ -366,7 +365,7 @@ object VSCommands {
 
         if (deleteBlocks) {
             for (ship in r) {
-                var level = context.source.level;
+                var level = context.source.level
                 if (level is ServerLevel) {
                     val aabb = ship.shipAABB ?: continue
                     // There has to be a better way to do this...
