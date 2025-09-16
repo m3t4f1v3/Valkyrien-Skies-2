@@ -22,6 +22,7 @@ import org.valkyrienskies.core.api.ships.ServerShip
 import org.valkyrienskies.core.api.world.ServerShipWorld
 import org.valkyrienskies.core.api.world.ShipWorld
 import org.valkyrienskies.core.apigame.ShipTeleportData
+import org.valkyrienskies.mod.common.config.VSGameConfig
 import org.valkyrienskies.mod.common.dimensionId
 import org.valkyrienskies.mod.common.getShipManagingPos
 import org.valkyrienskies.mod.common.shipObjectWorld
@@ -47,7 +48,44 @@ object VSCommands {
     fun registerServerCommands(dispatcher: CommandDispatcher<CommandSourceStack>) {
         dispatcher.register(
             literal("vs")
+                // Non operator commands
+
+                .then(literal("get-ship")
+                .requires{ it.hasPermission(VSGameConfig.SERVER.Commands.getShipCommandPerms)}
+                .executes {
+
+                    val mcCommandContext = it
+
+                    var success = false
+                    val sourceEntity: Entity? = mcCommandContext.source.entity
+                    if (sourceEntity != null) {
+                        val rayTrace = sourceEntity.pick(10.0, 1.0.toFloat(), false)
+                        if (rayTrace is BlockHitResult) {
+                            val ship = sourceEntity.level().getShipManagingPos(rayTrace.blockPos)
+                            if (ship != null) {
+                                it.source.sendVSMessage(
+                                    translatable(GET_SHIP_SUCCESS_MESSAGE, ship.slug, ship.id)
+                                )
+                                success = true
+                            }
+                        }
+                        if (success) {
+                            1
+                        } else {
+                            it.source.sendVSMessage(translatable(GET_SHIP_FAIL_MESSAGE))
+                            0
+                        }
+                    } else {
+                        it.source.sendVSMessage(
+                            translatable(GET_SHIP_ONLY_USABLE_BY_ENTITIES_MESSAGE)
+                        )
+                        0
+                    }
+
+                })
+                // Operator commands
                 .then(literal("delete")
+                .requires{ it.hasPermission(VSGameConfig.SERVER.Commands.deleteShipCommandPerms)}
                     .then(argument("ships", ShipArgument.ships())
                         .executes {
                             deleteShip(it)
@@ -58,6 +96,7 @@ object VSCommands {
                         )
                     )
                 ).then(literal("rename")
+                .requires{ it.hasPermission(VSGameConfig.SERVER.Commands.renameShipCommandPerms)}
                     .then(argument("ship", ShipArgument.ships())
                         .then(argument("newName", StringArgumentType.string())
                             .executes {
@@ -71,7 +110,8 @@ object VSCommands {
                     )
                 )
                 .then(
-                    literal("set-static").then(
+                    literal("set-static")
+                        .requires{ it.hasPermission(VSGameConfig.SERVER.Commands.setStaticShipCommandPerms)}.then(
                         argument("ships", ShipArgument.ships()).then(
                             argument("is-static", BoolArgumentType.bool()).executes {
                                 val r = ShipArgument.getShips(it, "ships").toList() as List<ServerShip>
@@ -90,7 +130,8 @@ object VSCommands {
                 )
                 //Scale a ship
                 .then(
-                    literal("scale").then(
+                    literal("scale")
+                        .requires{ it.hasPermission(VSGameConfig.SERVER.Commands.scaleShipCommandPerms)}.then(
                         argument("ship", ShipArgument.ships())
                             .then(argument("newScale", DoubleArgumentType.doubleArg(0.001))
                                 .executes {
@@ -105,7 +146,8 @@ object VSCommands {
                     )
                 )
                 .then(
-                    literal("teleport").then(
+                    literal("teleport")
+                        .requires{ it.hasPermission(VSGameConfig.SERVER.Commands.teleportShipCommandPerms)}.then(
                         argument("ships", ShipArgument.ships()).then(
                             argument("position", Vec3Argument.vec3()).executes {
                                 // If only position is present then we execute this code
@@ -254,37 +296,7 @@ object VSCommands {
                         )
                     )
                 )
-                .then(literal("get-ship").executes {
 
-                    val mcCommandContext = it
-
-                    var success = false
-                    val sourceEntity: Entity? = mcCommandContext.source.entity
-                    if (sourceEntity != null) {
-                        val rayTrace = sourceEntity.pick(10.0, 1.0.toFloat(), false)
-                        if (rayTrace is BlockHitResult) {
-                            val ship = sourceEntity.level().getShipManagingPos(rayTrace.blockPos)
-                            if (ship != null) {
-                                it.source.sendVSMessage(
-                                    translatable(GET_SHIP_SUCCESS_MESSAGE, ship.slug, ship.id)
-                                )
-                                success = true
-                            }
-                        }
-                        if (success) {
-                            1
-                        } else {
-                            it.source.sendVSMessage(translatable(GET_SHIP_FAIL_MESSAGE))
-                            0
-                        }
-                    } else {
-                        it.source.sendVSMessage(
-                            translatable(GET_SHIP_ONLY_USABLE_BY_ENTITIES_MESSAGE)
-                        )
-                        0
-                    }
-
-                })
 
         )
 

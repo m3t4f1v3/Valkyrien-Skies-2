@@ -185,10 +185,39 @@ object VSGameConfig {
         )
         var defaultSplitGraceTimer = 1
 
-        @JsonSchema(
-            description = "The permission level required to use the /vs command. Must be 0 <= x <= 4"
-        )
-        var vsCommandPerms = 2
+        val Commands = COMMANDS()
+
+        class COMMANDS {
+            @JsonSchema(
+                description = "The permission level required to use the /vs delete command. Must be 0 <= x <= 4"
+            )
+            var deleteShipCommandPerms = 2
+
+            @JsonSchema(
+                description = "The permission level required to use the /vs get-ship command. Must be 0 <= x <= 4"
+            )
+            var getShipCommandPerms = 0
+
+            @JsonSchema(
+                description = "The permission level required to use the /vs rename command. Must be 0 <= x <= 4"
+            )
+            var renameShipCommandPerms = 2
+
+            @JsonSchema(
+                description = "The permission level required to use the /vs scale command. Must be 0 <= x <= 4"
+            )
+            var scaleShipCommandPerms = 2
+
+            @JsonSchema(
+                description = "The permission level required to use the /vs set-static command. Must be 0 <= x <= 4"
+            )
+            var setStaticShipCommandPerms = 2
+
+            @JsonSchema(
+                description = "The permission level required to use the /vs teleport command. Must be 0 <= x <= 4"
+            )
+            var teleportShipCommandPerms = 2
+        }
     }
 
     class Common {
