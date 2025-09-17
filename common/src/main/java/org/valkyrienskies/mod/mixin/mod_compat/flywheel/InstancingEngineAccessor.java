@@ -7,7 +7,7 @@ import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
 @Pseudo
-@Mixin(value = InstancingEngine.class, remap = false)
+//@Mixin(value = InstancingEngine.class, remap = false)
 public interface InstancingEngineAccessor {
     @Accessor
     void setOriginCoordinate(BlockPos pos);

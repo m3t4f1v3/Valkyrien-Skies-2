@@ -1,5 +1,7 @@
 package org.valkyrienskies.mod.mixin.mod_compat.flywheel;
 
+import dev.engine_room.flywheel.api.visualization.VisualizationManager;
+import dev.engine_room.flywheel.backend;
 import com.jozufozu.flywheel.api.MaterialManager;
 import com.jozufozu.flywheel.api.instance.Instance;
 import com.jozufozu.flywheel.backend.Backend;
@@ -26,19 +28,19 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.valkyrienskies.core.api.ships.ClientShip;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
-import org.valkyrienskies.mod.mixinducks.MixinBlockEntityInstanceManagerDuck;
+import org.valkyrienskies.mod.mixinducks.MixinVisualizationManagerDuck;
 
 @Pseudo
-@Mixin(value = BlockEntityInstanceManager.class)
+//@Mixin(value = VisualizationManager.class)
 @ParametersAreNonnullByDefault
-public abstract class MixinBlockEntityInstanceManager extends InstanceManager<BlockEntity> implements
-    MixinBlockEntityInstanceManagerDuck {
+public abstract class MixinVisualizationManager implements
+    MixinVisualizationManagerDuck {
 
     @Unique
     private final WeakHashMap<ClientShip, MaterialManager> vs$shipMaterialManagers =
         new WeakHashMap<>();
 
-    public MixinBlockEntityInstanceManager(final MaterialManager materialManager) {
+    public MixinVisualizationManager(final MaterialManager materialManager) {
         super(materialManager);
     }
 

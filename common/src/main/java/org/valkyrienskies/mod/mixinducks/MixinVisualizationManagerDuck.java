@@ -4,7 +4,7 @@ import com.jozufozu.flywheel.api.MaterialManager;
 import java.util.WeakHashMap;
 import org.valkyrienskies.core.api.ships.ClientShip;
 
-public interface MixinBlockEntityInstanceManagerDuck {
+public interface MixinVisualizationManagerDuck {
 
     WeakHashMap<ClientShip, MaterialManager> vs$getShipMaterialManagers();
 

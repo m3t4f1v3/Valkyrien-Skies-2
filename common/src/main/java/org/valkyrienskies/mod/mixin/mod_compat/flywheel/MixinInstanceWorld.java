@@ -24,11 +24,11 @@ import org.valkyrienskies.core.api.ships.ClientShip;
 import org.valkyrienskies.mod.common.VSClientGameUtils;
 import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
 import org.valkyrienskies.mod.compat.FlywheelEvents;
-import org.valkyrienskies.mod.mixinducks.MixinBlockEntityInstanceManagerDuck;
+import org.valkyrienskies.mod.mixinducks.MixinVisualizationManagerDuck;
 import org.valkyrienskies.mod.mixinducks.MixinInstancingEngineDuck;
 
 @Pseudo
-@Mixin(value = InstanceWorld.class, remap = false)
+//@Mixin(value = InstanceWorld.class, remap = false)
 public class MixinInstanceWorld {
 
     @Shadow
@@ -50,7 +50,7 @@ public class MixinInstanceWorld {
         //not sure if restoreState stuff should be here or in the ((MixinInstancingEngineDuck) manager).render() method
         final GlStateTracker.State restoreState = GlStateTracker.getRestoreState();
         final var shipManagers =
-            ((MixinBlockEntityInstanceManagerDuck) blockEntityInstanceManager).vs$getShipMaterialManagers();
+            ((MixinVisualizationManagerDuck) blockEntityInstanceManager).vs$getShipMaterialManagers();
 
         shipManagers.forEach((ship, manager) -> vs$render(ship, manager, event));
         restoreState.restore();

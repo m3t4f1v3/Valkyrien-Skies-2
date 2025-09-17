@@ -14,7 +14,7 @@ import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
 
 @Pseudo
-@Mixin(InstanceManager.class)
+//@Mixin(InstanceManager.class)
 public class MixinInstanceManager {
 
     @Redirect(

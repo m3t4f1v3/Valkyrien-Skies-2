@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.valkyrienskies.mod.mixinducks.MixinInstancingEngineDuck;
 
 @Pseudo
-@Mixin(value = InstancingEngine.class, remap = false)
+//@Mixin(value = InstancingEngine.class, remap = false)
 public abstract class MixinInstancingEngine<P extends WorldProgram> implements MixinInstancingEngineDuck {
     @Shadow
     protected abstract Stream<InstancedMaterialGroup<P>> getGroupsToRender(@Nullable RenderLayer layer);
