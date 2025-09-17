@@ -112,11 +112,22 @@ subprojects {
             maven { url = "https://api.modrinth.com/maven" } // LazyDFU, Suggestion Tweaker, Create Big Cannons
             maven { url = "https://maven.shedaniel.me/" } // Cloth Config, REI
             maven { url "https://maven.architectury.dev/" }
-            maven { url = "https://mvn.devos.one/snapshots/" } // Fabric Create, Porting Lib, Forge Tags, Milk Lib
-            maven { url = "https://raw.githubusercontent.com/Fuzss/modresources/main/maven/" } // Forge Config API Port
-            maven { url = "https://maven.tterrag.com/" } // Registrate, Forge Create and Flywheel
-            maven { url = "https://maven.cafeteria.dev/releases" } // Fake Player API
+            maven { url = "https://maven.createmod.net" } // Create, Ponder, Flywheel
+            maven { url = "https://maven.ithundxr.dev/mirror" } // Registrate
+            maven { url = "https://raw.githubusercontent.com/Fuzss/modresources/main/maven/" } // ForgeConfigAPIPort
+
+            // mavens for Create Fabric and dependencies
+            maven { url = "https://mvn.devos.one/releases" } // Porting Lib releases
+            maven { url = "https://mvn.devos.one/snapshots/" } // Create and several dependencies
             maven { url = "https://maven.jamieswhiteshirt.com/libs-release" } // Reach Entity Attributes
+            maven { url = "https://raw.githubusercontent.com/Fuzss/modresources/main/maven" } // Forge Config API Port
+
+            maven { // Fabric ASM for Porting Lib
+                url = "https://jitpack.io/"
+                content { includeGroupAndSubgroups("com.github") }
+            }
+
+            maven { url = "https://maven.cafeteria.dev/releases" } // Fake Player API
             maven { url = "https://maven.realrobotix.me/createbigcannons/" } // Create Big Cannons
             maven {
                 name = "CC-Tweaked"
