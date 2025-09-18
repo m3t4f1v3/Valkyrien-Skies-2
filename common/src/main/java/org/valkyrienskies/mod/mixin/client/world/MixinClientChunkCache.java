@@ -19,13 +19,14 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+import org.valkyrienskies.core.api.ships.ClientShip;
+import org.valkyrienskies.core.api.ships.properties.ChunkClaim;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.compat.SodiumCompat;
 import org.valkyrienskies.mod.compat.VSRenderer;
 import org.valkyrienskies.mod.mixin.ValkyrienCommonMixinConfigPlugin;
 import org.valkyrienskies.mod.mixin.accessors.client.multiplayer.ClientLevelAccessor;
 import org.valkyrienskies.mod.mixin.accessors.client.render.LevelRendererAccessor;
-import org.valkyrienskies.mod.mixin.accessors.client.world.ClientChunkCacheStorageAccessor;
 import org.valkyrienskies.mod.mixinducks.client.render.IVSViewAreaMethods;
 import org.valkyrienskies.mod.mixinducks.client.world.ClientChunkCacheDuck;
 
@@ -34,9 +35,6 @@ import org.valkyrienskies.mod.mixinducks.client.world.ClientChunkCacheDuck;
  */
 @Mixin(ClientChunkCache.class)
 public abstract class MixinClientChunkCache implements ClientChunkCacheDuck {
-
-    @Shadow
-    volatile ClientChunkCache.Storage storage;
     @Shadow
     @Final
     ClientLevel level;
@@ -53,39 +51,46 @@ public abstract class MixinClientChunkCache implements ClientChunkCacheDuck {
         final FriendlyByteBuf buf,
         final CompoundTag tag,
         final Consumer<BlockEntityTagOutput> consumer, final CallbackInfoReturnable<LevelChunk> cir) {
-        final ClientChunkCacheStorageAccessor clientChunkMapAccessor =
-            ClientChunkCacheStorageAccessor.class.cast(storage);
-        if (!clientChunkMapAccessor.callInRange(x, z)) {
-            if (VSGameUtilsKt.isChunkInShipyard(level, x, z)) {
-                final long chunkPosLong = ChunkPos.asLong(x, z);
+        if (VSGameUtilsKt.isChunkInShipyard(level, x, z)) {
+            final ChunkPos pos = new ChunkPos(x, z);
+            final long chunkPosLong = pos.toLong();
+            final LevelChunk oldChunk = vs$shipChunks.get(chunkPosLong);
+            final LevelChunk worldChunk;
+            if (oldChunk != null) {
+                worldChunk = oldChunk;
+                oldChunk.replaceWithPacketData(buf, tag, consumer);
+            } else {
+                worldChunk = new LevelChunk(this.level, pos);
+                worldChunk.replaceWithPacketData(buf, tag, consumer);
+                vs$shipChunks.put(chunkPosLong, worldChunk);
+            }
 
-                final LevelChunk oldChunk = vs$shipChunks.get(chunkPosLong);
-                final LevelChunk worldChunk;
-                if (oldChunk != null) {
-                    worldChunk = oldChunk;
-                    oldChunk.replaceWithPacketData(buf, tag, consumer);
-                } else {
-                    worldChunk = new LevelChunk(this.level, new ChunkPos(x, z));
-                    worldChunk.replaceWithPacketData(buf, tag, consumer);
-                    vs$shipChunks.put(chunkPosLong, worldChunk);
-                }
+            this.level.onChunkLoaded(pos);
+            SodiumCompat.onChunkAdded(this.level, x, z);
+            cir.setReturnValue(worldChunk);
+        }
+    }
 
-                this.level.onChunkLoaded(new ChunkPos(x, z));
-                SodiumCompat.onChunkAdded(this.level, x, z);
-                cir.setReturnValue(worldChunk);
+    @Override
+    public void vs$removeShip(final ClientShip ship) {
+        final ChunkClaim chunks = ship.getChunkClaim();
+        for (int x = chunks.getXStart(); x <= chunks.getXEnd(); x++) {
+            for (int z = chunks.getZStart(); z <= chunks.getZEnd(); z++) {
+                this.removeShipChunk(x, z);
             }
         }
     }
 
-    @Inject(method = "drop", at = @At("HEAD"), cancellable = true)
-    public void preUnload(final int chunkX, final int chunkZ, final CallbackInfo ci) {
-        vs$shipChunks.remove(ChunkPos.asLong(chunkX, chunkZ));
+    @Unique
+    private void removeShipChunk(final int chunkX, final int chunkZ) {
+        if (vs$shipChunks.remove(ChunkPos.asLong(chunkX, chunkZ)) == null) {
+            return;
+        }
         if (ValkyrienCommonMixinConfigPlugin.getVSRenderer() != VSRenderer.SODIUM) {
             ((IVSViewAreaMethods) ((LevelRendererAccessor) ((ClientLevelAccessor) level).getLevelRenderer()).getViewArea())
                 .unloadChunk(chunkX, chunkZ);
         }
         SodiumCompat.onChunkRemoved(this.level, chunkX, chunkZ);
-        ci.cancel();
     }
 
     @Inject(
