@@ -103,11 +103,7 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck {
     private boolean getNeedsFrustumUpdate(final boolean needsFrustumUpdate) {
         // force frustum update if default behaviour says to OR if the player is mounted to a ship
         final Player player = this.minecraft.player;
-        if (player == null) {
-            this.lastMountedShipId = null;
-            return needsFrustumUpdate;
-        }
-        if (!(VSGameUtilsKt.getShipMountedTo(player) instanceof final ClientShip ship)) {
+        if (player == null || !(VSGameUtilsKt.getShipMountedTo(player) instanceof final ClientShip ship)) {
             this.lastMountedShipId = null;
             return needsFrustumUpdate;
         }
