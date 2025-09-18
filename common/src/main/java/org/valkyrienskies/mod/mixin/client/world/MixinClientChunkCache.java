@@ -3,6 +3,7 @@ package org.valkyrienskies.mod.mixin.client.world;
 import io.netty.util.collection.LongObjectHashMap;
 import io.netty.util.collection.LongObjectMap;
 import java.util.function.Consumer;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientChunkCache;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.nbt.CompoundTag;
@@ -29,6 +30,7 @@ import org.valkyrienskies.mod.mixin.accessors.client.multiplayer.ClientLevelAcce
 import org.valkyrienskies.mod.mixin.accessors.client.render.LevelRendererAccessor;
 import org.valkyrienskies.mod.mixinducks.client.render.IVSViewAreaMethods;
 import org.valkyrienskies.mod.mixinducks.client.world.ClientChunkCacheDuck;
+import org.valkyrienskies.mod.mixinducks.mod_compat.vanilla_renderer.LevelRendererDuck;
 
 /**
  * The purpose of this mixin is to allow {@link ClientChunkCache} to store ship chunks.
@@ -50,8 +52,13 @@ public abstract class MixinClientChunkCache implements ClientChunkCacheDuck {
     private void preLoadChunkFromPacket(final int x, final int z,
         final FriendlyByteBuf buf,
         final CompoundTag tag,
-        final Consumer<BlockEntityTagOutput> consumer, final CallbackInfoReturnable<LevelChunk> cir) {
+        final Consumer<BlockEntityTagOutput> consumer, 
+        final CallbackInfoReturnable<LevelChunk> cir
+    ) {
         if (VSGameUtilsKt.isChunkInShipyard(level, x, z)) {
+            if (Minecraft.getInstance().levelRenderer instanceof final LevelRendererDuck levelRenderer) {
+                levelRenderer.vs$setNeedsFrustumUpdate();
+            }
             final ChunkPos pos = new ChunkPos(x, z);
             final long chunkPosLong = pos.toLong();
             final LevelChunk oldChunk = vs$shipChunks.get(chunkPosLong);
@@ -96,8 +103,13 @@ public abstract class MixinClientChunkCache implements ClientChunkCacheDuck {
     @Inject(
         method = "getChunk(IILnet/minecraft/world/level/chunk/ChunkStatus;Z)Lnet/minecraft/world/level/chunk/LevelChunk;",
         at = @At("HEAD"), cancellable = true)
-    public void preGetChunk(final int chunkX, final int chunkZ, final ChunkStatus chunkStatus, final boolean bl,
-        final CallbackInfoReturnable<LevelChunk> cir) {
+    public void preGetChunk(
+        final int chunkX,
+        final int chunkZ,
+        final ChunkStatus chunkStatus,
+        final boolean bl,
+        final CallbackInfoReturnable<LevelChunk> cir
+    ) {
         final LevelChunk shipChunk = vs$shipChunks.get(ChunkPos.asLong(chunkX, chunkZ));
         if (shipChunk != null) {
             cir.setReturnValue(shipChunk);

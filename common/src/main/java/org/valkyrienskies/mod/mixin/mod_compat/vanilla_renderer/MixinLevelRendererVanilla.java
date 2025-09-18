@@ -11,6 +11,7 @@ import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import it.unimi.dsi.fastutil.objects.ObjectList;
 import java.util.ListIterator;
 import java.util.WeakHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.LevelRenderer;
@@ -36,6 +37,8 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.valkyrienskies.core.api.ships.ClientShip;
+import org.valkyrienskies.core.api.ships.LoadedShip;
+import org.valkyrienskies.core.api.ships.properties.ShipTransform;
 import org.valkyrienskies.mod.common.VSClientGameUtils;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.hooks.VSGameEvents;
@@ -44,9 +47,10 @@ import org.valkyrienskies.mod.compat.VSRenderer;
 import org.valkyrienskies.mod.mixin.ValkyrienCommonMixinConfigPlugin;
 import org.valkyrienskies.mod.mixin.accessors.client.render.ViewAreaAccessor;
 import org.valkyrienskies.mod.mixin.mod_compat.optifine.RenderChunkInfoAccessorOptifine;
+import org.valkyrienskies.mod.mixinducks.mod_compat.vanilla_renderer.LevelRendererDuck;
 
 @Mixin(LevelRenderer.class)
-public abstract class MixinLevelRendererVanilla {
+public abstract class MixinLevelRendererVanilla implements LevelRendererDuck {
     private final WeakHashMap<ClientShip, ObjectList<RenderChunkInfo>> shipRenderChunks = new WeakHashMap<>();
     @Shadow
     private ClientLevel level;
@@ -58,9 +62,16 @@ public abstract class MixinLevelRendererVanilla {
     @Shadow
     @Final
     private Minecraft minecraft;
+    @Shadow
+    @Final
+    private AtomicBoolean needsFrustumUpdate;
 
     @Unique
     private ObjectList<RenderChunkInfo> renderChunksGeneratedByVanilla = new ObjectArrayList<>();
+    @Unique
+    private Long lastMountedShipId = null;
+    @Unique
+    private ShipTransform lastTransform = null;
 
     /**
      * Fix the distance to render chunks, so that MC doesn't think ship chunks are too far away
@@ -89,10 +100,31 @@ public abstract class MixinLevelRendererVanilla {
         ),
         method = "setupRender"
     )
-    private boolean needsFrustumUpdate(final boolean needsFrustumUpdate) {
-        // force frustum updates so newly created ship will render instantly
-        // also allows frustum update correctly when player is moving with a ship
-        return true;
+    private boolean getNeedsFrustumUpdate(final boolean needsFrustumUpdate) {
+        // force frustum update if default behaviour says to OR if the player is mounted to a ship
+        final Player player = this.minecraft.player;
+        if (player == null) {
+            this.lastMountedShipId = null;
+            return needsFrustumUpdate;
+        }
+        if (!(VSGameUtilsKt.getShipMountedTo(player) instanceof final ClientShip ship)) {
+            this.lastMountedShipId = null;
+            return needsFrustumUpdate;
+        }
+        final ShipTransform transform = ship.getRenderTransform();
+        if (this.lastMountedShipId == null || this.lastMountedShipId.longValue() != ship.getId() || this.lastTransform == null) {
+            this.lastMountedShipId = ship.getId();
+            this.lastTransform = transform;
+            return true;
+        }
+        final boolean needUpdate = this.lastTransform != transform && !this.lastTransform.getShipToWorld().equals(transform.getShipToWorld());
+        this.lastTransform = transform;
+        return needUpdate;
+    }
+
+    @Override
+    public void vs$setNeedsFrustumUpdate() {
+        this.needsFrustumUpdate.set(true);
     }
 
     /**
