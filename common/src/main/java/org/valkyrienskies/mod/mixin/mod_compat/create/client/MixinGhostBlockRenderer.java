@@ -6,8 +6,8 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.valkyrienskies.mod.common.VSClientGameUtils;
 
-@Mixin(targets = {"com.simibubi.create.foundation.utility.ghost.GhostBlockRenderer$DefaultGhostBlockRenderer",
-        "com.simibubi.create.foundation.utility.ghost.GhostBlockRenderer$TransparentGhostBlockRenderer"})
+@Mixin(targets = {"net.createmod.catnip.ghostblock.GhostBlockRenderer$DefaultGhostBlockRenderer",
+        "net.createmod.catnip.ghostblock.GhostBlockRenderer$TransparentGhostBlockRenderer"})
 public class MixinGhostBlockRenderer {
 
     @Redirect(

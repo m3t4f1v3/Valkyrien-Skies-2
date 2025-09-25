@@ -1,6 +1,6 @@
 package org.valkyrienskies.mod.compat.flywheel
 
-import dev.engine_room.flywheel.api.visual.BlockEntityVisual
+import dev.engine_room.flywheel.api.visual.Visual
 import dev.engine_room.flywheel.api.visualization.VisualizationContext
 import dev.engine_room.flywheel.impl.visualization.storage.Storage
 import dev.engine_room.flywheel.lib.visualization.VisualizationHelper
@@ -9,9 +9,12 @@ import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.entity.BlockEntity
 
 //TODO uses impl prone to change will prob break
-class ShipBlockEntityStorage(ctx: VisualizationContext) : Storage<BlockEntity>(ctx) {
+class ShipBlockEntityStorage() : Storage<BlockEntity>() {
 
-    override fun createRaw(obj: BlockEntity, partialTick: Float): BlockEntityVisual<*>? {
+    override fun createRaw(
+        visualizationContext: VisualizationContext,
+        obj: BlockEntity, partialTick: Float
+    ): Visual? {
         val visualizer = VisualizationHelper.getVisualizer(obj)
             ?: return null
 
@@ -31,4 +34,5 @@ class ShipBlockEntityStorage(ctx: VisualizationContext) : Storage<BlockEntity>(c
 
         return existingChunk != null
     }
+
 }

@@ -83,7 +83,7 @@ class FlywheelShipVisual(val effect: ShipEffect, val visualContext: Visualizatio
         ).toBlockPos()
     )
     //TODO uses impl prone to change will prob break
-    val storage = ShipBlockEntityStorage(embedding)
+    val storage = ShipBlockEntityStorage()
     val manager = VisualManagerImpl(storage).apply { effect.manager = this }
     val camera = ShipEffectCamera(ship)
     val frustum = FrustumIntersection()
@@ -101,13 +101,13 @@ class FlywheelShipVisual(val effect: ShipEffect, val visualContext: Visualizatio
     }
 
     override fun planTick(): Plan<TickableVisual.Context> =
-        manager.tickPlan()
+        manager.tickPlan(visualContext)
 
     override fun planFrame(): Plan<Context> =
         NestedPlan.of(
             RunnablePlan.of(::updateEmbedding),
             RunnablePlan.of(::updateSections),
-            MapContextPlan.map(::newContext).to(manager.framePlan())
+            MapContextPlan.map(::newContext).to(manager.framePlan(visualContext))
         )
 
     private fun newContext(ctx: Context): Context {
