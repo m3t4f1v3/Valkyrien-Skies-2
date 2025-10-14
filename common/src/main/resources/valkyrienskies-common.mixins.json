@@ -53,6 +53,7 @@
     "feature.world_border.MixinWorldBorder",
     "mod_compat.cc_tweaked.MixinCustomLecternRenderer",
     "mod_compat.cc_tweaked.MixinSpeakerPosition",
+    "mod_compat.cc_tweaked.MixinSpeakerSound",
     "mod_compat.cc_tweaked.MixinTurtleBrain",
     "mod_compat.cc_tweaked.MixinTurtleMoveCommand",
     "mod_compat.cc_tweaked.MixinWirelessNetwork",
