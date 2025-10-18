@@ -1,6 +1,7 @@
 package org.valkyrienskies.mod.common
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation
+import com.mojang.logging.LogUtils
 import net.minecraft.client.Minecraft
 import net.minecraft.client.multiplayer.ClientLevel
 import net.minecraft.core.BlockPos
@@ -41,6 +42,7 @@ import org.valkyrienskies.mod.common.entity.ShipMountedToData
 import org.valkyrienskies.mod.common.entity.ShipMountedToDataProvider
 import org.valkyrienskies.mod.common.util.DimensionIdProvider
 import org.valkyrienskies.mod.common.util.EntityDragger.serversideEyePosition
+import org.valkyrienskies.mod.common.util.IEntityDraggingInformationProvider
 import org.valkyrienskies.mod.common.util.MinecraftPlayer
 import org.valkyrienskies.mod.common.util.set
 import org.valkyrienskies.mod.common.util.toJOML
@@ -472,4 +474,29 @@ fun getShipMountedToData(passenger: Entity, partialTicks: Float? = null): ShipMo
 
 fun getShipMountedTo(entity: Entity): LoadedShip? {
     return getShipMountedToData(entity)?.shipMountedTo
+}
+
+/**
+ * Applies the ship velocity, inluding angular velocity, to the entity.
+ * This will also set the entity to be dragged by the ship.
+ */
+fun Entity?.applyShipVelocity(ship: Ship?) =
+    this.applyShipVelocity(ship, true)
+
+/**
+ * Applies the ship velocity, inluding angular velocity, to the entity.
+ * Useful for cases like launching something on a ship.
+ * @param willBeDragged if the entity should also be immediately dragged by the ship.
+ */
+fun Entity?.applyShipVelocity(ship: Ship?, willBeDragged: Boolean) {
+    if (this == null || ship == null) return
+    val relPos = this.position().toJOML().sub(ship.transform.positionInWorld)
+    val shipSpeed = Vector3d(ship.velocity)
+        .add(ship.angularVelocity.cross(relPos, Vector3d()))
+        .mul(0.05)
+    this.push(shipSpeed.x, shipSpeed.y, shipSpeed.z)
+    if( willBeDragged ) {
+        val info = (this as IEntityDraggingInformationProvider).draggingInformation
+        info.lastShipStoodOn = ship.id
+    }
 }
