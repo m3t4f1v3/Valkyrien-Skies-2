@@ -165,6 +165,7 @@
     "mod_compat.old_flywheel.MixinInstanceWorld",
     "mod_compat.old_flywheel.MixinInstancingEngine",
     "mod_compat.reachentityattributes.MixinReachEntityAttributes",
+    "mod_compat.sodium.MixinRenderSection",
     "mod_compat.tis3d.MixinInfraredPacketEntity",
     "server.MinecraftServerAccessor",
     "server.MixinMinecraftServer",
