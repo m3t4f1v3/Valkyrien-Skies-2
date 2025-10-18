@@ -158,6 +158,9 @@ object EntityDragger {
                 }
                 entityDraggingInformation.previousRelativeVelocityOnShip = entityDraggingInformation.relativeVelocityOnShip
             } else {
+                entity.addDeltaMovement(entityDraggingInformation.addedMovementLastTick.toMinecraft())
+                entityDraggingInformation.addedMovementLastTick = Vector3d()
+                entityDraggingInformation.addedYawRotLastTick = 0.0
                 entityDraggingInformation.previousRelativeVelocityOnShip = null
             }
             entityDraggingInformation.ticksSinceStoodOnShip++
