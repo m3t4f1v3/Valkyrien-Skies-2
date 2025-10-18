@@ -1,5 +1,6 @@
 package org.valkyrienskies.mod.common.util
 
+import com.mojang.logging.LogUtils
 import net.minecraft.core.Direction
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.util.Mth
@@ -51,17 +52,6 @@ object EntityDragger {
                     val shipData = entity.level().shipObjectWorld.allShips.getById(shipDraggingEntity)
                     if (shipData != null) {
                         dragTheEntity = true
-
-                        if(entityDraggingInformation.previousRelativeVelocityOnShip == null) { //This is the first Tick on the ship.
-                            val shipPos = entity.position().toJOML().sub(shipData.transform.positionInWorld)
-                            val shipPosVelocity = Vector3d(shipData.velocity).add(
-                                Vector3d(shipData.angularVelocity).cross(shipPos)
-                            ).mul(0.05)
-                            val newRelativeVelocity = entity.deltaMovement.toJOML().sub(shipPosVelocity)
-                            entity.deltaMovement = newRelativeVelocity.toMinecraft()
-                            shipData.transform.worldToShip.transformDirection(newRelativeVelocity)
-                            entityDraggingInformation.relativeVelocityOnShip = newRelativeVelocity
-                        }
                         val entityReferencePos: Vector3dc = if (preTick) {
                             Vector3d(entity.x, entity.y, entity.z)
                         } else {
@@ -114,7 +104,7 @@ object EntityDragger {
                         // endregion
                     }
                 } else {
-                    dragTheEntity = entityDraggingInformation.ticksSinceStoodOnShip < EntityDraggingInformation.TICKS_TO_DRAG_ENTITIES
+                    dragTheEntity = false
                     addedMovement = entityDraggingInformation.addedMovementLastTick
                         .mul(ADDED_MOVEMENT_DECAY, Vector3d())
                     addedYRot = entityDraggingInformation.addedYawRotLastTick * ADDED_MOVEMENT_DECAY
@@ -132,6 +122,13 @@ object EntityDragger {
                     entity.y + addedMovement.y(),
                     entity.z + addedMovement.z()
                 )
+
+                if(entityDraggingInformation.boardedShipLastTick) { //This is the first Tick on the ship.
+                    val acceleration = Vector3d(entityDraggingInformation.addedMovementLastTick) // if it was on a different ship last tick, consider that too.
+                        .sub(addedMovement) // relative velocity to current ship.
+                    entity.push(acceleration.x, acceleration.y, acceleration.z)
+                }
+
                 entityDraggingInformation.addedMovementLastTick = addedMovement
 
                 // Apply [addedYRot]
@@ -156,12 +153,9 @@ object EntityDragger {
 
                     entityDraggingInformation.addedYawRotLastTick = addedYRot
                 }
-                entityDraggingInformation.previousRelativeVelocityOnShip = entityDraggingInformation.relativeVelocityOnShip
             } else {
-                entity.addDeltaMovement(entityDraggingInformation.addedMovementLastTick.toMinecraft())
-                entityDraggingInformation.addedMovementLastTick = Vector3d()
-                entityDraggingInformation.addedYawRotLastTick = 0.0
-                entityDraggingInformation.previousRelativeVelocityOnShip = null
+                val lastMovement = entityDraggingInformation.addedMovementLastTick
+                entity.push(lastMovement.x(), lastMovement.y(), lastMovement.z())
             }
             entityDraggingInformation.ticksSinceStoodOnShip++
             entityDraggingInformation.mountedToEntity = entity.vehicle != null

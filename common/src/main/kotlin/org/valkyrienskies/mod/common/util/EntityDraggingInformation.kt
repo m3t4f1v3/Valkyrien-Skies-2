@@ -11,13 +11,18 @@ class EntityDraggingInformation {
     var addedMovementLastTick: Vector3dc = Vector3d()
     var addedYawRotLastTick: Double = 0.0
     var changedShipLastTick = false
+    var boardedShipLastTick = false
     var lastShipStoodOn: ShipId? = null
         set(value) {
-            ticksSinceStoodOnShip = 0
+            ticksSinceStoodOnShip = 0 // ensure this is set before boardedShipLastTick check.
+            boardedShipLastTick = field != value && value != null // only if it boarded different ship.
             changedShipLastTick = field != value && field != null && value != null
             field = value
         }
     var ticksSinceStoodOnShip: Int = 0
+        set(value) {
+            boardedShipLastTick = false
+        }
     var ignoreNextGroundStand = false
     var mountedToEntity: Boolean = false
 
