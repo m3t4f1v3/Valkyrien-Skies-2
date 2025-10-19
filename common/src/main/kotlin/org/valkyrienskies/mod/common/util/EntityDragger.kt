@@ -123,7 +123,7 @@ object EntityDragger {
                     entity.z + addedMovement.z()
                 )
 
-                if(entityDraggingInformation.boardedShipLastTick) { //This is the first Tick on the ship.
+                if(entityDraggingInformation.boardedShipLastTick && !entity.level().isClientSide) { //This is the first Tick on the ship. Also, should push the entity in server side only and propagate the result.
                     val acceleration = Vector3d(entityDraggingInformation.addedMovementLastTick) // if it was on a different ship last tick, consider that too.
                         .sub(addedMovement) // relative velocity to current ship.
                     entity.push(acceleration.x, acceleration.y, acceleration.z)
@@ -153,7 +153,7 @@ object EntityDragger {
 
                     entityDraggingInformation.addedYawRotLastTick = addedYRot
                 }
-            } else {
+            } else if (!entity.level().isClientSide) {
                 val lastMovement = entityDraggingInformation.addedMovementLastTick
                 entity.push(lastMovement.x(), lastMovement.y(), lastMovement.z())
             }

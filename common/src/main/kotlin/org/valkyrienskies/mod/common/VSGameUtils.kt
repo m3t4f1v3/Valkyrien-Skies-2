@@ -494,7 +494,7 @@ fun Entity?.applyShipVelocity(ship: Ship?, willBeDragged: Boolean) {
     val shipSpeed = Vector3d(ship.velocity)
         .add(ship.angularVelocity.cross(relPos, Vector3d()))
         .mul(0.05)
-    this.push(shipSpeed.x, shipSpeed.y, shipSpeed.z)
+    this.addDeltaMovement(shipSpeed.toMinecraft())
     if( willBeDragged ) {
         val info = (this as IEntityDraggingInformationProvider).draggingInformation
         info.lastShipStoodOn = ship.id
