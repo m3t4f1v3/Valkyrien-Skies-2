@@ -34,8 +34,6 @@ public class MixinEntity {
         if (ship == null && info.isEntityBeingDraggedByAShip()) {
             ship = ValkyrienSkies.getShipById(level, info.getLastShipStoodOn());
         }
-        if (ship != null) {
-            VSGameUtilsKt.applyShipVelocity(result, ship);
-        }
+        VSGameUtilsKt.applyShipVelocity(result, ship);
     }
 }
