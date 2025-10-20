@@ -22,6 +22,7 @@ class EntityDraggingInformation {
     var ticksSinceStoodOnShip: Int = 0
         set(value) {
             boardedShipLastTick = false
+            field = value
         }
     var ignoreNextGroundStand = false
     var mountedToEntity: Boolean = false
