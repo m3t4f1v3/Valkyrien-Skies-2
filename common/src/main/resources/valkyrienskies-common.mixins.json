@@ -45,7 +45,6 @@
     "feature.commands.MixinArgumentTypeInfos",
     "feature.conduit_fix.ConduitMixin",
     "feature.dismount_dead_entities.MixinLivingEntity",
-    "feature.dispensers.MixinDefaultDispenseItemBehavior",
     "feature.distance_replace.MixinEntity",
     "feature.enchantment_table.MixinEnchantmentTableBlockEntity",
     "feature.entity_collision.MixinEntity",
