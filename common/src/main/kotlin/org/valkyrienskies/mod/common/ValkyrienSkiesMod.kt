@@ -1,5 +1,6 @@
 package org.valkyrienskies.mod.common
 
+import net.minecraft.client.Minecraft
 import net.minecraft.core.registries.Registries
 import net.minecraft.network.chat.Component
 import net.minecraft.resources.ResourceKey
@@ -23,6 +24,7 @@ import org.valkyrienskies.mod.common.entity.ShipMountingEntity
 import org.valkyrienskies.mod.common.entity.VSPhysicsEntity
 import org.valkyrienskies.mod.common.networking.VSGamePackets
 import org.valkyrienskies.mod.common.util.GameTickForceApplier
+import org.valkyrienskies.mod.mixinducks.client.world.ClientChunkCacheDuck
 
 object ValkyrienSkiesMod {
     const val MOD_ID = "valkyrienskies"
@@ -62,6 +64,12 @@ object ValkyrienSkiesMod {
         VSConfigClass.registerConfig("vs", VSGameConfig::class.java)
         VSEvents.ShipLoadEvent.on { event ->
             event.ship.setAttachment(GameTickForceApplier())
+        }
+        VSEvents.ShipUnloadEventClient.on { event ->
+            val level = Minecraft.getInstance().level
+            if (level != null) {
+                (level.getChunkSource() as ClientChunkCacheDuck).`vs$removeShip`(event.ship)
+            }
         }
     }
 
