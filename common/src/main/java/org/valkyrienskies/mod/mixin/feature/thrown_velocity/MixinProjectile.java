@@ -45,6 +45,7 @@ public abstract class MixinProjectile extends Entity implements TraceableEntity 
             ship = ValkyrienSkies.getShipById(level(), info.getLastShipStoodOn());
         }
         VSGameUtilsKt.applyShipVelocity(this, ship, false);
+        this.hasImpulse = true;
     }
 
 

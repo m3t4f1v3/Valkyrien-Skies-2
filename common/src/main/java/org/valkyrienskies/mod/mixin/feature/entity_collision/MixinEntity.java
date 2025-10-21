@@ -39,9 +39,6 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider 
 
     @Shadow
     public int tickCount;
-    
-    @Deprecated
-    public abstract BlockPos getOnPosLegacy();
 
     @Shadow
     public abstract void setPos(Vec3 arg);
