@@ -12,8 +12,13 @@ import net.minecraft.network.syncher.EntityDataSerializers
 import net.minecraft.network.syncher.SynchedEntityData
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.EntityType
+import net.minecraft.world.entity.Mob
+import net.minecraft.world.entity.ai.attributes.AttributeSupplier
+import net.minecraft.world.entity.ai.attributes.Attributes
 import net.minecraft.world.level.Level
 import net.minecraft.world.level.entity.EntityInLevelCallback
+import net.minecraft.world.phys.AABB
+import net.minecraft.world.phys.Vec3
 import org.joml.Matrix3d
 import org.joml.Vector3d
 import org.joml.Vector3dc
@@ -33,7 +38,7 @@ import org.valkyrienskies.mod.common.util.toMinecraft
 import org.valkyrienskies.mod.common.vsCore
 import org.valkyrienskies.mod.mixin.accessors.entity.EntityAccessor
 
-open class VSPhysicsEntity(type: EntityType<VSPhysicsEntity>, level: Level) : Entity(type, level) {
+open class VSPhysicsEntity(type: EntityType<VSPhysicsEntity>, level: Level) : Mob(type, level) {
     // Physics data, persistent
     protected var physicsEntityData: PhysicsEntityData? = null
         private set
@@ -112,6 +117,11 @@ open class VSPhysicsEntity(type: EntityType<VSPhysicsEntity>, level: Level) : En
 
     override fun defineSynchedData() {
         entityData.define(SHIP_ID_DATA, "")
+        super.defineSynchedData()
+    }
+
+    override fun travel(movementInput: Vec3) {
+        // disable AI movement
     }
 
     override fun readAdditionalSaveData(compoundTag: CompoundTag) {
@@ -226,6 +236,13 @@ open class VSPhysicsEntity(type: EntityType<VSPhysicsEntity>, level: Level) : En
 
         private fun getMapper(): ObjectMapper {
             return vsCore.defaultMapper
+        }
+
+        // Without these attributes LivingEntity complains
+        fun createAttributes(): AttributeSupplier.Builder {
+            return createMobAttributes()
+                .add(Attributes.MAX_HEALTH, 1.0)
+                .add(Attributes.MOVEMENT_SPEED, 0.25)
         }
 
         fun createBasicSphereData(
