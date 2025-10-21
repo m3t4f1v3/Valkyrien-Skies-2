@@ -478,25 +478,13 @@ fun getShipMountedTo(entity: Entity): LoadedShip? {
 
 /**
  * Applies the ship velocity, inluding angular velocity, to the entity.
- * This will also set the entity to be dragged by the ship.
- */
-fun Entity?.applyShipVelocity(ship: Ship?) =
-    this.applyShipVelocity(ship, true)
-
-/**
- * Applies the ship velocity, inluding angular velocity, to the entity.
  * Useful for cases like launching something on a ship.
- * @param willBeDragged if the entity should also be immediately dragged by the ship.
  */
-fun Entity?.applyShipVelocity(ship: Ship?, willBeDragged: Boolean) {
+fun Entity?.applyShipVelocity(ship: Ship?) {
     if (this == null || ship == null) return
     val relPos = this.position().toJOML().sub(ship.transform.positionInWorld)
     val shipSpeed = Vector3d(ship.velocity)
         .add(ship.angularVelocity.cross(relPos, Vector3d()))
         .mul(0.05)
-    this.addDeltaMovement(shipSpeed.toMinecraft())
-    if( willBeDragged ) {
-        val info = (this as IEntityDraggingInformationProvider).draggingInformation
-        info.lastShipStoodOn = ship.id
-    }
+    this.push(shipSpeed.x, shipSpeed.y, shipSpeed.z)
 }

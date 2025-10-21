@@ -2,6 +2,7 @@ package org.valkyrienskies.mod.common.util
 
 import org.joml.Vector3d
 import org.joml.Vector3dc
+import org.valkyrienskies.core.api.ships.Ship
 import org.valkyrienskies.core.api.ships.properties.ShipId
 
 /**
@@ -11,17 +12,17 @@ class EntityDraggingInformation {
     var addedMovementLastTick: Vector3dc = Vector3d()
     var addedYawRotLastTick: Double = 0.0
     var changedShipLastTick = false
-    var boardedShipLastTick = false
+    var shouldImpulseMovement = false
     var lastShipStoodOn: ShipId? = null
         set(value) {
             if(value != null) ticksSinceStoodOnShip = 0 // ensure this is set before boardedShipLastTick check.
-            boardedShipLastTick = field != value && value != null // only if it boarded different ship.
+            shouldImpulseMovement = field != value && value != null // only if it boarded different ship.
             changedShipLastTick = field != value && field != null && value != null
             field = value
         }
     var ticksSinceStoodOnShip: Int = 0
         set(value) {
-            boardedShipLastTick = false
+            shouldImpulseMovement = false
             field = value
         }
     var ignoreNextGroundStand = false
@@ -73,4 +74,9 @@ interface IEntityDraggingInformationProvider {
     val draggingInformation: EntityDraggingInformation
 
     fun `vs$shouldDrag`(): Boolean
+
+    /**
+     * Shortcut for entity initializations that requires to set the entity dragged without sliding.
+     */
+    fun `vs$dragImmediately`(ship : Ship?)
 }

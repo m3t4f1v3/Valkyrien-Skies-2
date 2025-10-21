@@ -17,6 +17,7 @@ import org.valkyrienskies.core.util.component2
 import org.valkyrienskies.core.util.component3
 import org.valkyrienskies.mod.common.applyShipVelocity
 import org.valkyrienskies.mod.common.toWorldCoordinates
+import org.valkyrienskies.mod.common.util.IEntityDraggingInformationProvider
 import org.valkyrienskies.mod.common.util.toJOML
 import org.valkyrienskies.mod.common.util.toMinecraft
 import kotlin.math.atan2
@@ -70,7 +71,11 @@ object WorldEntityHandler : VSEntityHandler {
         val entityVelocity = ship.transform.shipToWorldRotation.transform(entity.deltaMovement.toJOML())
 
         entity.deltaMovement = entityVelocity.toMinecraft()
-        entity.applyShipVelocity(ship, entity !is Projectile)
+        if (entity is Projectile) {
+            entity.applyShipVelocity(ship)
+        } else {
+            (entity as IEntityDraggingInformationProvider).`vs$dragImmediately`(ship)
+        }
 
         val direction : Vector3d
         val yaw : Double

@@ -29,11 +29,13 @@ public abstract class MixinPlayer extends LivingEntity {
     )
     private void shipVelocityToThrownItem(ItemStack itemStack, boolean bl, boolean bl2,
         CallbackInfoReturnable<ItemEntity> cir) {
+        ItemEntity result = cir.getReturnValue();
+        if(result == null) return;
         Ship ship = VSGameUtilsKt.getShipMountedTo(this);
         EntityDraggingInformation info = ((IEntityDraggingInformationProvider)this).getDraggingInformation();
-        if(ship == null && info.isEntityBeingDraggedByAShip()) {
-            ship = ValkyrienSkies.getShipById(this.level(), info.getLastShipStoodOn());
+        if (ship == null && info.isEntityBeingDraggedByAShip()) {
+            ship = ValkyrienSkies.getShipById(level(), info.getLastShipStoodOn());
         }
-        VSGameUtilsKt.applyShipVelocity(cir.getReturnValue(), ship);
+        ((IEntityDraggingInformationProvider)result).vs$dragImmediately(ship);
     }
 }

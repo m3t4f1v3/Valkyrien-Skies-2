@@ -122,7 +122,7 @@ object EntityDragger {
                     entity.z + addedMovement.z()
                 )
 
-                if(entityDraggingInformation.boardedShipLastTick && (!entity.level().isClientSide || entity is LocalPlayer)) { //This is the first Tick on the ship. Also, should push the entity in server side only and propagate the result.
+                if(entityDraggingInformation.shouldImpulseMovement && (!entity.level().isClientSide || entity is LocalPlayer)) { //This is the first Tick on the ship. Also, should push the entity in server side only and propagate the result.
                     val acceleration = Vector3d(entityDraggingInformation.addedMovementLastTick) // if it was on a different ship last tick, consider that too.
                         .sub(addedMovement) // relative velocity to current ship.
                     entity.push(acceleration.x, acceleration.y, acceleration.z)

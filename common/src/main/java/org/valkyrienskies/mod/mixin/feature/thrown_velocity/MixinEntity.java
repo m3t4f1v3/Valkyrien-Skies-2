@@ -29,11 +29,12 @@ public class MixinEntity {
     )
     private void setItemDragged(ItemStack itemStack, float f, CallbackInfoReturnable<ItemEntity> cir) {
         ItemEntity result = cir.getReturnValue();
+        if(result == null) return;
         Ship ship = VSGameUtilsKt.getShipMountedTo(Entity.class.cast(this));
         EntityDraggingInformation info = ((IEntityDraggingInformationProvider)this).getDraggingInformation();
         if (ship == null && info.isEntityBeingDraggedByAShip()) {
             ship = ValkyrienSkies.getShipById(level, info.getLastShipStoodOn());
         }
-        VSGameUtilsKt.applyShipVelocity(result, ship);
+        ((IEntityDraggingInformationProvider)result).vs$dragImmediately(ship);
     }
 }
