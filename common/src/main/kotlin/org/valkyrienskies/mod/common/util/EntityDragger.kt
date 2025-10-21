@@ -5,6 +5,7 @@ import net.minecraft.core.Direction
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.util.Mth
 import net.minecraft.world.entity.Entity
+import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.level.ClipContext
 import net.minecraft.world.level.Level
@@ -135,17 +136,27 @@ object EntityDragger {
                         if (entity !is ServerPlayer) {
                             entity.yRot = ((entity.yRot + addedYRot.toFloat()) + 360f) % 360f
                             entity.yHeadRot = ((entity.yHeadRot + addedYRot.toFloat()) + 360f) % 360f
+                            if(entity is LivingEntity) {
+                                entity.yBodyRot = ((entity.yBodyRot + addedYRot.toFloat()) + 360f) % 360f
+                            }
                         } else {
                             entity.yRot = Mth.wrapDegrees(entity.yRot + addedYRot.toFloat())
                             entity.yHeadRot = Mth.wrapDegrees(entity.yHeadRot + addedYRot.toFloat())
+                            entity.yBodyRot = Mth.wrapDegrees(entity.yBodyRot + addedYRot.toFloat())
                         }
                     } else {
                         if (!entity.isControlledByLocalInstance && entity !is Player) {
                             entity.yRot = Mth.wrapDegrees(entity.yRot + addedYRot.toFloat())
                             entity.yHeadRot = Mth.wrapDegrees(entity.yHeadRot + addedYRot.toFloat())
+                            if(entity is LivingEntity) {
+                                entity.yBodyRot = Mth.wrapDegrees(entity.yBodyRot + addedYRot.toFloat())
+                            }
                         } else {
                             entity.yRot = (entity.yRot + addedYRot.toFloat())
                             entity.yHeadRot = (entity.yHeadRot + addedYRot.toFloat())
+                            if(entity is LivingEntity) {
+                                entity.yBodyRot = (entity.yBodyRot + addedYRot.toFloat())
+                            }
                         }
                     }
 
