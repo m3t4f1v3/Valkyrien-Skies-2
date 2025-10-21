@@ -1,6 +1,6 @@
 package org.valkyrienskies.mod.common.util
 
-import com.mojang.logging.LogUtils
+import net.minecraft.client.player.LocalPlayer
 import net.minecraft.core.Direction
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.util.Mth
@@ -104,10 +104,8 @@ object EntityDragger {
                         // endregion
                     }
                 } else {
-                    dragTheEntity = false
-                    addedMovement = entityDraggingInformation.addedMovementLastTick
-                        .mul(ADDED_MOVEMENT_DECAY, Vector3d())
-                    addedYRot = entityDraggingInformation.addedYawRotLastTick * ADDED_MOVEMENT_DECAY
+                    addedMovement = Vector3d(entityDraggingInformation.addedMovementLastTick)
+                    addedYRot = 0.0
                 }
             }
 
@@ -123,7 +121,7 @@ object EntityDragger {
                     entity.z + addedMovement.z()
                 )
 
-                if(entityDraggingInformation.boardedShipLastTick && !entity.level().isClientSide) { //This is the first Tick on the ship. Also, should push the entity in server side only and propagate the result.
+                if(entityDraggingInformation.boardedShipLastTick && (!entity.level().isClientSide || entity is LocalPlayer)) { //This is the first Tick on the ship. Also, should push the entity in server side only and propagate the result.
                     val acceleration = Vector3d(entityDraggingInformation.addedMovementLastTick) // if it was on a different ship last tick, consider that too.
                         .sub(addedMovement) // relative velocity to current ship.
                     entity.push(acceleration.x, acceleration.y, acceleration.z)
@@ -153,9 +151,12 @@ object EntityDragger {
 
                     entityDraggingInformation.addedYawRotLastTick = addedYRot
                 }
-            } else if (!entity.level().isClientSide) {
-                val lastMovement = entityDraggingInformation.addedMovementLastTick
-                entity.push(lastMovement.x(), lastMovement.y(), lastMovement.z())
+            } else if ((!entity.level().isClientSide || entity is LocalPlayer) && entityDraggingInformation.addedMovementLastTick.length() > 1e-3) {
+                entity.push(entityDraggingInformation.addedMovementLastTick.x(),
+                    entityDraggingInformation.addedMovementLastTick.y(),
+                    entityDraggingInformation.addedMovementLastTick.z())
+                entityDraggingInformation.addedMovementLastTick = Vector3d()
+                entityDraggingInformation.addedYawRotLastTick = 0.0
             }
             entityDraggingInformation.ticksSinceStoodOnShip++
             entityDraggingInformation.mountedToEntity = entity.vehicle != null

@@ -99,14 +99,12 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider 
                 return collisionResultWithWorld;
             }
             entityDraggingInformation.setLastShipStoodOn(null);
-            entityDraggingInformation.setAddedMovementLastTick(new Vector3d());
             entityDraggingInformation.setAddedYawRotLastTick(0.0);
 
             for (Entity entityRiding : entity.getIndirectPassengers()) {
                 final EntityDraggingInformation passengerDraggingInformation =
                     ((IEntityDraggingInformationProvider) entityRiding).getDraggingInformation();
                 passengerDraggingInformation.setLastShipStoodOn(null);
-                passengerDraggingInformation.setAddedMovementLastTick(new Vector3d());
                 passengerDraggingInformation.setAddedYawRotLastTick(0.0);
             }
         }

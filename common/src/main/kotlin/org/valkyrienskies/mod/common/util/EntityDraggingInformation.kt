@@ -14,7 +14,7 @@ class EntityDraggingInformation {
     var boardedShipLastTick = false
     var lastShipStoodOn: ShipId? = null
         set(value) {
-            ticksSinceStoodOnShip = 0 // ensure this is set before boardedShipLastTick check.
+            if(value != null) ticksSinceStoodOnShip = 0 // ensure this is set before boardedShipLastTick check.
             boardedShipLastTick = field != value && value != null // only if it boarded different ship.
             changedShipLastTick = field != value && field != null && value != null
             field = value
