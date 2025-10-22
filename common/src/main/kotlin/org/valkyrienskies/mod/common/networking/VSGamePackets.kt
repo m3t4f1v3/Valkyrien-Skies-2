@@ -82,6 +82,7 @@ object VSGamePackets {
                     entity.draggingInformation.lastShipStoodOn = setMotion.shipID
                     entity.draggingInformation.ignoreNextGroundStand = true
                 }
+                entity.draggingInformation.shouldImpulseMovement = false
 
                 entity.draggingInformation.relativePositionOnShip = ship.worldToShip.transformPosition(
                     Vector3d(entity.x, entity.y, entity.z)

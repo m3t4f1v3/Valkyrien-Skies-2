@@ -38,6 +38,10 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider 
     // region collision
 
     @Shadow
+    public boolean hasImpulse;
+    @Shadow
+    protected boolean firstTick;
+    @Shadow
     public int tickCount;
 
     @Shadow
@@ -209,6 +213,20 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider 
     private BlockPos skipBlockPosition(final Entity entity, final Operation<BlockPos> original, @Local final BlockPos posOn) {
         if (VSGameUtilsKt.isBlockInShipyard(level, posOn)) return posOn;
         return original.call(entity);
+    }
+
+    /**
+     * This will set the entity impulsed if it is dragged by a ship on its first tick.
+     * Marking impulse forces the sync over server-client, so this will also sync dragging information.
+     */
+    @Inject(
+        method = "tick",
+        at = @At("HEAD")
+    )
+    private void markImpulsedFirstTick(CallbackInfo ci) {
+        if (firstTick && getDraggingInformation().isEntityBeingDraggedByAShip() && !level.isClientSide) {
+            hasImpulse = true;
+        }
     }
 
     @Inject(
