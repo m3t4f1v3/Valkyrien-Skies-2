@@ -72,6 +72,19 @@ object VSGameConfig {
             var canTurtlesLeaveScaledShips = false
         }
 
+        val Dynmap = DYNMAP()
+
+        class DYNMAP {
+            @JsonSchema(description = "Show Ships as Icon Markers on Dynmap")
+            var showIconMarkers = true
+            @JsonSchema(description = "Show Ships as Polyline Markers on Dynmap")
+            var showPolylineMarkers = true
+            @JsonSchema
+            var showShipId = true
+            @JsonSchema
+            var showShipMass = true
+        }
+
         @JsonSchema(
             description = "By default, the vanilla server prevents block interacts past a certain distance " +
                 "to prevent cheat clients from breaking blocks halfway across the map. " +
