@@ -4,24 +4,37 @@ import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import com.mojang.blaze3d.vertex.PoseStack;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import java.util.SortedSet;
+
+import me.jellysquid.mods.sodium.client.gl.device.CommandList;
+import me.jellysquid.mods.sodium.client.gl.device.RenderDevice;
 import me.jellysquid.mods.sodium.client.render.SodiumWorldRenderer;
+import me.jellysquid.mods.sodium.client.render.chunk.ChunkRenderMatrices;
 import me.jellysquid.mods.sodium.client.render.chunk.RenderSectionManager;
 import me.jellysquid.mods.sodium.client.render.chunk.lists.SortedRenderLists;
+import me.jellysquid.mods.sodium.client.render.chunk.terrain.DefaultTerrainRenderPasses;
+import me.jellysquid.mods.sodium.client.render.chunk.terrain.TerrainRenderPass;
+import me.jellysquid.mods.sodium.client.render.viewport.CameraTransform;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.MultiBufferSource.BufferSource;
 import net.minecraft.client.renderer.RenderBuffers;
+import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderDispatcher;
+import net.minecraft.client.renderer.entity.layers.RenderLayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.BlockDestructionProgress;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.entity.BlockEntity;
+
+import org.joml.Matrix4f;
+import org.joml.Vector3dc;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.valkyrienskies.core.api.ships.ClientShip;
 import org.valkyrienskies.mod.common.VSClientGameUtils;
@@ -88,6 +101,38 @@ public abstract class MixinSodiumWorldRenderer {
         }
 
         this.currentRenderLists = null;
+    }
+
+    private void vsRenderLayer(ChunkRenderMatrices matrices, TerrainRenderPass pass, double x, double y, double z,
+            CommandList commandList) {
+        ((RenderSectionManagerDuck) this.renderSectionManager).vs_getShipRenderLists().forEach((ship, renderList) -> {
+            final Matrix4f newModelView = new Matrix4f(matrices.modelView());
+            final Vector3dc center = ship.getRenderTransform().getPositionInShip();
+            VSClientGameUtils.transformRenderWithShip(ship.getRenderTransform(), newModelView, center.x(), center.y(),
+                    center.z(), x, y, z);
+
+            final ChunkRenderMatrices newMatrices = new ChunkRenderMatrices(matrices.projection(), newModelView);
+            ((RenderSectionManagerAccessor) this.renderSectionManager).getChunkRenderer().render(newMatrices, commandList, renderList, pass,
+                    new CameraTransform(center.x(), center.y(), center.z()));
+        });
+    }
+
+    @Inject(method = "drawChunkLayer", at = @At("TAIL"))
+    private void afterChunkLayer(RenderType renderLayer, ChunkRenderMatrices matrices, double x, double y, double z,
+            CallbackInfo ci) {
+        // System.out.println("[MixinSodiumWorldRenderer] After CUTOUT renderLayer");
+
+        RenderDevice device = RenderDevice.INSTANCE;
+        CommandList commandList = device.createCommandList();
+        
+        if (renderLayer == RenderType.solid()) {
+            vsRenderLayer(matrices, DefaultTerrainRenderPasses.SOLID, x, y, z, commandList);
+            vsRenderLayer(matrices, DefaultTerrainRenderPasses.CUTOUT, x, y, z, commandList);
+        } else if (renderLayer == RenderType.translucent()) {
+            vsRenderLayer(matrices, DefaultTerrainRenderPasses.TRANSLUCENT, x, y, z, commandList);
+        }
+
+        commandList.close();
     }
 
     @ModifyExpressionValue(

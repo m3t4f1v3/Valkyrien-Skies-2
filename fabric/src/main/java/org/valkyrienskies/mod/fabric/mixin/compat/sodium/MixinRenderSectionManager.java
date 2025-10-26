@@ -21,26 +21,26 @@ import org.valkyrienskies.mod.mixinducks.mod_compat.sodium.RenderSectionManagerD
 @Mixin(value = RenderSectionManager.class, remap = false)
 public class MixinRenderSectionManager {
 
-    @Shadow
-    @Final
-    private ChunkRenderer chunkRenderer;
+    // @Shadow
+    // @Final
+    // private ChunkRenderer chunkRenderer;
 
-    @Inject(at = @At(value = "INVOKE", target = "Lme/jellysquid/mods/sodium/client/gl/device/CommandList;flush()V"),
-        method = "renderLayer")
-    private void redirectRenderLayer(final ChunkRenderMatrices matrices, final TerrainRenderPass pass,
-        final double camX, final double camY, final double camZ, final CallbackInfo ci, @Local final CommandList commandList) {
+    // @Inject(at = @At(value = "INVOKE", target = "Lme/jellysquid/mods/sodium/client/gl/device/CommandList;flush()V"),
+    //     method = "renderLayer")
+    // private void redirectRenderLayer(final ChunkRenderMatrices matrices, final TerrainRenderPass pass,
+    //     final double camX, final double camY, final double camZ, final CallbackInfo ci, @Local final CommandList commandList) {
 
-        ((RenderSectionManagerDuck) this).vs_getShipRenderLists().forEach((ship, renderList) -> {
-            final Matrix4f newModelView = new Matrix4f(matrices.modelView());
-            final Vector3dc center = ship.getRenderTransform().getPositionInShip();
-            VSClientGameUtils.transformRenderWithShip(ship.getRenderTransform(), newModelView, center.x(), center.y(),
-                center.z(), camX, camY, camZ);
+    //     ((RenderSectionManagerDuck) this).vs_getShipRenderLists().forEach((ship, renderList) -> {
+    //         final Matrix4f newModelView = new Matrix4f(matrices.modelView());
+    //         final Vector3dc center = ship.getRenderTransform().getPositionInShip();
+    //         VSClientGameUtils.transformRenderWithShip(ship.getRenderTransform(), newModelView, center.x(), center.y(),
+    //             center.z(), camX, camY, camZ);
 
-            final ChunkRenderMatrices newMatrices = new ChunkRenderMatrices(matrices.projection(), newModelView);
-            chunkRenderer.render(newMatrices, commandList, renderList, pass,
-                new CameraTransform(center.x(), center.y(), center.z()));
-            commandList.close();
-        });
-    }
+    //         final ChunkRenderMatrices newMatrices = new ChunkRenderMatrices(matrices.projection(), newModelView);
+    //         chunkRenderer.render(newMatrices, commandList, renderList, pass,
+    //             new CameraTransform(center.x(), center.y(), center.z()));
+    //         commandList.close();
+    //     });
+    // }
 
 }
