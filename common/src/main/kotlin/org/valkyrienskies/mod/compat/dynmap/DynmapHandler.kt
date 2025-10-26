@@ -59,7 +59,7 @@ abstract class DynmapHandler : DynmapCommonAPIListener() {
 
     private fun renderShipIconMarker(data: ServerShip, markerSet: MarkerSet, world: String) {
         val pos = data.transform.positionInWorld
-        val label = ""//createShipLabel(data, this.config)
+        val label = createShipLabel(data)
         val icon = getOrCreateIcon()
 
         val marker: Marker = markerSet.findMarker("ship${data.id}") ?: run {

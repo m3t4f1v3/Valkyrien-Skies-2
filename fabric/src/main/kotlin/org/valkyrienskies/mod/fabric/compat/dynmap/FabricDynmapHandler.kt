@@ -22,7 +22,7 @@ class FabricDynmapHandler: DynmapHandler() {
     override fun getOrCreateIcon(): MarkerIcon? =
         this.api?.markerAPI?.getMarkerIcon("ship") ?: run {
             plugin?.fabricServer?.let {
-                this.api?.markerAPI?.createMarkerIcon("loaded_ship", "ship",
+                this.api?.markerAPI?.createMarkerIcon("ship", "ship",
                     it.openResource(ValkyrienSkiesMod.MOD_ID, "assets/valkyrienskies/icon.png"))
             }
         }

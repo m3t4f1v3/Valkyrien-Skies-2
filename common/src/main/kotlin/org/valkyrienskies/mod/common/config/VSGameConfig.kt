@@ -79,9 +79,9 @@ object VSGameConfig {
             var showIconMarkers = true
             @JsonSchema(description = "Show Ships as Polyline Markers on Dynmap")
             var showPolylineMarkers = true
-            @JsonSchema
+            @JsonSchema(description = "Show the Ship ID in the label")
             var showShipId = true
-            @JsonSchema
+            @JsonSchema(description = "Show the Ship Mass in the label")
             var showShipMass = true
         }
 

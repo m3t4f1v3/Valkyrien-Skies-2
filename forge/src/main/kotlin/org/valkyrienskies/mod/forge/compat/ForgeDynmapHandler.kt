@@ -21,8 +21,8 @@ class ForgeDynmapHandler : DynmapHandler() {
     override fun getOrCreateIcon(): MarkerIcon? =
         this.api?.markerAPI?.getMarkerIcon("ship") ?: run {
             plugin?.ForgeServer()?.let {
-                this.api?.markerAPI?.createMarkerIcon("loaded_ship", "ship",
-                    it.openResource(ValkyrienSkiesMod.MOD_ID, "icon.png"))
+                this.api?.markerAPI?.createMarkerIcon("ship", "ship",
+                    it.openResource(ValkyrienSkiesMod.MOD_ID, "assets/valkyrienskies/icon.png"))
             }
         }
 
