@@ -177,7 +177,7 @@ class ValkyrienSkiesModForge {
 
         if (ModList.get().isLoaded("dynmap")) {
             ForgeDynmapHandler().register()
-            modBus.addListener(ForgeDynmapHandler::tick)
+            forgeBus.addListener(ForgeDynmapHandler::tick)
         }
     }
 
