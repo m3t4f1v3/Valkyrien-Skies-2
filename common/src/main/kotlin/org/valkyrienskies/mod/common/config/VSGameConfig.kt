@@ -96,6 +96,19 @@ object VSGameConfig {
             var stormDampening = 0.0f
         }
 
+        val Dynmap = DYNMAP()
+
+        class DYNMAP {
+            @JsonSchema(description = "Show Ships as Icon Markers on Dynmap")
+            var showIconMarkers = true
+            @JsonSchema(description = "Show Ships as Polyline Markers on Dynmap")
+            var showPolylineMarkers = true
+            @JsonSchema(description = "Show the Ship ID in the label")
+            var showShipId = true
+            @JsonSchema(description = "Show the Ship Mass in the label")
+            var showShipMass = true
+        }
+
 
         @JsonSchema(
             description = "By default, the vanilla server prevents block interacts past a certain distance " +

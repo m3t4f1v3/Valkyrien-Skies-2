@@ -52,6 +52,7 @@ import org.valkyrienskies.mod.common.item.PhysicsEntityCreatorItem
 import org.valkyrienskies.mod.common.item.ShipAssemblerItem
 import org.valkyrienskies.mod.common.item.ShipCreatorItem
 import org.valkyrienskies.mod.compat.clothconfig.VSClothConfig
+import org.valkyrienskies.mod.forge.compat.ForgeDynmapHandler
 import org.valkyrienskies.mod.forge.compat.epicfight.FracturedBlockStateInfoProvider
 
 @Mod(MOD_ID)
@@ -172,6 +173,11 @@ class ValkyrienSkiesModForge {
 
         if (ModList.get().isLoaded("epicfight")) {
             FracturedBlockStateInfoProvider.register()
+        }
+
+        if (ModList.get().isLoaded("dynmap")) {
+            ForgeDynmapHandler().register()
+            forgeBus.addListener(ForgeDynmapHandler::tick)
         }
     }
 
