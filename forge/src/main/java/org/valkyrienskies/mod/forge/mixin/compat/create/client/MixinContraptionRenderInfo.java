@@ -1,7 +1,6 @@
 package org.valkyrienskies.mod.forge.mixin.compat.create.client;
 
 import com.simibubi.create.content.contraptions.AbstractContraptionEntity;
-import com.simibubi.create.content.contraptions.render.ContraptionRenderInfo;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.world.phys.AABB;
 import org.spongepowered.asm.mixin.Mixin;
@@ -9,8 +8,10 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 
-@Mixin(ContraptionRenderInfo.class)
+//@Mixin(ContraptionRenderInfo.class)
 public class MixinContraptionRenderInfo {
+    //TODO: Find out where this moved. Fabric snapshot doesn't have this class.
+    /*
     @Redirect(
         at = @At(
             value = "INVOKE",
@@ -22,4 +23,5 @@ public class MixinContraptionRenderInfo {
         return VSGameUtilsKt.transformRenderAABBToWorld(((ClientLevel) receiver.level()), receiver.position(),
             receiver.getBoundingBoxForCulling());
     }
+    */
 }
