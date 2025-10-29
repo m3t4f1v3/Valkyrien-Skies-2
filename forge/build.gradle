@@ -91,6 +91,9 @@ dependencies {
     // Epic Fight
     modCompileOnly("maven.modrinth:epic-fight:20.10.3")
 
+    // Dynmap
+    modCompileOnly("maven.modrinth:dynmap:${dynmap_version}")
+
     // Add Kotlin for Forge (3.12.0)
     forgeRuntimeLibrary("maven.modrinth:kotlin-for-forge:${kotlin_version}")
 

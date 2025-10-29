@@ -5,6 +5,8 @@ import static org.valkyrienskies.mod.common.VSClientGameUtils.transformRenderWit
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.multiplayer.ClientLevel;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
@@ -12,6 +14,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
+import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -27,7 +30,7 @@ import org.valkyrienskies.mod.common.VSGameUtilsKt;
 public abstract class MixinLevelRenderer {
 
     @Shadow
-    private ClientLevel level;
+    private @Nullable ClientLevel level;
 
     @Unique private PoseStack matrixStack;
     @Unique private Vec3 camera;
@@ -125,4 +128,24 @@ public abstract class MixinLevelRenderer {
 
      */
 
+    /**
+     * If an entity, for example an arrow stuck on a ship, is attached outside the border of the ship's chunk claim,
+     * it won't be rendered because the chunk isn't compiled.
+     * This injector bypasses that if the entity is in shipyard next to the compiled chunk.
+     */
+    @WrapOperation(
+        method = "renderLevel",
+        at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/LevelRenderer;isChunkCompiled(Lnet/minecraft/core/BlockPos;)Z")
+    )
+    private boolean isInShipyardBorder(LevelRenderer instance, BlockPos blockPos, Operation<Boolean> original){
+        if(original.call(instance, blockPos)) return true;
+        if(VSGameUtilsKt.isBlockInShipyard(level, blockPos)) {
+            BlockPos blockPos1 = blockPos.offset(-1, -1, -1);
+            BlockPos blockPos2 = blockPos.offset(1, 1, 1);
+            for(BlockPos neighbor : BlockPos.betweenClosed(blockPos1, blockPos2)) {
+                if (original.call(instance, neighbor)) return true;
+            }
+        }
+        return false;
+    }
 }

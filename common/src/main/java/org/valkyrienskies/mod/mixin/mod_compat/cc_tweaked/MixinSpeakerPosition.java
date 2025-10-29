@@ -12,24 +12,13 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Pseudo
 @Mixin(value = SpeakerPosition.class, priority = 2000)
 public abstract class MixinSpeakerPosition {
     @Shadow
     public abstract Level level();
-
-    @Inject(method = "position", at = @At("RETURN"), remap = false, cancellable = true)
-    public void position(final CallbackInfoReturnable<Vec3> cir) {
-        final Vec3 pos = cir.getReturnValue();
-        final Ship ship = VSGameUtilsKt.getShipObjectManagingPos(level(), pos.x, pos.y, pos.z);
-        if (ship != null) {
-            cir.setReturnValue(VSGameUtilsKt.toWorldCoordinates(level(), pos));
-        }
-    }
 
     @Redirect(
         method = "withinDistance",
@@ -39,9 +28,9 @@ public abstract class MixinSpeakerPosition {
         )
     )
     public double withinDistance$distanceToSqr(final Vec3 position, final Vec3 other) {
-        final Ship ship = VSGameUtilsKt.getShipManagingPos(level(), position);
+        final Ship ship = VSGameUtilsKt.getShipManagingPos(this.level(), position);
         if (ship != null) {
-            return VSGameUtilsKt.squaredDistanceBetweenInclShips(level(), position.x, position.y, position.z, other.x, other.y, other.z);
+            return VSGameUtilsKt.squaredDistanceBetweenInclShips(this.level(), position.x, position.y, position.z, other.x, other.y, other.z);
         }
         return position.distanceToSqr(other);
     }

@@ -26,6 +26,7 @@ import net.minecraft.world.item.BlockItem
 import net.minecraft.world.item.Item
 import net.minecraft.world.item.Item.Properties
 import net.minecraft.world.level.block.Block
+import org.dynmap.modsupport.ModSupportAPI
 import org.valkyrienskies.core.apigame.VSCoreFactory
 import org.valkyrienskies.mod.client.EmptyRenderer
 import org.valkyrienskies.mod.client.VSPhysicsEntityRenderer
@@ -49,6 +50,7 @@ import org.valkyrienskies.mod.common.item.PhysicsEntityCreatorItem
 import org.valkyrienskies.mod.common.item.ShipAssemblerItem
 import org.valkyrienskies.mod.common.item.ShipCreatorItem
 import org.valkyrienskies.mod.compat.flywheel.ShipEmbeddingManager
+import org.valkyrienskies.mod.fabric.compat.dynmap.FabricDynmapHandler
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executor
 import java.util.concurrent.atomic.AtomicBoolean
@@ -188,6 +190,9 @@ class ValkyrienSkiesModFabric : ModInitializer {
         CommonLifecycleEvents.TAGS_LOADED.register { _, _ ->
             VSGameEvents.tagsAreLoaded.emit(Unit)
         }
+
+        if (FabricLoader.getInstance().isModLoaded("dynmap"))
+            FabricDynmapHandler().register()
     }
 
     /**
