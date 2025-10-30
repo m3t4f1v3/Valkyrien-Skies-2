@@ -2,16 +2,14 @@ package org.valkyrienskies.mod.mixin.feature.entity_collision;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import com.llamalad7.mixinextras.sugar.Local;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.particles.BlockParticleOption;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -38,6 +36,10 @@ import org.valkyrienskies.mod.common.util.IEntityDraggingInformationProvider;
 public abstract class MixinEntity implements IEntityDraggingInformationProvider {
 
     // region collision
+
+    @Shadow
+    @Deprecated
+    public abstract BlockPos getOnPosLegacy();
 
     @Shadow
     public abstract void setPos(Vec3 arg);
@@ -194,28 +196,15 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider 
         return null;
     }
 
-    @Inject(method = "getBlockPosBelowThatAffectsMyMovement", at = @At("HEAD"), cancellable = true)
-    private void preGetBlockPosBelowThatAffectsMyMovement(final CallbackInfoReturnable<BlockPos> cir) {
-        final Vector3dc blockPosInGlobal = new Vector3d(
-            position.x,
-            getBoundingBox().minY - 0.5,
-            position.z
-        );
-        final BlockPos blockPosStandingOnFromShip = getPosStandingOnFromShips(blockPosInGlobal);
-        if (blockPosStandingOnFromShip != null) {
-            cir.setReturnValue(blockPosStandingOnFromShip);
-        }
-    }
-
     /**
      * @author tri0de
      * @reason Allows ship blocks to spawn landing particles, running particles, and play step sounds
      */
-    @Inject(method = "getOnPos", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "getOnPos(F)Lnet/minecraft/core/BlockPos;", at = @At("HEAD"), cancellable = true)
     private void preGetOnPos(final CallbackInfoReturnable<BlockPos> cir) {
         final Vector3dc blockPosInGlobal = new Vector3d(
             position.x,
-            position.y - 0.2,
+            position.y,
             position.z
         );
         final BlockPos blockPosStandingOnFromShip = getPosStandingOnFromShips(blockPosInGlobal);
@@ -224,30 +213,10 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider 
         }
     }
 
-    @Inject(method = "spawnSprintParticle", at = @At("HEAD"), cancellable = true)
-    private void preSpawnSprintParticle(final CallbackInfo ci) {
-        final Vector3dc blockPosInGlobal = new Vector3d(
-            position.x,
-            position.y - 0.2,
-            position.z
-        );
-        final BlockPos blockPosStandingOnFromShip = getPosStandingOnFromShips(blockPosInGlobal);
-        if (blockPosStandingOnFromShip != null) {
-            final BlockState blockState = this.level.getBlockState(blockPosStandingOnFromShip);
-            if (blockState.getRenderShape() != RenderShape.INVISIBLE) {
-                final Vec3 vec3 = this.getDeltaMovement();
-                this.level.addParticle(
-                    new BlockParticleOption(ParticleTypes.BLOCK, blockState),
-                    this.getX() + (this.random.nextDouble() - 0.5) * (double) this.dimensions.width,
-                    this.getY() + 0.1,
-                    this.getZ() + (this.random.nextDouble() - 0.5) * (double) this.dimensions.width,
-                    vec3.x * -4.0,
-                    1.5,
-                    vec3.z * -4.0
-                );
-                ci.cancel();
-            }
-        }
+    @WrapOperation(method = "spawnSprintParticle", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/Entity;blockPosition()Lnet/minecraft/core/BlockPos;"))
+    private BlockPos skipBlockPosition(final Entity entity, final Operation<BlockPos> original, @Local final BlockPos posOn) {
+        if (VSGameUtilsKt.isBlockInShipyard(level, posOn)) return posOn;
+        return original.call(entity);
     }
 
     @Inject(

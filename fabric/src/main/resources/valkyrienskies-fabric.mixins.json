@@ -16,6 +16,7 @@
     "compat.sodium.MixinRenderSectionManager",
     "feature.explosions.ClipContextMixin",
     "feature.shipyard_entities.MixinPersistentEntitySectionManager",
+    "feature.water_in_ships_entity.MixinEntity",
     "server.network.MixinServerGamePacketListenerImpl",
     "server.network.MixinServerPlayerGameMode",
     "world.level.block.FireMixin"
