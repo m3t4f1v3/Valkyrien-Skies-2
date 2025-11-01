@@ -4,6 +4,7 @@ import dev.engine_room.flywheel.api.visualization.VisualizationManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.entity.EntitySection;
 import org.valkyrienskies.core.impl.hooks.VSEvents.ShipUnloadEventClient;
 import dev.engine_room.flywheel.api.visualization.VisualEmbedding;
 import dev.engine_room.flywheel.api.visualization.VisualizationContext;
@@ -37,14 +38,24 @@ public class ShipEmbeddingManager {
 
     protected static ConcurrentHashMap<ClientShip, VisualEmbedding> vs$shipEmbedding = new ConcurrentHashMap<>();
 
-    protected static ConcurrentHashMap<Entity, ClientShip> vs$shipEntitiesWithVisual = new ConcurrentHashMap<>();
-
-    protected static ConcurrentHashMap<BlockEntity, ClientShip> vs$shipBlockEntitiesWithVisual = new ConcurrentHashMap<>();
+    protected static ConcurrentHashMap<BlockEntity, ClientShip> vs$shipBEs = new ConcurrentHashMap<>();
 
     private ShipEmbeddingManager(){
         ShipUnloadEventClient.Companion.on(event -> this.unloadShip(event.getShip()));
         VSGameEvents.INSTANCE.getShipsStartRendering().on(event -> this.updateAllShips());
         VSGameEvents.INSTANCE.getShipsStartRenderingSodium().on(event -> this.updateAllShips());
+        VSGameEvents.INSTANCE.getEntitySectionSetShip().on(event -> this.updateEntitySection(event.getSection()));
+    }
+
+    private void updateEntitySection(EntitySection<?> section){
+        VisualizationManager manager = VisualizationManager.get(Minecraft.getInstance().level);
+        if (manager == null) return;
+        section.getEntities().forEach(
+            entity -> {
+                manager.entities().queueRemove((Entity) entity);
+                manager.entities().queueAdd((Entity) entity);
+            }
+        );
     }
 
     /**
@@ -56,14 +67,17 @@ public class ShipEmbeddingManager {
         VisualEmbedding prevEmbedding = vs$shipEmbedding.get(ship);
         if(prevEmbedding != null && ctx.renderOrigin().equals(vs$EmbeddingOrigin.get(ship))) return prevEmbedding;
 
-        // remove previous mapping of entities/blockEntities and embedding
-        vs$shipEntitiesWithVisual.entrySet().removeIf(
-            entry -> entry.getValue() == ship
+        // remove previous mapping of visuals and embedding
+        vs$shipBEs.entrySet().removeIf(
+            entry -> {
+                final VisualizationManager manager = VisualizationManager.get(entry.getKey().getLevel());
+                if (entry.getValue() == ship && manager != null){
+                    manager.blockEntities().queueRemove(entry.getKey());
+                    manager.blockEntities().queueAdd(entry.getKey());
+                    return true;
+                } else return false;
+            }
         );
-        vs$shipBlockEntitiesWithVisual.entrySet().removeIf(
-            entry -> entry.getValue() == ship
-        );
-
         if(prevEmbedding != null) prevEmbedding.delete();
 
         BlockPos anchor = BlockPos.containing(VectorConversionsMCKt.toMinecraft(ship.getRenderTransform().getPositionInShip()));
@@ -82,7 +96,7 @@ public class ShipEmbeddingManager {
      * Ideally this should be called every frame when ships have their transform changed, so it's bound to ShipStartRendering event.
      * @author Bunting_chj
      */
-    public void updateAllShips() {
+    public synchronized void updateAllShips() {
         for(final ClientShip ship : vs$shipEmbedding.keySet()){
             final Vec3i anchor = vs$shipAnchor.get(ship);
             final VisualEmbedding embedding = vs$shipEmbedding.get(ship);
@@ -101,27 +115,14 @@ public class ShipEmbeddingManager {
         if(embedding != null){
             embedding.delete();
         }
-
-        final VisualizationManager manager = VisualizationManager.get(Minecraft.getInstance().level);
-        if (manager != null) {
-            vs$shipEntitiesWithVisual.entrySet().removeIf ( entry-> {
-                    if (entry.getValue() == ship) {
-                        manager.entities().queueRemove(entry.getKey());
-                        return true;
-                    }
-                    return false;
-                }
-            );
-            vs$shipBlockEntitiesWithVisual.entrySet().removeIf ( entry-> {
-                    if (entry.getValue() == ship) {
-                        manager.blockEntities().queueRemove(entry.getKey());
-                        return true;
-                    }
-                    return false;
-                }
-            );
-        }
-
+        vs$shipBEs.entrySet().removeIf(
+            entry -> {
+                if (entry.getValue() == ship) {
+                    VisualizationManager.get(entry.getKey().getLevel()).blockEntities().queueRemove(entry.getKey());
+                    return true;
+                } else return false;
+            }
+        );
         vs$shipAnchor.remove(ship);
         vs$EmbeddingOrigin.remove(ship);
     }
@@ -134,21 +135,7 @@ public class ShipEmbeddingManager {
      */
 
     public synchronized void unloadAllShip() {
-        final VisualizationManager manager = VisualizationManager.get(Minecraft.getInstance().level);
-        if (manager != null) {
-            vs$shipEntitiesWithVisual.forEach(
-                (entity, ship) -> manager.entities().queueRemove(entity)
-            );
-            vs$shipBlockEntitiesWithVisual.forEach(
-                (blockEntity, clientShip) -> manager.blockEntities().queueRemove(blockEntity)
-            );
-        }
-        vs$shipEmbedding.forEach(
-            (ship, embedding) -> {
-                embedding.delete();
-            }
-        );
-        vs$shipEntitiesWithVisual.clear();
+        vs$shipBEs.clear();
         vs$shipEmbedding.clear();
         vs$shipAnchor.clear();
         vs$EmbeddingOrigin.clear();
@@ -178,11 +165,7 @@ public class ShipEmbeddingManager {
         embedding.transforms(poseMatrix, normalMatrix);
     }
 
-    public void registerEntity(Entity entity, ClientShip ship) {
-        vs$shipEntitiesWithVisual.put(entity, ship);
-    }
-
-    public void registerBlockEntity(BlockEntity blockEntity, ClientShip ship) {
-        vs$shipBlockEntitiesWithVisual.put(blockEntity, ship);
+    public void register(BlockEntity blockEntity, ClientShip ship) {
+        vs$shipBEs.put(blockEntity, ship);
     }
 }

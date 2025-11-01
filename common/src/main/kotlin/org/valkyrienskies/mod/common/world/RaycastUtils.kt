@@ -32,9 +32,12 @@ private val logger = LogManager.getLogger("RaycastUtilsKt")
 
 @JvmOverloads
 fun Level.clipIncludeShips(
-    ctx: ClipContext, shouldTransformHitPos: Boolean = true, skipShip: ShipId? = null
+    ctx: ClipContext, shouldTransformHitPos: Boolean = true, skipShip: ShipId? = null, skipWorld: Boolean = false
 ): BlockHitResult {
-    val vanillaHit = vanillaClip(ctx)
+    val vanillaHit = if(skipWorld) {
+        val line = ctx.to.subtract(ctx.from)
+        BlockHitResult.miss(ctx.to, Direction.getNearest(line.x, line.y, line.z), BlockPos.containing(ctx.to))
+    } else vanillaClip(ctx)
 
     if (shipObjectWorld == null) {
         logger.error(
