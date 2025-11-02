@@ -1,5 +1,6 @@
 package org.valkyrienskies.mod.fabric.common
 
+import dev.engine_room.flywheel.api.event.ReloadLevelRendererCallback
 import net.fabricmc.api.EnvType
 import net.fabricmc.api.ModInitializer
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper
@@ -12,6 +13,7 @@ import net.fabricmc.fabric.api.`object`.builder.v1.entity.FabricDefaultAttribute
 import net.fabricmc.fabric.api.resource.IdentifiableResourceReloadListener
 import net.fabricmc.fabric.api.resource.ResourceManagerHelper
 import net.fabricmc.loader.api.FabricLoader
+import net.minecraft.client.multiplayer.ClientLevel
 import net.minecraft.client.renderer.entity.EntityRendererProvider.Context
 import net.minecraft.core.Registry
 import net.minecraft.core.registries.BuiltInRegistries
@@ -26,6 +28,7 @@ import net.minecraft.world.item.BlockItem
 import net.minecraft.world.item.Item
 import net.minecraft.world.item.Item.Properties
 import net.minecraft.world.level.block.Block
+import org.dynmap.modsupport.ModSupportAPI
 import org.valkyrienskies.core.apigame.VSCoreFactory
 import org.valkyrienskies.mod.client.EmptyRenderer
 import org.valkyrienskies.mod.client.VSPhysicsEntityModel
@@ -54,6 +57,8 @@ import org.valkyrienskies.mod.common.item.ShipAssemblerItem
 import org.valkyrienskies.mod.common.item.ShipCreatorItem
 import org.valkyrienskies.mod.compat.LoadedMods
 import org.valkyrienskies.mod.compat.flywheel.FlywheelCompat
+import org.valkyrienskies.mod.compat.flywheel.ShipEmbeddingManager
+import org.valkyrienskies.mod.fabric.compat.dynmap.FabricDynmapHandler
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executor
 import java.util.concurrent.atomic.AtomicBoolean
@@ -223,6 +228,9 @@ class ValkyrienSkiesModFabric : ModInitializer {
         CommonLifecycleEvents.TAGS_LOADED.register { _, _ ->
             VSGameEvents.tagsAreLoaded.emit(Unit)
         }
+
+        if (FabricLoader.getInstance().isModLoaded("dynmap"))
+            FabricDynmapHandler().register()
     }
 
     /**
@@ -258,6 +266,8 @@ class ValkyrienSkiesModFabric : ModInitializer {
         if (LoadedMods.flywheel == LoadedMods.FlywheelVersion.V1) {
             FlywheelCompat.initClient()
         }
+        if(FabricLoader.getInstance().isModLoaded("flywheel")) ReloadLevelRendererCallback.EVENT.register(
+            ReloadLevelRendererCallback { event: ClientLevel? -> ShipEmbeddingManager.INSTANCE.unloadAllShip() })
     }
 
     private fun registerBlockAndItem(registryName: String, block: Block): Item {

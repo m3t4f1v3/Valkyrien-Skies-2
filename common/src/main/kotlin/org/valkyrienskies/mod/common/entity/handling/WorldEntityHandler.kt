@@ -4,7 +4,9 @@ import com.mojang.blaze3d.vertex.PoseStack
 import net.minecraft.client.renderer.MultiBufferSource
 import net.minecraft.client.renderer.entity.EntityRenderer
 import net.minecraft.world.entity.Entity
+import net.minecraft.world.entity.projectile.AbstractArrow
 import net.minecraft.world.entity.projectile.AbstractHurtingProjectile
+import net.minecraft.world.entity.projectile.Projectile
 import net.minecraft.world.entity.projectile.ProjectileUtil
 import org.joml.Vector3d
 import org.valkyrienskies.core.api.ships.ClientShip
@@ -74,9 +76,20 @@ object WorldEntityHandler : VSEntityHandler {
             .add(shipVelocity)
             .toMinecraft()
 
-        val direction = ship.transform.shipToWorldRotation.transform(entity.lookAngle.toJOML())
-        val yaw = -atan2(direction.x, direction.z)
-        val pitch = -atan2(direction.y, sqrt((direction.x * direction.x) + (direction.z * direction.z)))
+        val direction : Vector3d
+        val yaw : Double
+        val pitch : Double
+
+        if (entity is AbstractArrow) {
+            direction = entity.deltaMovement.toJOML()
+            yaw = atan2(direction.x, direction.z)
+            pitch = atan2(direction.y, sqrt((direction.x * direction.x) + (direction.z * direction.z)))
+        } else {
+            direction = ship.shipToWorld.transformDirection(entity.lookAngle.toJOML())
+            yaw = atan2(-direction.x, direction.z)
+            pitch = atan2(direction.y, sqrt((direction.x * direction.x) + (direction.z * direction.z)))
+        }
+
         entity.yRot = (yaw * (180 / Math.PI)).toFloat()
         entity.xRot = (pitch * (180 / Math.PI)).toFloat()
         entity.yRotO = entity.yRot
@@ -85,11 +98,12 @@ object WorldEntityHandler : VSEntityHandler {
         if (entity is AbstractHurtingProjectile) {
             val power = Vector3d(entity.xPower, entity.yPower, entity.zPower)
 
-            ship.transform.shipToWorldRotation.transform(power)
+            ship.shipToWorld.transformDirection(power)
 
             entity.xPower = power.x
             entity.yPower = power.y
             entity.zPower = power.z
+
             ProjectileUtil.rotateTowardsMovement(entity, 1.0f)
         }
     }

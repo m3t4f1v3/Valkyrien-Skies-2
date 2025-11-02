@@ -81,9 +81,14 @@ object VSGameConfig {
 
         class WEATHER2 {
             @JsonSchema(
+                description = "If VS ships are affected by Weather2"
+            )
+            var enableWeatherCompat = true
+
+            @JsonSchema(
                 description = "How much Weather 2's wind affects VS ships"
             )
-            var windMultiplier = 0.0001f
+            var windMultiplier = 0.1f
 
             @JsonSchema(
                 description = "The maximum velocity a VS ship can travel because of wind"
@@ -100,6 +105,20 @@ object VSGameConfig {
             )
             var stormDampening = 0.0f
         }
+
+        val Dynmap = DYNMAP()
+
+        class DYNMAP {
+            @JsonSchema(description = "Show Ships as Icon Markers on Dynmap")
+            var showIconMarkers = true
+            @JsonSchema(description = "Show Ships as Polyline Markers on Dynmap")
+            var showPolylineMarkers = true
+            @JsonSchema(description = "Show the Ship ID in the label")
+            var showShipId = true
+            @JsonSchema(description = "Show the Ship Mass in the label")
+            var showShipMass = true
+        }
+
 
         @JsonSchema(
             description = "By default, the vanilla server prevents block interacts past a certain distance " +
