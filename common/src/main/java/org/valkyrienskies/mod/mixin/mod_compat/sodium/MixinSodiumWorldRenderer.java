@@ -113,24 +113,6 @@ public abstract class MixinSodiumWorldRenderer {
         });
     }
 
-    @Inject(method = "drawChunkLayer", at = @At("TAIL"))
-    private void afterChunkLayer(RenderType renderLayer, ChunkRenderMatrices matrices, double x, double y, double z,
-            CallbackInfo ci) {
-        // System.out.println("[MixinSodiumWorldRenderer] After CUTOUT renderLayer");
-
-        RenderDevice device = RenderDevice.INSTANCE;
-        CommandList commandList = device.createCommandList();
-        
-        if (renderLayer == RenderType.solid()) {
-            vsRenderLayer(matrices, DefaultTerrainRenderPasses.SOLID, x, y, z, commandList);
-            vsRenderLayer(matrices, DefaultTerrainRenderPasses.CUTOUT, x, y, z, commandList);
-        } else if (renderLayer == RenderType.translucent()) {
-            vsRenderLayer(matrices, DefaultTerrainRenderPasses.TRANSLUCENT, x, y, z, commandList);
-        }
-
-        commandList.close();
-    }
-
     @ModifyExpressionValue(
         method = "renderBlockEntities(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/RenderBuffers;Lit/unimi/dsi/fastutil/longs/Long2ObjectMap;FLnet/minecraft/client/renderer/MultiBufferSource$BufferSource;DDDLnet/minecraft/client/renderer/blockentity/BlockEntityRenderDispatcher;)V",
         at = @At(value = "INVOKE",

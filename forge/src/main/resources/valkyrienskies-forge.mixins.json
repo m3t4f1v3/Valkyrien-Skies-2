@@ -26,7 +26,8 @@
     "client.render.MixinLevelRenderer",
     "compat.create.client.MixinChainConveyorBlockEntity",
     "compat.create.client.MixinContraptionHandlerClient",
-    "compat.sodium.MixinRenderSectionManager"
+    "compat.sodium.MixinRenderSectionManager",
+    "compat.sodium.MixinSodiumShipRenderer"
   ],
   "injectors": {
     "defaultRequire": 1

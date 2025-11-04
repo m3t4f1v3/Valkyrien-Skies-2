@@ -54,14 +54,12 @@ object VSGameEvents {
     )
 
     data class ShipStartRenderEventSodium(
-        val renderer: ChunkRenderer,
         val pass: TerrainRenderPass,
         val matrices: ChunkRenderMatrices,
         val camX: Double, val camY: Double, val camZ: Double
     )
 
     data class ShipRenderEventSodium(
-        val renderer: ChunkRenderer,
         val pass: TerrainRenderPass,
         val matrices: ChunkRenderMatrices,
         val camX: Double, val camY: Double, val camZ: Double,
