@@ -243,6 +243,11 @@ object VSGameConfig {
             var renameShipCommandPerms = 2
 
             @JsonSchema(
+                description = "The permission level required to use the /vs remass command. Must be 0 <= x <= 4"
+            )
+            var remassShipCommandPerms = 2
+
+            @JsonSchema(
                 description = "The permission level required to use the /vs scale command. Must be 0 <= x <= 4"
             )
             var scaleShipCommandPerms = 2

@@ -144,67 +144,62 @@ object BlockStateInfo {
 
     /**
      * Recalculates mass of a ship. Useful if block masses were changed in a data pack, game config or in VS itself.
+     * The ship is made static before any of its physical properties are modified and only returns to original status
+     * if recalculation has been successfully completed.
      *
      * NOTE: There is no distinction between masses that were added by placing real blocks and those that were
      * added "manually" by calling onSetBlock. Some addons implement custom masses in this hacky way. Before
      * triggering a remass, these custom masses should be removed.
-     * TODO: Add a way to manage custom masses in VS itself so that they are trackable on VS side in situations
-     * like remassing.
-     There is no clean, direct way to zero out inertia of the ship. We remove mass block by block.
+     *
+     * @return false if mass recalculation has failed for any reason
      */
+    // TODO: Add a way to manage custom masses in VS itself so that they are trackable on VS side for remassing and so.
     fun remassShip(level: Level, ship: Ship): Boolean {
         if (level !is ServerLevel) return false
         if (ship !is LoadedServerShip) return false
         if (!::SORTED_REGISTRY.isInitialized) return false
 
-        val shipObjectWorld = level.shipObjectWorld
-
         val aabb = ship.shipAABB
         if (aabb == null) return false
 
+        // Last thing we want is something physical happening to our zero-mass ship.
         val wasStatic = ship.isStatic
         ship.isStatic = true
-        println(ship.inertiaData.mass)
-        println(ship.inertiaData.centerOfMass)
-        println(ship.inertiaData.inertiaTensor.toString())
 
-        // There is no clean, direct way to zero out inertia of the ship. We remove mass block by block.
-        var count = 0
-        BlockPos.betweenClosed(
-            aabb.minX(), aabb.minY(), aabb.minZ(), aabb.maxX(), aabb.maxY(),
-            aabb.maxZ()
-        ).forEach {
-            val state = level.getBlockState(it)
-            val (airBlockMass, airBlockType) = get(Blocks.AIR.defaultBlockState()) ?: return false
-            val (realBlockMass, realBlockType) = get(state) ?: return false
-            if (realBlockType != airBlockType) ++count
-        }
-        val massPerBlock = ship.inertiaData.mass / count
+        val (airBlockMass, airBlockType) = get(Blocks.AIR.defaultBlockState()) ?: return false
+        // Before we rebuild masses, make sure we have a ship with zero mass and no colliders.
+        // Blocks are replaced with air (in physical representation of a ship, no Minecraft blockstates are changed)
         BlockPos.betweenClosed(
             aabb.minX(), aabb.minY(), aabb.minZ(), aabb.maxX(), aabb.maxY(),
             aabb.maxZ()
         ).forEach {
             val state = level.getBlockState(it)
             val (realBlockMass, realBlockType) = get(state) ?: return false
-            val (airBlockMass, airBlockType) = get(Blocks.AIR.defaultBlockState()) ?: return false
             if (realBlockType != airBlockType) {
                 level.shipObjectWorld.onSetBlock(
                     it.x, it.y, it.z,
                     level.dimensionId,
                     realBlockType, airBlockType,
-                    massPerBlock, 0.0
+                    0.0, 0.0 // Making the block air without modifying ship mass, CoM and MoI
                 )
             }
         }
-        // After removing all blocks of a ship our mass is zero so CoM and MoI should be zeroed out as well.
-        // This is why we do a second iteration instead of removing and immediately readding mass.
+        // Zeroing out ship mass.
+        // This looks wrong but is actually fine. As per ShipInertiaDataImpl, if the resulting ship mass is zero,
+        // its CoM and MoI are explicitly zeroed out, bypassing any calculations. Any blockPos inside ship AABB is good
+        // for this purpose.
+        level.shipObjectWorld.onSetBlock(
+            aabb.minX(), aabb.minY(), aabb.minZ(), level.dimensionId,
+            airBlockType, airBlockType,
+            ship.inertiaData.mass, 0.0
+        )
+        // Readding all blocks to ship's physics representation (mass, block type)
         BlockPos.betweenClosed(
             aabb.minX(), aabb.minY(), aabb.minZ(), aabb.maxX(), aabb.maxY(),
             aabb.maxZ()
         ).forEach {
             val state = level.getBlockState(it)
             val (realBlockMass, realBlockType) = get(state) ?: return false
-            val (airBlockMass, airBlockType) = get(Blocks.AIR.defaultBlockState()) ?: return false
             if (realBlockType != airBlockType) {
                 level.shipObjectWorld.onSetBlock(
                     it.x, it.y, it.z,
@@ -214,11 +209,6 @@ object BlockStateInfo {
                 )
             }
         }
-        // In theory, if a remass was triggered without any changes to blockstate masses, ship mass, CoM and MoI
-        // should be identical.
-        println(ship.inertiaData.mass)
-        println(ship.inertiaData.centerOfMass)
-        println(ship.inertiaData.inertiaTensor.toString())
         ship.isStatic = wasStatic
 
         return true

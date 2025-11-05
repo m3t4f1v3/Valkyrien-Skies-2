@@ -113,7 +113,7 @@ object VSCommands {
                 )
                 .then(
                     literal("remass")
-                        .requires{ it.hasPermission(VSGameConfig.SERVER.Commands.setStaticShipCommandPerms)}.then(
+                        .requires{ it.hasPermission(VSGameConfig.SERVER.Commands.remassShipCommandPerms)}.then(
                             argument("ships", ShipArgument.ships()).executes {
                                 val r = ShipArgument.getShips(it, "ships").toList() as List<ServerShip>
                                 var successful = 0
