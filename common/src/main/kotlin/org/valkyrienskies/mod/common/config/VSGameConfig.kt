@@ -195,6 +195,26 @@ object VSGameConfig {
         var minScaling = 0.25
 
         @JsonSchema(
+            description = "Default mass for blocks that do not have it defined in data or code. Blocks with masses below 1000 float in water"
+        )
+        var defaultBlockMass = 100.0
+
+        @JsonSchema(
+            description = "Default elasticity coefficient for blocks. Higher values make blocks more bouncy"
+        )
+        var defaultBlockElasticity = 0.3
+
+        @JsonSchema(
+            description = "Default friction coefficient for blocks. Lower values make blocks more slippery"
+        )
+        var defaultBlockFriction = 0.5
+
+        @JsonSchema(
+            description = "Default block hardness (unused value, placeholder for later)"
+        )
+        var defaultBlockHardness = 1.0
+
+        @JsonSchema(
             description = "Enable splitting in worldspace. (Experimental!)"
         )
         var enableWorldSplitting = false
