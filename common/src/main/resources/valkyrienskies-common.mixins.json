@@ -67,6 +67,7 @@
     "mod_compat.create.MixinContraption",
     "mod_compat.create.MixinContraptionCollider",
     "mod_compat.create.MixinEntityLauncher",
+    "mod_compat.create.MixinFactoryPanelConnectionHandler",
     "mod_compat.create.MixinLaunchedItem",
     "mod_compat.create.MixinRedstoneLinkNetworkHandler",
     "mod_compat.create.MixinSharedDepotBlockMethods",
