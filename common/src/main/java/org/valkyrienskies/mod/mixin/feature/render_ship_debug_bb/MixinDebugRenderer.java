@@ -41,6 +41,9 @@ public class MixinDebugRenderer {
         final ClientShipWorldCore shipObjectClientWorld = VSGameUtilsKt.getShipObjectWorld(world);
 
         if (Minecraft.getInstance().getEntityRenderDispatcher().shouldRenderHitBoxes()) {
+            // Reduced debug info (gamerule) disables ability to see normal hitboxes, so we disable ship ones too
+            if (Minecraft.getInstance().showOnlyReducedInfo()) return;
+
             for (final ClientShip shipObjectClient : shipObjectClientWorld.getLoadedShips()) {
                 final ShipTransform shipRenderTransform = shipObjectClient.getRenderTransform();
                 final Vector3dc shipRenderPosition = shipRenderTransform.getShipPositionInWorldCoordinates();
