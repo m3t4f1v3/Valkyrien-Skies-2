@@ -6,6 +6,8 @@
   "mixins": [
     "compat.create.MixinBlockBreakingKineticTileEntity",
     "compat.create.MixinControlledContraptionEntity",
+    "compat.create.client.MixinBlockEntityRenderHelper66",
+    "compat.create.client.MixinSuperGlueSelectionHandler66",
     "compat.immersivengineering.MixinBlockEntityInventory",
     "compat.mffs.MixinClientPacketHandler",
     "compat.mffs.MixinFrequencyGrid",
@@ -20,10 +22,10 @@
   ],
   "client": [
     "client.render.MixinLevelRenderer",
-    "compat.create.client.MixinBlockEntityRenderHelper",
+    "compat.create.client.MixinBlockEntityRenderHelper67",
     "compat.create.client.MixinChainConveyorBlockEntity",
     "compat.create.client.MixinContraptionHandlerClient",
-    "compat.create.client.MixinSuperGlueSelectionHandler",
+    "compat.create.client.MixinSuperGlueSelectionHandler67",
     "compat.sodium.MixinRenderSectionManager"
   ],
   "injectors": {
