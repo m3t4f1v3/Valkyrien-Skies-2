@@ -45,7 +45,9 @@ public class MixinTrackBlockOutline {
     }
 
     @WrapOperation(
-        method = "drawCustomBlockSelection",
+        // Two mixin targets. One for 6.0.7+, one for 6.0.6.
+        // If we just use "drawCustomBlockSelection" it's not smart enough to match both
+        method = {"Lcom/simibubi/create/content/trains/track/TrackBlockOutline;drawCustomBlockSelection(Lnet/minecraft/client/renderer/LevelRenderer;Lnet/minecraft/client/Camera;Lnet/minecraft/world/phys/HitResult;FLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;)Z", "Lcom/simibubi/create/content/trains/track/TrackBlockOutline;drawCustomBlockSelection(Lnet/minecraftforge/client/event/RenderHighlightEvent$Block;)V"},
         at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/vertex/PoseStack;translate(DDD)V")
     )
     private static void wrapSelection(PoseStack instance, double d, double e, double f, Operation<Void> original,
