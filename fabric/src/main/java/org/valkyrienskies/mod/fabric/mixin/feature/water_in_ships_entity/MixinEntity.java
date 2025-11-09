@@ -112,11 +112,6 @@ public abstract class MixinEntity {
         return valkyrienskies$fluidPushE;
     }
 
-    @Inject(
-        at = @At(value = "INVOKE", target = "Lnet/minecraft/world/phys/Vec3;length()D", ordinal = 0),
-        method = "updateFluidHeightAndDoFluidPushing",
-        cancellable = true
-    )
 
     @Inject(
         at = @At(value = "INVOKE", target = "Lnet/minecraft/world/phys/Vec3;length()D", ordinal = 0),
