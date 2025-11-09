@@ -12,6 +12,7 @@ import com.simibubi.create.content.contraptions.actors.harvester.HarvesterMoveme
 import com.simibubi.create.content.contraptions.behaviour.MovementContext;
 import com.simibubi.create.content.kinetics.base.BlockBreakingMovementBehaviour;
 import com.simibubi.create.content.kinetics.deployer.DeployerMovementBehaviour;
+import dev.engine_room.flywheel.api.visualization.VisualizationManager;
 import net.createmod.catnip.math.VecHelper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.syncher.EntityDataAccessor;
@@ -193,6 +194,24 @@ public abstract class MixinAbstractContraptionEntity extends Entity implements M
 
     @Shadow
     protected abstract void onContraptionStalled();
+
+    /**
+     * If the contraption is moved between ship and world or other ship, the anchor should be moved too.
+     * As far as I know this will only happen to carriage contraptions which can be relocated on tracks, but I'll add it here just in case other contraption entities are moved to a ship.
+     */
+    @Inject(
+        method = "tick",
+        at = @At("HEAD")
+    )
+    private void updateAnchor(CallbackInfo ci) {
+        if (VSGameUtilsKt.getShipManagingPos(level(), contraption.anchor) != VSGameUtilsKt.getShipManaging(this)) {
+            this.contraption.anchor = this.blockPosition();
+            if(VisualizationManager.supportsVisualization(level())) {
+                VisualizationManager.get(level()).entities().queueRemove(this);
+                VisualizationManager.get(level()).entities().queueAdd(this);
+            }
+        }
+    }
 
     @Inject(method = "tickActors", at = @At("HEAD"), cancellable = true, remap = false)
     private void preTickActors(final CallbackInfo ci) {
