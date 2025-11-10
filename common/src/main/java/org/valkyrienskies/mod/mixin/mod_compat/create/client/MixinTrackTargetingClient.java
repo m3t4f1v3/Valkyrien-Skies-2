@@ -20,7 +20,7 @@ import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
 @Mixin(TrackTargetingClient.class)
 public class MixinTrackTargetingClient {
     @Shadow
-    private static BlockPos lastHovered;
+    static BlockPos lastHovered;
 
     @WrapOperation(
         method = "render",
