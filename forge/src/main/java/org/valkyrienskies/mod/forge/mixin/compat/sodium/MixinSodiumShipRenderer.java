@@ -1,6 +1,7 @@
 package org.valkyrienskies.mod.forge.mixin.compat.sodium;
 
 import org.joml.Matrix4d;
+import org.joml.Matrix4dc;
 import org.joml.Matrix4f;
 import org.joml.Vector3dc;
 import org.spongepowered.asm.mixin.Mixin;
@@ -43,12 +44,11 @@ public class MixinSodiumShipRenderer {
         ((RenderSectionManagerDuck) this.renderSectionManager).vs_getShipRenderLists().forEach((ship, renderList) -> {
             VSGameEvents.INSTANCE.getRenderShipSodium().emit(new ShipRenderEventSodium(pass, matrices, x, y, z, ship, renderList));
             final Vector3dc center = ship.getRenderTransform().getPositionInShip();
-            final org.joml.Matrix4dc s = ship.getRenderTransform().getShipToWorld();
+            final Matrix4dc s = ship.getRenderTransform().getShipToWorld();
             final Matrix4d newModelView = new Matrix4d(matrices.modelView())
                 .translate(-x, -y, -z)
-                .mul(s.m00(), s.m01(), s.m02(), s.m03(), s.m10(), s.m11(), s.m12(), s.m13(), s.m20(),
-                    s.m21(), s.m22(), s.m23(), s.m30(), s.m31(), s.m32(), s.m33())
-                .translate(center.x(), center.y(), center.z());
+                .mul(s)
+                .translate(center);
 
             final ChunkRenderMatrices newMatrices =
                 new ChunkRenderMatrices(matrices.projection(), new Matrix4f(newModelView));
