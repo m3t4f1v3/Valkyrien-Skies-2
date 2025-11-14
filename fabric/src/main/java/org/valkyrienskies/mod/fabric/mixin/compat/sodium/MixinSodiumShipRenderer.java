@@ -38,7 +38,7 @@ public class MixinSodiumShipRenderer {
             pass, matrices, x, y, z
         ));
 
-        ((RenderSectionManagerDuck) this).vs_getShipRenderLists().forEach((ship, renderList) -> {
+        ((RenderSectionManagerDuck) this.renderSectionManager).vs_getShipRenderLists().forEach((ship, renderList) -> {
             VSGameEvents.INSTANCE.getRenderShipSodium().emit(new ShipRenderEventSodium(pass, matrices, x, y, z, ship, renderList));
             final Vector3dc center = ship.getRenderTransform().getPositionInShip();
             final org.joml.Matrix4dc s = ship.getRenderTransform().getShipToWorld();
