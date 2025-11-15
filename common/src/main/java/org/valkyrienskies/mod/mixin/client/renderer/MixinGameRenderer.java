@@ -19,8 +19,10 @@ import org.joml.Quaterniond;
 import org.joml.Quaternionf;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
+import org.joml.primitives.AABBdc;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -29,6 +31,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.valkyrienskies.core.api.ships.ClientShip;
 import org.valkyrienskies.core.apigame.world.ClientShipWorldCore;
+import org.valkyrienskies.core.util.VectorConversionsKt;
 import org.valkyrienskies.mod.client.IVSCamera;
 import org.valkyrienskies.mod.common.IShipObjectWorldClientProvider;
 import org.valkyrienskies.mod.common.entity.ShipMountedToData;
@@ -296,4 +299,28 @@ public abstract class MixinGameRenderer {
             this.getProjectionMatrix(Math.max(fov, this.minecraft.options.fov().get())));
     }
     // endregion
+
+
+    @Overwrite
+    public float getDepthFar() {
+        float maxDistance = this.minecraft.options.renderDistance().get() * 4;
+        for (final ClientShip ship : VSGameUtilsKt.getShipObjectWorld(Minecraft.getInstance()).getLoadedShips()) {
+            Vec3 cameraPos = this.mainCamera.getPosition();
+            AABBdc shipAABB = ship.getRenderAABB();
+            // find the furthest distance from the camera to the ship AABB corners
+            double furthestDistanceSq = 0;
+            for (int i = 0; i < 8; i++) {
+                double x = (i & 1) == 0 ? shipAABB.minX() : shipAABB.maxX();
+                double y = (i & 2) == 0 ? shipAABB.minY() : shipAABB.maxY();
+                double z = (i & 4) == 0 ? shipAABB.minZ() : shipAABB.maxZ();
+                double distanceSq = cameraPos.distanceToSqr(new Vec3(x, y, z));
+                if (distanceSq > furthestDistanceSq) {
+                    furthestDistanceSq = distanceSq;
+                }
+            }
+            maxDistance = Math.max(maxDistance, (float) Math.sqrt(furthestDistanceSq));
+        }
+
+        return maxDistance;
+    }
 }

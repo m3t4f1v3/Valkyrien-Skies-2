@@ -17,6 +17,7 @@ import org.valkyrienskies.core.api.ships.ClientShip;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 
 import net.minecraft.core.Direction;
+import net.minecraft.core.Vec3i;
 
 @Mixin(DefaultChunkRenderer.class)
 public abstract class MixinDefaultChunkRenderer {
@@ -46,14 +47,8 @@ public abstract class MixinDefaultChunkRenderer {
         int facesVisible = 0;
 
         for (Direction dir : Direction.values()) {
-            Vector3d normal = switch (dir) {
-                case NORTH -> new Vector3d(0, 0, -1);
-                case SOUTH -> new Vector3d(0, 0, 1);
-                case EAST -> new Vector3d(1, 0, 0);
-                case WEST -> new Vector3d(-1, 0, 0);
-                case UP -> new Vector3d(0, 1, 0);
-                case DOWN -> new Vector3d(0, -1, 0);
-            };
+            Vec3i normMc = dir.getNormal();
+            Vector3d normal = new Vector3d(normMc.getX(), normMc.getY(), normMc.getZ());
 
             if (deltaShip.dot(normal) < 0.05) {
                 facesVisible |= 1 << ModelQuadFacing.fromDirection(dir).ordinal();
