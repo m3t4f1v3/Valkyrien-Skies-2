@@ -397,7 +397,12 @@ object MassDatapackResolver : BlockStateInfoProvider {
                 blockType = if (blockState.liquid()) { //TODO: This is also deprecated. I could check if the blockState is wet and not waterlogged but couldn't be sure if that's what this is for.
                     getFluidState(blockState.fluidState).second
                 } else {
-                    val voxelShape = blockState.getCollisionShape(dummyBlockGetter, BlockPos.ZERO)
+                    val voxelShape: VoxelShape
+                    if (blockState.isSolid) {
+                        voxelShape = blockState.getShape(dummyBlockGetter, BlockPos.ZERO)
+                    } else {
+                        voxelShape = blockState.getCollisionShape(dummyBlockGetter, BlockPos.ZERO)
+                    }
 
                     val collisionShape: Lod1SolidCollisionShape = if (voxelShapeToCollisionShapeMap.contains(voxelShape)) {
                         voxelShapeToCollisionShapeMap[voxelShape]!!
