@@ -17,7 +17,7 @@ import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
 @Mixin(EdgeInteractionHandler.class)
 public class MixinEdgeInteractionHandler {
     @WrapOperation(
-        method="onBlockActivated",
+        method={"Lcom/simibubi/create/foundation/blockEntity/behaviour/edgeInteraction/EdgeInteractionHandler;onBlockActivated(Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/world/level/Level;Lnet/minecraft/world/InteractionHand;Lnet/minecraft/world/phys/BlockHitResult;)Lnet/minecraft/world/InteractionResult;", "Lcom/simibubi/create/foundation/blockEntity/behaviour/edgeInteraction/EdgeInteractionHandler;onBlockActivated(Lnet/minecraftforge/event/entity/player/PlayerInteractEvent$RightClickBlock;)V"},
         at=@At(value = "INVOKE", target = "Lnet/minecraft/world/phys/BlockHitResult;getLocation()Lnet/minecraft/world/phys/Vec3;")
     )
     private static Vec3 injectGetLocation(BlockHitResult instance, Operation<Vec3> original,  @Local(ordinal = 0)
