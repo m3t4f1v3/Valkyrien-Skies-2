@@ -28,8 +28,7 @@ import net.minecraft.world.item.BlockItem
 import net.minecraft.world.item.Item
 import net.minecraft.world.item.Item.Properties
 import net.minecraft.world.level.block.Block
-import org.dynmap.modsupport.ModSupportAPI
-import org.valkyrienskies.core.apigame.VSCoreFactory
+import org.valkyrienskies.core.internal.VsiCoreFactory
 import org.valkyrienskies.mod.client.EmptyRenderer
 import org.valkyrienskies.mod.client.VSPhysicsEntityModel
 import org.valkyrienskies.mod.client.VSPhysicsEntityRenderer
@@ -124,9 +123,9 @@ class ValkyrienSkiesModFabric : ModInitializer {
         val networking = VSFabricNetworking(isClient)
         val hooks = FabricHooksImpl(networking)
         val vsCore = if (isClient) {
-            VSCoreFactory.instance.newVsCoreClient(hooks)
+            VsiCoreFactory.instance.newVsCoreClient(hooks)
         } else {
-            VSCoreFactory.instance.newVsCoreServer(hooks)
+            VsiCoreFactory.instance.newVsCoreServer(hooks)
         }
 
         networking.register(vsCore.hooks)

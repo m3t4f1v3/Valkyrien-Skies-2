@@ -28,7 +28,7 @@ import net.minecraftforge.fml.loading.FMLEnvironment
 import net.minecraftforge.registries.DeferredRegister
 import net.minecraftforge.registries.ForgeRegistries
 import net.minecraftforge.registries.RegistryObject
-import org.valkyrienskies.core.apigame.VSCoreFactory
+import org.valkyrienskies.core.internal.VsiCoreFactory
 import org.valkyrienskies.core.impl.config.VSCoreConfig
 import org.valkyrienskies.mod.client.EmptyRenderer
 import org.valkyrienskies.mod.client.VSPhysicsEntityModel
@@ -88,9 +88,9 @@ class ValkyrienSkiesModForge {
     init {
         val isClient = FMLEnvironment.dist.isClient
         val vsCore = if (isClient) {
-            VSCoreFactory.instance.newVsCoreClient(ForgeHooksImpl)
+            VsiCoreFactory.instance.newVsCoreClient(ForgeHooksImpl)
         } else {
-            VSCoreFactory.instance.newVsCoreServer(ForgeHooksImpl)
+            VsiCoreFactory.instance.newVsCoreServer(ForgeHooksImpl)
         }
 
         VSForgeNetworking.registerPacketHandlers(vsCore.hooks)

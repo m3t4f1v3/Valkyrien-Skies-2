@@ -13,8 +13,8 @@ import net.minecraft.world.item.ItemStack
 import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.entity.BlockEntityType
 import org.valkyrienskies.core.api.world.properties.DimensionId
-import org.valkyrienskies.core.apigame.VSCore
-import org.valkyrienskies.core.apigame.VSCoreClient
+import org.valkyrienskies.core.internal.VsiCore
+import org.valkyrienskies.core.internal.VsiCoreClient
 import org.valkyrienskies.mod.api.SeatedControllingPlayer
 import org.valkyrienskies.mod.api_impl.events.VsApiImpl
 import org.valkyrienskies.mod.common.blockentity.DebugPhysicsTickables
@@ -58,10 +58,10 @@ object ValkyrienSkiesMod {
     var currentServer: MinecraftServer? = null
 
     @JvmStatic
-    lateinit var vsCore: VSCore
+    lateinit var vsCore: VsiCore
 
     @JvmStatic
-    val vsCoreClient get() = vsCore as VSCoreClient
+    val vsCoreClient get() = vsCore as VsiCoreClient
 
     @JvmStatic
     val api by lazy {
@@ -71,7 +71,7 @@ object ValkyrienSkiesMod {
     @JvmStatic
     lateinit var splitHandler: SplitHandler
 
-    fun init(core: VSCore) {
+    fun init(core: VsiCore) {
         this.vsCore = core
 
         BlockStateInfo.init()

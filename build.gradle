@@ -42,13 +42,13 @@ tasks.register("updateVsCore") {
 
     try {
         def vsCoreBuild = gradle.includedBuild("vs-core")
-        versionFile = new File(vsCoreBuild.projectDir, "api-game/build/version.txt")
+        versionFile = new File(vsCoreBuild.projectDir, "internal/build/version.txt")
 
         inputs.file(versionFile)
         outputs.file(gradleProperties)
-        dependsOn(vsCoreBuild.task(":api-game:writeVersion"))
+        dependsOn(vsCoreBuild.task(":internal:writeVersion"))
 
-        [':impl', ':api', ':api-game', ':util'].each {
+        [':impl', ':api', ':internal', ':util'].each {
             dependsOn(vsCoreBuild.task("${it}:publishToMavenLocal"))
         }
     } catch (UnknownDomainObjectException ignore) {}
@@ -81,7 +81,7 @@ subprojects {
                 }
             }
 
-            [':impl', ':api', ':api-game'].each {
+            [':impl', ':api', ':internal'].each {
                 compileJava.dependsOn(vsCoreBuild.task("${it}:publishToMavenLocal"))
             }
         } catch (UnknownDomainObjectException ignore) {}

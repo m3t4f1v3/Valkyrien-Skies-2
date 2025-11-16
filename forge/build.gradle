@@ -137,7 +137,7 @@ dependencies {
 
     // Shade vs-core
     implementation("org.valkyrienskies.core:util:${rootProject.vs_core_version}")
-    implementation("org.valkyrienskies.core:api-game:${rootProject.vs_core_version}") {
+    implementation("org.valkyrienskies.core:internal:${rootProject.vs_core_version}") {
         exclude group: 'org.joml', module: 'joml'
     }
     runtimeOnly("org.valkyrienskies.core:impl:${rootProject.vs_core_version}") {
@@ -155,7 +155,7 @@ dependencies {
         transitive = false
     }
 
-    forgeRuntimeLibrary shadowCommon("org.valkyrienskies.core:api-game:${rootProject.vs_core_version}") {
+    forgeRuntimeLibrary shadowCommon("org.valkyrienskies.core:internal:${rootProject.vs_core_version}") {
         exclude group: 'org.joml', module: 'joml'
         transitive = false
     }
