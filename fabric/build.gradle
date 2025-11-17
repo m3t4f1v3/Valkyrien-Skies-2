@@ -68,7 +68,7 @@ dependencies {
     //modRuntimeOnly("cc.tweaked:cc-tweaked-${minecraft_version}-fabric:${cc_tweaked_version}")
 
     // Create compat
-    modImplementation("com.simibubi.create:create-fabric-${minecraft_version}:${create_fabric_version}") {
+    modImplementation("com.simibubi.create:create-fabric:${create_fabric_version}") {
         exclude group: 'com.github.AlphaMode', module: 'fakeconfigtoml'
     }
     modImplementation("com.tterrag.registrate_fabric:Registrate:${registrate_version}")
