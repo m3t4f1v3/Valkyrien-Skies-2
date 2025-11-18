@@ -43,18 +43,25 @@ public abstract class MixinSodiumWorldRenderer {
         method = "renderBlockEntity",
         at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/vertex/PoseStack;translate(DDD)V")
     )
-    private static void renderShipBlockEntityInShipyard(final PoseStack instance, final double d, final double e,
-        final double f, final PoseStack ignore, final RenderBuffers bufferBuilders,
+    private static void renderShipBlockEntityInShipyard(
+        final PoseStack instance,
+        final double x, final double y, final double z,
+        final PoseStack ignore,
+        final RenderBuffers bufferBuilders,
         final Long2ObjectMap<SortedSet<BlockDestructionProgress>> blockBreakingProgressions,
-        final float tickDelta, final MultiBufferSource.BufferSource immediate, final double camX, final double camY,
-        final double camZ, final BlockEntityRenderDispatcher dispatcher, final BlockEntity entity) {
-
+        final float tickDelta,
+        final MultiBufferSource.BufferSource immediate,
+        final double camX, final double camY, final double camZ,
+        final BlockEntityRenderDispatcher dispatcher,
+        final BlockEntity entity
+    ) {
         final BlockPos pos = entity.getBlockPos();
-        final ClientLevel level = (ClientLevel) dispatcher.level;
-        final ClientShip ship = VSGameUtilsKt.getShipObjectManagingPos(level, pos);
+        final ClientShip ship = dispatcher.level instanceof final ClientLevel level
+            ? VSGameUtilsKt.getShipObjectManagingPos(level, pos)
+            : null;
 
         if (ship == null) {
-            instance.translate(d, e, f);
+            instance.translate(x, y, z);
         } else {
             VSClientGameUtils.transformRenderWithShip(ship.getRenderTransform(), instance, pos, camX, camY, camZ);
         }
