@@ -236,10 +236,9 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
         shipRenderChunks.forEach((ship, chunks) -> {
             poseStack.pushPose();
             final ShipTransform shipTransform = ship.getRenderTransform();
-            final Vector3dc center = shipTransform.getPositionInShip();
             final Vector3dc cameraShipSpace = shipTransform.getWorldToShip().transformPosition(new Vector3d(camX, camY, camZ));
             VSClientGameUtils.transformRenderWithShip(ship.getRenderTransform(), poseStack,
-                center.x(), center.y(), center.z(),
+                cameraShipSpace.x(), cameraShipSpace.y(), cameraShipSpace.z(),
                 camX, camY, camZ);
 
             final var event = new VSGameEvents.ShipRenderEvent(
