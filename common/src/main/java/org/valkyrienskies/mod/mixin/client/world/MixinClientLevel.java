@@ -32,7 +32,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.valkyrienskies.core.api.ships.Ship;
-import org.valkyrienskies.core.apigame.world.ClientShipWorldCore;
+import org.valkyrienskies.core.internal.world.VsiClientShipWorld;
 import org.valkyrienskies.core.util.AABBdUtilKt;
 import org.valkyrienskies.core.util.VectorConversionsKt;
 import org.valkyrienskies.mod.client.audio.SimpleSoundInstanceOnShip;
@@ -50,7 +50,7 @@ public abstract class MixinClientLevel implements IShipObjectWorldClientProvider
 
     @NotNull
     @Override
-    public ClientShipWorldCore getShipObjectWorld() {
+    public VsiClientShipWorld getShipObjectWorld() {
         return ((IShipObjectWorldClientProvider) minecraft).getShipObjectWorld();
     }
 
@@ -158,27 +158,6 @@ public abstract class MixinClientLevel implements IShipObjectWorldClientProvider
                 thisAsClientLevel.addParticle(new BlockParticleOption(ParticleTypes.BLOCK_MARKER, blockState),
                     (double) posX + 0.5, (double) posY + 0.5,
                     (double) posZ + 0.5, 0.0, 0.0, 0.0);
-            }
-
-            if (!blockState.isCollisionShapeFullBlock(thisAsClientLevel, mutableBlockPos)) {
-                thisAsClientLevel.getBiome(mutableBlockPos)
-                    .value()
-                    .getAmbientParticle()
-                    .ifPresent(
-                        ambientParticleSettings -> {
-                            if (ambientParticleSettings.canSpawn(vsRandom)) {
-                                thisAsClientLevel.addParticle(
-                                    ambientParticleSettings.getOptions(),
-                                    (double) mutableBlockPos.getX() + vsRandom.nextDouble(),
-                                    (double) mutableBlockPos.getY() + vsRandom.nextDouble(),
-                                    (double) mutableBlockPos.getZ() + vsRandom.nextDouble(),
-                                    0.0,
-                                    0.0,
-                                    0.0
-                                );
-                            }
-                        }
-                    );
             }
         }
     }

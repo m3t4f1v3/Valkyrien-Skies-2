@@ -1,5 +1,6 @@
 package org.valkyrienskies.mod.common
 
+import net.minecraft.client.Minecraft
 import net.minecraft.core.registries.Registries
 import net.minecraft.network.chat.Component
 import net.minecraft.resources.ResourceKey
@@ -12,8 +13,8 @@ import net.minecraft.world.item.ItemStack
 import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.entity.BlockEntityType
 import org.valkyrienskies.core.api.world.properties.DimensionId
-import org.valkyrienskies.core.apigame.VSCore
-import org.valkyrienskies.core.apigame.VSCoreClient
+import org.valkyrienskies.core.internal.VsiCore
+import org.valkyrienskies.core.internal.VsiCoreClient
 import org.valkyrienskies.mod.api.SeatedControllingPlayer
 import org.valkyrienskies.mod.api_impl.events.VsApiImpl
 import org.valkyrienskies.mod.common.blockentity.DebugPhysicsTickables
@@ -27,6 +28,7 @@ import org.valkyrienskies.mod.common.util.GameToPhysicsAdapter
 import org.valkyrienskies.mod.common.util.ShipSettings
 import org.valkyrienskies.mod.common.util.SplitHandler
 import org.valkyrienskies.mod.common.util.SplittingDisablerAttachment
+import org.valkyrienskies.mod.mixinducks.client.world.ClientChunkCacheDuck
 
 object ValkyrienSkiesMod {
     const val MOD_ID = "valkyrienskies"
@@ -35,6 +37,7 @@ object ValkyrienSkiesMod {
     lateinit var TEST_HINGE: Block
     lateinit var TEST_FLAP: Block
     lateinit var TEST_WING: Block
+    lateinit var TEST_SPHERE: Block
     lateinit var TEST_THRUSTER: Block
     lateinit var CONNECTION_CHECKER_ITEM: Item
     lateinit var SHIP_CREATOR_ITEM: Item
@@ -55,10 +58,10 @@ object ValkyrienSkiesMod {
     var currentServer: MinecraftServer? = null
 
     @JvmStatic
-    lateinit var vsCore: VSCore
+    lateinit var vsCore: VsiCore
 
     @JvmStatic
-    val vsCoreClient get() = vsCore as VSCoreClient
+    val vsCoreClient get() = vsCore as VsiCoreClient
 
     @JvmStatic
     val api by lazy {
@@ -68,7 +71,7 @@ object ValkyrienSkiesMod {
     @JvmStatic
     lateinit var splitHandler: SplitHandler
 
-    fun init(core: VSCore) {
+    fun init(core: VsiCore) {
         this.vsCore = core
 
         BlockStateInfo.init()
@@ -98,6 +101,12 @@ object ValkyrienSkiesMod {
                 }
             }
             DebugPhysicsTickables.physTick(event.world, event.delta)
+        }
+        core.shipUnloadEventClient.on { event ->
+            val level = Minecraft.getInstance().level
+            if (level != null) {
+                (level.getChunkSource() as ClientChunkCacheDuck).`vs$removeShip`(event.ship)
+            }
         }
     }
 

@@ -8,6 +8,7 @@ import com.simibubi.create.content.trains.entity.CarriageContraptionVisual;
 import dev.engine_room.flywheel.api.visualization.VisualizationContext;
 import dev.engine_room.flywheel.lib.transform.PoseTransformStack;
 import dev.engine_room.flywheel.lib.transform.Translate;
+import net.createmod.catnip.animation.AnimationTickHolder;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
@@ -30,24 +31,28 @@ public abstract class MixinCarriageContraptionInstance extends ContraptionVisual
     }
 
     @WrapOperation(remap = false,
-        method = "animate", at = @At(value = "INVOKE",
-        target = "Ldev/engine_room/flywheel/lib/transform/PoseTransformStack;translate(Lorg/joml/Vector3fc;)Ldev/engine_room/flywheel/lib/transform/Translate;")
+            method = "animate", at = @At(
+                value = "INVOKE",
+                target = "Ldev/engine_room/flywheel/lib/transform/PoseTransformStack;translate(Lorg/joml/Vector3fc;)Ldev/engine_room/flywheel/lib/transform/Translate;"
+            )
     )
-    private Translate<PoseTransformStack> redirectTranslate(PoseTransformStack instance, Vector3fc vector3f, Operation<Object> operation, float partialTicks) {
+    private Translate redirectTranslate(PoseTransformStack instance, Vector3fc vector3fc, Operation<Translate> original) {
+
+        final float partialTicks = AnimationTickHolder.getPartialTicks();
         final Level level = this.level;
         final ClientShip ship =
-                (ClientShip) VSGameUtilsKt.getShipObjectManagingPos(level, vector3f.x(), vector3f.y(), vector3f.z());
+                (ClientShip) VSGameUtilsKt.getShipObjectManagingPos(level, vector3fc.x(), vector3fc.y(), vector3fc.z());
 
         if (ship != null) {
             final CarriageContraptionEntity carriageContraptionEntity = this.entity;
             final Vector3d origin = VectorConversionsMCKt.toJOMLD(this.visualizationContext.renderOrigin());
             final Vec3 pos = carriageContraptionEntity.position();
             final Vector3d newPosition =
-                new Vector3d(
-                    Mth.lerp(partialTicks, carriageContraptionEntity.xOld, pos.x),
-                    Mth.lerp(partialTicks, carriageContraptionEntity.yOld, pos.y),
-                    Mth.lerp(partialTicks, carriageContraptionEntity.zOld, pos.z)
-                );
+                    new Vector3d(
+                            Mth.lerp(partialTicks, carriageContraptionEntity.xOld, pos.x),
+                            Mth.lerp(partialTicks, carriageContraptionEntity.yOld, pos.y),
+                            Mth.lerp(partialTicks, carriageContraptionEntity.zOld, pos.z)
+                    );
             final ShipTransform transform = ship.getRenderTransform();
             Matrix4d renderMatrix = new Matrix4d()
                     .translate(origin.mul(-1))
@@ -56,9 +61,9 @@ public abstract class MixinCarriageContraptionInstance extends ContraptionVisual
             Matrix4f mat4f = new Matrix4f(renderMatrix);
             instance.unwrap().last().pose().mul(mat4f);
         } else {
-            operation.call(instance, vector3f);
-            // instance.translate(vector3f);
+            original.call(instance, vector3fc);
+            //instance.translate(vector3f);
         }
-        return instance;
+        return null;
     }
 }
