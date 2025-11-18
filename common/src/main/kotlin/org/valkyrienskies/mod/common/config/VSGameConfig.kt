@@ -151,13 +151,6 @@ object VSGameConfig {
         var teleportReconnectedPlayers = true
 
         @JsonSchema(
-            description = "Determines how many airborne ticks after a player leaves the ground of a" +
-                "ship that they are still considered part of it when they disconnect, such that they will" +
-                "be teleported back to it after reconnecnting."
-        )
-        var maxAirborneTicksForReconnectedPlayerTeleport = 4
-
-        @JsonSchema(
             description = "If true, when a mob gets unloaded, its position on a ship is saved such that " +
                 "if the ship is moved, when the mob loads back in it will be teleported to the same position in the ship." +
                 " This helps prevent mobs from falling off of ships."

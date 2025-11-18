@@ -1,6 +1,7 @@
 package org.valkyrienskies.mod.fabric.mixin.compat.sodium;
 
 import com.llamalad7.mixinextras.sugar.Local;
+import com.mojang.blaze3d.systems.RenderSystem;
 import me.jellysquid.mods.sodium.client.gl.device.CommandList;
 import me.jellysquid.mods.sodium.client.render.chunk.ChunkRenderMatrices;
 import me.jellysquid.mods.sodium.client.render.chunk.ChunkRenderer;
@@ -8,6 +9,7 @@ import me.jellysquid.mods.sodium.client.render.chunk.RenderSectionManager;
 import me.jellysquid.mods.sodium.client.render.chunk.terrain.TerrainRenderPass;
 import me.jellysquid.mods.sodium.client.render.viewport.CameraTransform;
 import org.joml.Matrix4f;
+import org.joml.Vector3d;
 import org.joml.Vector3dc;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -15,6 +17,7 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.valkyrienskies.core.api.ships.properties.ShipTransform;
 import org.valkyrienskies.mod.common.VSClientGameUtils;
 import org.valkyrienskies.mod.common.hooks.VSGameEvents;
 import org.valkyrienskies.mod.common.hooks.VSGameEvents.ShipRenderEventSodium;
@@ -38,15 +41,37 @@ public class MixinRenderSectionManager {
 
         ((RenderSectionManagerDuck) this).vs_getShipRenderLists().forEach((ship, renderList) -> {
             VSGameEvents.INSTANCE.getRenderShipSodium().emit(new ShipRenderEventSodium(chunkRenderer, pass, matrices, camX, camY, camZ, ship, renderList));
+            final ShipTransform shipTransform = ship.getRenderTransform();
+
+            final float distanceScaling = 1 / (float) shipTransform.getShipToWorldScaling().x();
+            final float initialFogStart = RenderSystem.getShaderFogStart();
+            final float initialFogEnd = RenderSystem.getShaderFogEnd();
+
+            if (distanceScaling != 1f) {
+                RenderSystem.setShaderFogStart(initialFogStart * distanceScaling);
+                RenderSystem.setShaderFogEnd(initialFogEnd * distanceScaling);
+            }
+
             final Matrix4f newModelView = new Matrix4f(matrices.modelView());
-            final Vector3dc center = ship.getRenderTransform().getPositionInShip();
-            VSClientGameUtils.transformRenderWithShip(ship.getRenderTransform(), newModelView, center.x(), center.y(),
-                center.z(), camX, camY, camZ);
+            final Vector3dc cameraShipSpace = shipTransform.getWorldToShip().transformPosition(new Vector3d(camX, camY, camZ));
+
+            VSClientGameUtils.transformRenderWithShip(
+                shipTransform,
+                newModelView,
+                cameraShipSpace.x(), cameraShipSpace.y(), cameraShipSpace.z(),
+                camX, camY, camZ
+            );
 
             final ChunkRenderMatrices newMatrices = new ChunkRenderMatrices(matrices.projection(), newModelView);
             chunkRenderer.render(newMatrices, commandList, renderList, pass,
-                new CameraTransform(center.x(), center.y(), center.z()));
+                new CameraTransform(cameraShipSpace.x(), cameraShipSpace.y(), cameraShipSpace.z()));
             commandList.close();
+
+            if (distanceScaling != 1f) {
+                RenderSystem.setShaderFogStart(initialFogStart);
+                RenderSystem.setShaderFogEnd(initialFogEnd);
+            }
+
             VSGameEvents.INSTANCE.getPostRenderShipSodium().emit(new ShipRenderEventSodium(chunkRenderer, pass, matrices, camX, camY, camZ, ship, renderList));
         });
     }

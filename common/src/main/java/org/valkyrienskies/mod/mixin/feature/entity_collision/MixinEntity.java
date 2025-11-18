@@ -38,8 +38,11 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider 
     // region collision
 
     @Shadow
-    @Deprecated
-    public abstract BlockPos getOnPosLegacy();
+    public boolean hasImpulse;
+    @Shadow
+    protected boolean firstTick;
+    @Shadow
+    public int tickCount;
 
     @Shadow
     public abstract void setPos(Vec3 arg);
@@ -52,9 +55,6 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider 
 
     @Shadow
     public abstract EntityType<?> getType();
-
-    @Shadow
-    protected boolean firstTick;
 
     @Shadow
     public abstract Iterable<Entity> getIndirectPassengers();
@@ -100,14 +100,12 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider 
                 return collisionResultWithWorld;
             }
             entityDraggingInformation.setLastShipStoodOn(null);
-            entityDraggingInformation.setAddedMovementLastTick(new Vector3d());
             entityDraggingInformation.setAddedYawRotLastTick(0.0);
 
             for (Entity entityRiding : entity.getIndirectPassengers()) {
                 final EntityDraggingInformation passengerDraggingInformation =
                     ((IEntityDraggingInformationProvider) entityRiding).getDraggingInformation();
                 passengerDraggingInformation.setLastShipStoodOn(null);
-                passengerDraggingInformation.setAddedMovementLastTick(new Vector3d());
                 passengerDraggingInformation.setAddedYawRotLastTick(0.0);
             }
         }
@@ -217,6 +215,20 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider 
         return original.call(entity);
     }
 
+    /**
+     * This will set the entity impulsed if it is dragged by a ship on its first tick.
+     * Marking impulse forces the sync over server-client, so this will also sync dragging information.
+     */
+    @Inject(
+        method = "tick",
+        at = @At("HEAD")
+    )
+    private void markImpulsedFirstTick(CallbackInfo ci) {
+        if (firstTick && getDraggingInformation().isEntityBeingDraggedByAShip() && !level.isClientSide) {
+            hasImpulse = true;
+        }
+    }
+
     @Inject(
         method = "baseTick",
         at = @At("TAIL")
@@ -224,7 +236,7 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider 
     private void postBaseTick(final CallbackInfo ci) {
         final EntityDraggingInformation entityDraggingInformation = getDraggingInformation();
 
-        if (level != null && level.isClientSide && !firstTick) {
+        if (level != null && level.isClientSide && tickCount > 1) { //baseTick sets the firstTick false, use tickCount instead.
             final Ship ship = VSGameUtilsKt.getShipObjectManagingPos(level, getOnPos());
             if (ship != null) {
                 entityDraggingInformation.setLastShipStoodOn(ship.getId());

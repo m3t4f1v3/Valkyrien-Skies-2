@@ -5,6 +5,7 @@ import net.minecraft.world.level.block.LiquidBlock
 import net.minecraft.world.level.block.state.BlockState
 import org.valkyrienskies.core.apigame.world.chunks.BlockType
 import org.valkyrienskies.mod.common.config.VSGameConfig
+import org.valkyrienskies.core.internal.world.chunks.VsiBlockType
 
 object DefaultBlockStateInfoProvider : BlockStateInfoProvider {
     override val priority: Int
@@ -15,7 +16,7 @@ object DefaultBlockStateInfoProvider : BlockStateInfoProvider {
         return VSGameConfig.SERVER.defaultBlockMass
     }
 
-    override fun getBlockStateType(blockState: BlockState): BlockType {
+    override fun getBlockStateType(blockState: BlockState): VsiBlockType {
         if (blockState.isAir) return vsCore.blockTypes.air
 
         val block = blockState.block

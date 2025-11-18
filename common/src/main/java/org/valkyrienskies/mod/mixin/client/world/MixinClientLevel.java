@@ -32,7 +32,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.valkyrienskies.core.api.ships.Ship;
-import org.valkyrienskies.core.apigame.world.ClientShipWorldCore;
+import org.valkyrienskies.core.internal.world.VsiClientShipWorld;
 import org.valkyrienskies.core.util.AABBdUtilKt;
 import org.valkyrienskies.core.util.VectorConversionsKt;
 import org.valkyrienskies.mod.client.audio.SimpleSoundInstanceOnShip;
@@ -50,7 +50,7 @@ public abstract class MixinClientLevel implements IShipObjectWorldClientProvider
 
     @NotNull
     @Override
-    public ClientShipWorldCore getShipObjectWorld() {
+    public VsiClientShipWorld getShipObjectWorld() {
         return ((IShipObjectWorldClientProvider) minecraft).getShipObjectWorld();
     }
 

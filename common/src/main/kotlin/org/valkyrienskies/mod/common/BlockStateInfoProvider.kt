@@ -16,7 +16,7 @@ import org.valkyrienskies.core.api.ships.LoadedServerShip
 import org.valkyrienskies.core.api.ships.Ship
 import org.valkyrienskies.core.api.ships.Wing
 import org.valkyrienskies.core.api.ships.WingManager
-import org.valkyrienskies.core.apigame.world.chunks.BlockType
+import org.valkyrienskies.core.internal.world.chunks.VsiBlockType
 import org.valkyrienskies.mod.common.block.WingBlock
 import org.valkyrienskies.mod.common.config.MassDatapackResolver
 import org.valkyrienskies.mod.common.hooks.VSGameEvents
@@ -32,7 +32,7 @@ interface BlockStateInfoProvider {
     fun getBlockStateMass(blockState: BlockState): Double?
 
     // Get the id of the block state
-    fun getBlockStateType(blockState: BlockState): BlockType?
+    fun getBlockStateType(blockState: BlockState): VsiBlockType?
 }
 
 object BlockStateInfo {
@@ -60,10 +60,10 @@ object BlockStateInfo {
 
     class Cache {
         // Use a load factor of 0.5f because this map is hit very often
-        private val blockStateCache: Int2ObjectOpenHashMap<Pair<Double, BlockType>> =
-            Int2ObjectOpenHashMap<Pair<Double, BlockType>>(2048, 0.5f)
+        private val blockStateCache: Int2ObjectOpenHashMap<Pair<Double, VsiBlockType>> =
+            Int2ObjectOpenHashMap<Pair<Double, VsiBlockType>>(2048, 0.5f)
 
-        fun get(blockState: BlockState): Pair<Double, BlockType>? {
+        fun get(blockState: BlockState): Pair<Double, VsiBlockType>? {
             val blockId = Block.getId(blockState)
 
             if (blockId == -1) {
@@ -82,11 +82,11 @@ object BlockStateInfo {
 
     // this gets the weight and type provided by providers; or it gets it out of the cache
 
-    fun get(blockState: BlockState): Pair<Double, BlockType>? {
+    fun get(blockState: BlockState): Pair<Double, VsiBlockType>? {
         return cache.get(blockState)
     }
 
-    private fun iterateRegistry(blockState: BlockState): Pair<Double, BlockType> =
+    private fun iterateRegistry(blockState: BlockState): Pair<Double, VsiBlockType> =
         Pair(
             SORTED_REGISTRY.firstNotNullOf { it.getBlockStateMass(blockState) },
             SORTED_REGISTRY.firstNotNullOf { it.getBlockStateType(blockState) },
