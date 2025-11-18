@@ -29,6 +29,7 @@ import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
+import org.joml.Vector3d;
 import org.joml.Vector3dc;
 import org.joml.Vector3f;
 import org.joml.primitives.AABBd;
@@ -234,7 +235,9 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
 
         shipRenderChunks.forEach((ship, chunks) -> {
             poseStack.pushPose();
-            final Vector3dc center = ship.getRenderTransform().getPositionInShip();
+            final ShipTransform shipTransform = ship.getRenderTransform();
+            final Vector3dc center = shipTransform.getPositionInShip();
+            final Vector3dc cameraShipSpace = shipTransform.getWorldToShip().transformPosition(new Vector3d(camX, camY, camZ));
             VSClientGameUtils.transformRenderWithShip(ship.getRenderTransform(), poseStack,
                 center.x(), center.y(), center.z(),
                 camX, camY, camZ);
@@ -244,7 +247,7 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
             );
 
             VSGameEvents.INSTANCE.getRenderShip().emit(event);
-            renderChunkLayer(renderType, poseStack, center.x(), center.y(), center.z(), matrix4f, chunks);
+            renderChunkLayer(renderType, poseStack, cameraShipSpace.x(), cameraShipSpace.y(), cameraShipSpace.z(), matrix4f, chunks);
             VSGameEvents.INSTANCE.getPostRenderShip().emit(event);
 
             poseStack.popPose();
