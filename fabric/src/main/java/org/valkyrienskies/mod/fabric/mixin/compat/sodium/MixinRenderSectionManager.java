@@ -8,6 +8,7 @@ import me.jellysquid.mods.sodium.client.render.chunk.RenderSectionManager;
 import me.jellysquid.mods.sodium.client.render.chunk.terrain.TerrainRenderPass;
 import me.jellysquid.mods.sodium.client.render.viewport.CameraTransform;
 import org.joml.Matrix4f;
+import org.joml.Vector3d;
 import org.joml.Vector3dc;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -39,13 +40,18 @@ public class MixinRenderSectionManager {
         ((RenderSectionManagerDuck) this).vs_getShipRenderLists().forEach((ship, renderList) -> {
             VSGameEvents.INSTANCE.getRenderShipSodium().emit(new ShipRenderEventSodium(chunkRenderer, pass, matrices, camX, camY, camZ, ship, renderList));
             final Matrix4f newModelView = new Matrix4f(matrices.modelView());
-            final Vector3dc center = ship.getRenderTransform().getPositionInShip();
-            VSClientGameUtils.transformRenderWithShip(ship.getRenderTransform(), newModelView, center.x(), center.y(),
-                center.z(), camX, camY, camZ);
+            final Vector3dc cameraShipSpace = ship.getRenderTransform().getWorldToShip().transformPosition(new Vector3d(camX, camY, camZ));
+
+            VSClientGameUtils.transformRenderWithShip(
+                ship.getRenderTransform(),
+                newModelView,
+                cameraShipSpace.x(), cameraShipSpace.y(), cameraShipSpace.z(),
+                camX, camY, camZ
+            );
 
             final ChunkRenderMatrices newMatrices = new ChunkRenderMatrices(matrices.projection(), newModelView);
             chunkRenderer.render(newMatrices, commandList, renderList, pass,
-                new CameraTransform(center.x(), center.y(), center.z()));
+                new CameraTransform(cameraShipSpace.x(), cameraShipSpace.y(), cameraShipSpace.z()));
             commandList.close();
             VSGameEvents.INSTANCE.getPostRenderShipSodium().emit(new ShipRenderEventSodium(chunkRenderer, pass, matrices, camX, camY, camZ, ship, renderList));
         });
