@@ -7,13 +7,16 @@ import me.jellysquid.mods.sodium.client.render.chunk.RenderSectionManager;
 import me.jellysquid.mods.sodium.client.render.chunk.terrain.TerrainRenderPass;
 import me.jellysquid.mods.sodium.client.render.viewport.CameraTransform;
 import org.joml.Matrix4d;
+import org.joml.Matrix4dc;
 import org.joml.Matrix4f;
+import org.joml.Vector3d;
 import org.joml.Vector3dc;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
+import org.valkyrienskies.core.api.ships.properties.ShipTransform;
 import org.valkyrienskies.mod.common.hooks.VSGameEvents;
 import org.valkyrienskies.mod.common.hooks.VSGameEvents.ShipRenderEventSodium;
 import org.valkyrienskies.mod.mixinducks.mod_compat.sodium.RenderSectionManagerDuck;
@@ -36,18 +39,19 @@ public class MixinRenderSectionManager {
 
         ((RenderSectionManagerDuck) this).vs_getShipRenderLists().forEach((ship, renderList) -> {
             VSGameEvents.INSTANCE.getRenderShipSodium().emit(new ShipRenderEventSodium(chunkRenderer, pass, matrices, camX, camY, camZ, ship, renderList));
-            final Vector3dc center = ship.getRenderTransform().getPositionInShip();
-            final org.joml.Matrix4dc s = ship.getRenderTransform().getShipToWorld();
+            final ShipTransform shipTransform = ship.getRenderTransform();
+            final Matrix4dc s = shipTransform.getShipToWorld();
+            final Vector3dc cameraShipSpace = shipTransform.getWorldToShip().transformPosition(new Vector3d(camX, camY, camZ));
             final Matrix4d newModelView = new Matrix4d(matrices.modelView())
                 .translate(-camX, -camY, -camZ)
                 .mul(s.m00(), s.m01(), s.m02(), s.m03(), s.m10(), s.m11(), s.m12(), s.m13(), s.m20(),
                     s.m21(), s.m22(), s.m23(), s.m30(), s.m31(), s.m32(), s.m33())
-                .translate(center.x(), center.y(), center.z());
+                .translate(cameraShipSpace.x(), cameraShipSpace.y(), cameraShipSpace.z());
 
             final ChunkRenderMatrices newMatrices =
                 new ChunkRenderMatrices(matrices.projection(), new Matrix4f(newModelView));
             chunkRenderer.render(newMatrices, list, renderList, pass,
-                new CameraTransform(center.x(), center.y(), center.z()));
+                new CameraTransform(cameraShipSpace.x(), cameraShipSpace.y(), cameraShipSpace.z()));
             list.close();
             VSGameEvents.INSTANCE.getPostRenderShipSodium().emit(new ShipRenderEventSodium(chunkRenderer, pass, matrices, camX, camY, camZ, ship, renderList));
         });
