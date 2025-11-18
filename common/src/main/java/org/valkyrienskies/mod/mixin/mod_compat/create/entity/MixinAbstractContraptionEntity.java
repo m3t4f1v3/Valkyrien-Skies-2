@@ -3,17 +3,15 @@ package org.valkyrienskies.mod.mixin.mod_compat.create.entity;
 import static org.valkyrienskies.mod.common.util.VectorConversionsMCKt.toJOML;
 import static org.valkyrienskies.mod.common.util.VectorConversionsMCKt.toMinecraft;
 
-import com.simibubi.create.AllMovementBehaviours;
+import com.simibubi.create.api.behaviour.movement.MovementBehaviour;
 import com.simibubi.create.content.contraptions.AbstractContraptionEntity;
 import com.simibubi.create.content.contraptions.Contraption;
 import com.simibubi.create.content.contraptions.OrientedContraptionEntity;
 import com.simibubi.create.content.contraptions.StructureTransform;
 import com.simibubi.create.content.contraptions.actors.harvester.HarvesterMovementBehaviour;
-import com.simibubi.create.content.contraptions.behaviour.MovementBehaviour;
 import com.simibubi.create.content.contraptions.behaviour.MovementContext;
 import com.simibubi.create.content.kinetics.base.BlockBreakingMovementBehaviour;
-import com.simibubi.create.content.kinetics.deployer.DeployerMovementBehaviour;
-import com.simibubi.create.foundation.utility.VecHelper;
+import net.createmod.catnip.math.VecHelper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.server.level.ServerLevel;
@@ -158,7 +156,7 @@ public abstract class MixinAbstractContraptionEntity extends Entity implements M
 
     @Unique
     private boolean vs$shouldMod(final MovementBehaviour moveBehaviour) {
-        return ((moveBehaviour instanceof BlockBreakingMovementBehaviour) || (moveBehaviour instanceof HarvesterMovementBehaviour) || (moveBehaviour instanceof DeployerMovementBehaviour));
+        return ((moveBehaviour instanceof BlockBreakingMovementBehaviour) || (moveBehaviour instanceof HarvesterMovementBehaviour));
     }
 
     @Unique
@@ -208,7 +206,7 @@ public abstract class MixinAbstractContraptionEntity extends Entity implements M
         for (final MutablePair<StructureBlockInfo, MovementContext> pair : contraption.getActors()) {
             final MovementContext context = pair.right;
             final StructureBlockInfo blockInfo = pair.left;
-            final MovementBehaviour actor = AllMovementBehaviours.getBehaviour(blockInfo.state());
+            final MovementBehaviour actor = MovementBehaviour.REGISTRY.get(blockInfo.state());
 
             if (actor == null)
                 continue;

@@ -2,7 +2,7 @@ package org.valkyrienskies.mod.mixin.mod_compat.create.client;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
-import com.simibubi.create.foundation.outliner.Outline;
+import net.createmod.catnip.outliner.Outline;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.world.level.Level;

@@ -6,8 +6,8 @@ import static org.valkyrienskies.mod.common.util.VectorConversionsMCKt.toMinecra
 import com.simibubi.create.content.contraptions.AbstractContraptionEntity;
 import com.simibubi.create.content.contraptions.ContraptionCollider;
 import com.simibubi.create.foundation.collision.Matrix3d;
-import com.simibubi.create.foundation.utility.VecHelper;
 import javax.annotation.Nullable;
+import net.createmod.catnip.math.VecHelper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.entity.Entity;
@@ -29,6 +29,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.valkyrienskies.core.api.ships.Ship;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
+import org.valkyrienskies.mod.common.util.IEntityDraggingInformationProvider;
 
 @Mixin(ContraptionCollider.class)
 public abstract class MixinContraptionCollider {
@@ -82,6 +83,7 @@ public abstract class MixinContraptionCollider {
                     } else {
                         motion = toMinecraft(ship.getShipToWorld().transformDirection(toJOML(motion)));
                     }
+                    ((IEntityDraggingInformationProvider)instance).getDraggingInformation().setLastShipStoodOn(ship.getId());
                     instance.setDeltaMovement(motion);
                     motion = null;
                 }
