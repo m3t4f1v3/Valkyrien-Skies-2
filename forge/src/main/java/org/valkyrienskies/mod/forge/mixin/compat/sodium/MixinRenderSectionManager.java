@@ -1,5 +1,6 @@
 package org.valkyrienskies.mod.forge.mixin.compat.sodium;
 
+import com.mojang.blaze3d.systems.RenderSystem;
 import me.jellysquid.mods.sodium.client.gl.device.CommandList;
 import me.jellysquid.mods.sodium.client.render.chunk.ChunkRenderMatrices;
 import me.jellysquid.mods.sodium.client.render.chunk.ChunkRenderer;
@@ -40,6 +41,16 @@ public class MixinRenderSectionManager {
         ((RenderSectionManagerDuck) this).vs_getShipRenderLists().forEach((ship, renderList) -> {
             VSGameEvents.INSTANCE.getRenderShipSodium().emit(new ShipRenderEventSodium(chunkRenderer, pass, matrices, camX, camY, camZ, ship, renderList));
             final ShipTransform shipTransform = ship.getRenderTransform();
+
+            final float distanceScaling = 1 / (float) shipTransform.getShipToWorldScaling().x();
+            final float initialFogStart = RenderSystem.getShaderFogStart();
+            final float initialFogEnd = RenderSystem.getShaderFogEnd();
+
+            if (distanceScaling != 1f) {
+                RenderSystem.setShaderFogStart(initialFogStart * distanceScaling);
+                RenderSystem.setShaderFogEnd(initialFogEnd * distanceScaling);
+            }
+
             final Matrix4dc s = shipTransform.getShipToWorld();
             final Vector3dc cameraShipSpace = shipTransform.getWorldToShip().transformPosition(new Vector3d(camX, camY, camZ));
             final Matrix4d newModelView = new Matrix4d(matrices.modelView())
@@ -53,6 +64,12 @@ public class MixinRenderSectionManager {
             chunkRenderer.render(newMatrices, list, renderList, pass,
                 new CameraTransform(cameraShipSpace.x(), cameraShipSpace.y(), cameraShipSpace.z()));
             list.close();
+
+            if (distanceScaling != 1f) {
+                RenderSystem.setShaderFogStart(initialFogStart);
+                RenderSystem.setShaderFogEnd(initialFogEnd);
+            }
+
             VSGameEvents.INSTANCE.getPostRenderShipSodium().emit(new ShipRenderEventSodium(chunkRenderer, pass, matrices, camX, camY, camZ, ship, renderList));
         });
     }
