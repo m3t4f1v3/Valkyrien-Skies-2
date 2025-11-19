@@ -120,17 +120,8 @@ class ValkyrienSkiesModFabric : ModInitializer {
             FabricBlockEntityTypeBuilder.create(::TestThrusterBlockEntity, ValkyrienSkiesMod.TEST_THRUSTER).build()
 
         val isClient = FabricLoader.getInstance().environmentType == EnvType.CLIENT
-        val networking = VSFabricNetworking(isClient)
-        val hooks = FabricHooksImpl(networking)
-        val vsCore = if (isClient) {
-            VsiCoreFactory.instance.newVsCoreClient(hooks)
-        } else {
-            VsiCoreFactory.instance.newVsCoreServer(hooks)
-        }
 
-        networking.register(vsCore.hooks)
-
-        ValkyrienSkiesMod.init(vsCore)
+        ValkyrienSkiesMod.init()
 
         if (isClient) onInitializeClient()
 

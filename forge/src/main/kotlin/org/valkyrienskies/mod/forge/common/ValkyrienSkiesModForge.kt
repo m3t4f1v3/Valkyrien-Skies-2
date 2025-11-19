@@ -87,15 +87,8 @@ class ValkyrienSkiesModForge {
 
     init {
         val isClient = FMLEnvironment.dist.isClient
-        val vsCore = if (isClient) {
-            VsiCoreFactory.instance.newVsCoreClient(ForgeHooksImpl)
-        } else {
-            VsiCoreFactory.instance.newVsCoreServer(ForgeHooksImpl)
-        }
 
-        VSForgeNetworking.registerPacketHandlers(vsCore.hooks)
-
-        ValkyrienSkiesMod.init(vsCore)
+        ValkyrienSkiesMod.init()
         VSEntityManager.registerContraptionHandler(ContraptionShipyardEntityHandlerForge)
 
         val modBus = Bus.MOD.bus().get()

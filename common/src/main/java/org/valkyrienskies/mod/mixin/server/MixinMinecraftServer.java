@@ -307,7 +307,7 @@ public abstract class MixinMinecraftServer implements IShipObjectWorldServerProv
             // Getting portal info failed? Don't teleport.
             return;
         }
-        final ShipTeleportData shipTeleportData = ValkyrienSkiesMod.vsCore.newShipTeleportData(
+        final ShipTeleportData shipTeleportData = ValkyrienSkiesMod.getVsCore().newShipTeleportData(
             VectorConversionsMCKt.toJOML(portalInfo.pos),
             shipObject.getTransform().getShipToWorldRotation(),
             new Vector3d(),

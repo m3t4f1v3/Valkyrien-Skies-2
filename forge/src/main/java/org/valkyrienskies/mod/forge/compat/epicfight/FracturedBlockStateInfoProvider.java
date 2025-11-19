@@ -35,7 +35,7 @@ public class FracturedBlockStateInfoProvider implements BlockStateInfoProvider {
     @Override
     public VsiBlockType getBlockStateType(@NotNull BlockState blockState) {
         if (blockState instanceof FractureBlockState)
-            return ValkyrienSkiesMod.vsCore.getBlockTypes().getSolid();
+            return ValkyrienSkiesMod.getVsCore().getBlockTypes().getSolid();
         return null;
     }
 

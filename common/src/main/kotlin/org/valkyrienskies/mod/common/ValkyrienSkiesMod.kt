@@ -29,6 +29,8 @@ import org.valkyrienskies.mod.common.util.ShipSettings
 import org.valkyrienskies.mod.common.util.SplitHandler
 import org.valkyrienskies.mod.common.util.SplittingDisablerAttachment
 import org.valkyrienskies.mod.mixinducks.client.world.ClientChunkCacheDuck
+import java.lang.reflect.Method
+import java.util.ServiceLoader
 
 object ValkyrienSkiesMod {
     const val MOD_ID = "valkyrienskies"
@@ -58,7 +60,16 @@ object ValkyrienSkiesMod {
     var currentServer: MinecraftServer? = null
 
     @JvmStatic
-    lateinit var vsCore: VsiCore
+    val vsCoreProvider: VSCoreProvider by lazy {
+        val loader = ServiceLoader.load(VSCoreProvider::class.java, VSCoreProvider::class.java.classLoader)
+
+        loader.findFirst().orElseThrow {
+            IllegalStateException("No VSCoreProvider implementation found via ServiceLoader!")
+        }
+    }
+
+    @JvmStatic
+    val vsCore: VsiCore = vsCoreProvider.newVSCore()
 
     @JvmStatic
     val vsCoreClient get() = vsCore as VsiCoreClient
@@ -71,8 +82,8 @@ object ValkyrienSkiesMod {
     @JvmStatic
     lateinit var splitHandler: SplitHandler
 
-    fun init(core: VsiCore) {
-        this.vsCore = core
+    fun init() {
+        val core = this.vsCore
 
         BlockStateInfo.init()
         VSGamePackets.register()
