@@ -1,5 +1,6 @@
 package org.valkyrienskies.mod.mixin.client.renderer;
 
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -19,6 +20,7 @@ import org.joml.Quaterniond;
 import org.joml.Quaternionf;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
+import org.joml.primitives.AABBdc;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -295,4 +297,27 @@ public abstract class MixinGameRenderer {
             this.getProjectionMatrix(Math.max(fov, this.minecraft.options.fov().get())));
     }
     // endregion
+
+    @WrapMethod(method = "getDepthFar")
+    public float includeShipsIn(Operation<Float> original) {
+        float maxDistance = original.call();
+        for (final ClientShip ship : VSGameUtilsKt.getShipObjectWorld(Minecraft.getInstance()).getLoadedShips()) {
+            Vec3 cameraPos = this.mainCamera.getPosition();
+            AABBdc shipAABB = ship.getRenderAABB();
+            // find the furthest distance from the camera to the ship AABB corners
+            double furthestDistanceSq = 0;
+            for (int i = 0; i < 8; i++) {
+                double x = (i & 1) == 0 ? shipAABB.minX() : shipAABB.maxX();
+                double y = (i & 2) == 0 ? shipAABB.minY() : shipAABB.maxY();
+                double z = (i & 4) == 0 ? shipAABB.minZ() : shipAABB.maxZ();
+                double distanceSq = cameraPos.distanceToSqr(new Vec3(x, y, z));
+                if (distanceSq > furthestDistanceSq) {
+                    furthestDistanceSq = distanceSq;
+                }
+            }
+            maxDistance = Math.max(maxDistance, (float) Math.sqrt(furthestDistanceSq));
+        }
+
+        return maxDistance;
+    }
 }
