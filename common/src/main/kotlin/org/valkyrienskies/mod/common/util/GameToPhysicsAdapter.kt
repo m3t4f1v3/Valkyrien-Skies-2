@@ -28,6 +28,9 @@ class GameToPhysicsAdapter {
 
     private val toBeStatic = ConcurrentLinkedQueue<Pair<ShipId, Boolean>>()
 
+    private val enablePairs = ConcurrentLinkedQueue<Pair<ShipId, ShipId>>()
+    private val disablePairs = ConcurrentLinkedQueue<Pair<ShipId, ShipId>>()
+
     fun physTick(physLevel: PhysLevel, delta: Double) {
         invForces.pollUntilEmpty { pair -> physLevel.getShipById(pair.first)?.applyInvariantForce(pair.second) }
         invTorques.pollUntilEmpty { pair -> physLevel.getShipById(pair.first)?.applyInvariantTorque(pair.second) }
@@ -53,6 +56,9 @@ class GameToPhysicsAdapter {
         }
 
         toBeStatic.pollUntilEmpty { pair -> physLevel.getShipById(pair.first)?.isStatic = pair.second }
+
+        enablePairs.pollUntilEmpty { pair -> physLevel.enableCollisionBetween(pair.first, pair.second) }
+        disablePairs.pollUntilEmpty { pair -> physLevel.disableCollisionBetween(pair.first, pair.second) }
     }
 
     fun applyInvariantForce(ship: ShipId, force: Vector3dc) {
@@ -91,6 +97,14 @@ class GameToPhysicsAdapter {
     }
     fun removeJoint(jointId: VSJointId) {
         deletedJoints.add(jointId)
+    }
+
+    fun enableCollisionBetween(shipA: ShipId, shipB: ShipId) {
+        enablePairs.add(shipA to shipB)
+    }
+
+    fun disableCollisionBetween(shipA: ShipId, shipB: ShipId) {
+        disablePairs.add(shipA to shipB)
     }
 
     private data class InvForceAtPos(val force: Vector3dc, val pos: Vector3dc)
