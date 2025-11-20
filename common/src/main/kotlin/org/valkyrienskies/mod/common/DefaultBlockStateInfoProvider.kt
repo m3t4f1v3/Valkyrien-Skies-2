@@ -3,9 +3,8 @@ package org.valkyrienskies.mod.common
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.block.LiquidBlock
 import net.minecraft.world.level.block.state.BlockState
-import org.valkyrienskies.core.apigame.world.chunks.BlockType
-import org.valkyrienskies.mod.common.config.VSGameConfig
 import org.valkyrienskies.core.internal.world.chunks.VsiBlockType
+import org.valkyrienskies.mod.common.config.VSGameConfig
 
 object DefaultBlockStateInfoProvider : BlockStateInfoProvider {
     override val priority: Int
