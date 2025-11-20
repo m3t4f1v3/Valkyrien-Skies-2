@@ -1,5 +1,6 @@
 package org.valkyrienskies.mod.mixin.client.renderer;
 
+import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
@@ -298,24 +299,22 @@ public abstract class MixinGameRenderer {
     }
     // endregion
 
-    @WrapMethod(method = "getDepthFar")
-    public float includeShipsIn(Operation<Float> original) {
-        float maxDistance = original.call();
+    @ModifyReturnValue(method = "getDepthFar", at = @At("RETURN"))
+    public float includeShipsIn(final float originalDepth) {
+        float maxDistance = originalDepth;
         for (final ClientShip ship : VSGameUtilsKt.getShipObjectWorld(Minecraft.getInstance()).getLoadedShips()) {
             Vec3 cameraPos = this.mainCamera.getPosition();
             AABBdc shipAABB = ship.getRenderAABB();
             // find the furthest distance from the camera to the ship AABB corners
             double furthestDistanceSq = 0;
-            for (int i = 0; i < 8; i++) {
-                double x = (i & 1) == 0 ? shipAABB.minX() : shipAABB.maxX();
-                double y = (i & 2) == 0 ? shipAABB.minY() : shipAABB.maxY();
-                double z = (i & 4) == 0 ? shipAABB.minZ() : shipAABB.maxZ();
-                double distanceSq = cameraPos.distanceToSqr(new Vec3(x, y, z));
-                if (distanceSq > furthestDistanceSq) {
-                    furthestDistanceSq = distanceSq;
-                }
-            }
-            maxDistance = Math.max(maxDistance, (float) Math.sqrt(furthestDistanceSq));
+            double dMinX = shipAABB.minX() - cameraPos.x();  
+            double dMaxX = shipAABB.maxX() - cameraPos.x();  
+            double dMinY = shipAABB.minY() - cameraPos.y();  
+            double dMaxY = shipAABB.maxY() - cameraPos.y();  
+            double dMinZ = shipAABB.minZ() - cameraPos.z();  
+            double dMaxZ = shipAABB.maxZ() - cameraPos.z();  
+            double furthestDist = Math.sqrt(Math.max(dMinX * dMinX, dMaxX * dMaxX) + Math.max(dMinY * dMinY, dMaxY * dMaxY) + Math.max(dMinZ * dMinZ, dMaxZ * dMaxZ));  
+            maxDistance = Math.max(maxDistance, (float) furthestDist);  
         }
 
         return maxDistance;
