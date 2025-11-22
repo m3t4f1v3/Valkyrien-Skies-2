@@ -170,6 +170,7 @@
     "mod_compat.create_big_cannons.MixinCBCUtils",
     "mod_compat.create_big_cannons.MixinFCMSVB",
     "mod_compat.create_big_cannons.MixinPitchOrientedContraptionEntity",
+    "mod_compat.create_big_cannons.MixinRitchiesProjectileLib",
     "mod_compat.create_big_cannons.MixinSSFCMVP",
     "mod_compat.flywheel.MixinAbstractBlockEntityVisual",
     "mod_compat.create_utilities.MixinVoidLinkBehaviour",
