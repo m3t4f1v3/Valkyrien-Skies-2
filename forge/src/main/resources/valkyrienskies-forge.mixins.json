@@ -38,8 +38,7 @@
     "client.render.MixinLevelRenderer",
     "compat.create.client.MixinChainConveyorBlockEntity",
     "compat.create.client.MixinContraptionHandlerClient",
-    "compat.sodium.MixinRenderSectionManager"
-    "compat.create.client.MixinSuperGlueSelectionHandler",
+    "compat.sodium.MixinRenderSectionManager",
     "compat.sodium.MixinRenderSectionManager",
     "compat.oc2r.MixinComputerRenderer",
     "compat.oc2r.MixinMonitorRenderer",
