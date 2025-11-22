@@ -30,5 +30,9 @@
   "command.valkyrienskies.get_ship.success": "Found ship with slug %s",
   "command.valkyrienskies.get_ship.fail": "No ship found",
   "command.valkyrienskies.get_ship.only_usable_by_entities": "/vs get-ship can only be run by entities!",
-  "command.valkyrienskies.scale.success": "Scaled %d ships!"
+  "command.valkyrienskies.scale.success": "Scaled %d ships!",
+
+  "misc.valkyrienskies.create.deployer_working_mode": "Ship Behaviour",
+  "misc.valkyrienskies.create.deployer_working_mode.original": "Place on current ship",
+  "misc.valkyrienskies.create.deployer_working_mode.in_world": "Place in world"
 }

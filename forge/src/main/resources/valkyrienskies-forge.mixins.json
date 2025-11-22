@@ -7,6 +7,10 @@
 
     "compat.create.MixinBlockBreakingKineticTileEntity",
     "compat.create.MixinControlledContraptionEntity",
+    "compat.create.client.MixinBlockEntityRenderHelper66",
+    "compat.create.client.MixinBlockEntityRenderHelper67",
+    "compat.create.client.MixinSuperGlueSelectionHandler66",
+    "compat.create.client.MixinSuperGlueSelectionHandler67",
     "compat.immersivengineering.MixinBlockEntityInventory",
     "compat.integrateddynamics.MixinVoxelShapeComponents",
     "compat.mekanism.MixinRadiationManager",
@@ -32,9 +36,9 @@
   ],
   "client": [
     "client.render.MixinLevelRenderer",
-    "compat.create.client.MixinBlockEntityRenderHelper",
     "compat.create.client.MixinChainConveyorBlockEntity",
     "compat.create.client.MixinContraptionHandlerClient",
+    "compat.sodium.MixinRenderSectionManager"
     "compat.create.client.MixinSuperGlueSelectionHandler",
     "compat.sodium.MixinRenderSectionManager",
     "compat.oc2r.MixinComputerRenderer",

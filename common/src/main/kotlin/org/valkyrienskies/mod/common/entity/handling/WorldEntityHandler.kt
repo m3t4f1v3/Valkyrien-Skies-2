@@ -88,7 +88,7 @@ object WorldEntityHandler : VSEntityHandler {
         } else {
             direction = ship.shipToWorld.transformDirection(entity.lookAngle.toJOML())
             yaw = atan2(-direction.x, direction.z)
-            pitch = atan2(direction.y, sqrt((direction.x * direction.x) + (direction.z * direction.z)))
+            pitch = atan2(-direction.y, sqrt((direction.x * direction.x) + (direction.z * direction.z)))
         }
 
         entity.yRot = (yaw * (180 / Math.PI)).toFloat()

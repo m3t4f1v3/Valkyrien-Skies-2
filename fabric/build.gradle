@@ -83,7 +83,7 @@ dependencies {
     modCompileOnly("curse.maven:entity-texture-features-fabric-568563:5697084")
 
     // Create compat
-    modImplementation("com.simibubi.create:create-fabric-${minecraft_version}:${create_fabric_version}") {
+    modImplementation("com.simibubi.create:create-fabric:${create_fabric_version}") {
         exclude group: 'com.github.AlphaMode', module: 'fakeconfigtoml'
     }
     modImplementation("com.tterrag.registrate_fabric:Registrate:${registrate_version}")
