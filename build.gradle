@@ -94,6 +94,9 @@ subprojects {
             }
         }
         if (!project.block_external_repositories) {
+            maven {
+                url = "https://maven.realrobotix.me/master/"
+            }
             mavenLocal()
             maven {
                 name = "ParchmentMC"
