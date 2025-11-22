@@ -52,7 +52,7 @@ public abstract class MixinClientChunkCache implements ClientChunkCacheDuck {
     private void preLoadChunkFromPacket(final int x, final int z,
         final FriendlyByteBuf buf,
         final CompoundTag tag,
-        final Consumer<BlockEntityTagOutput> consumer, 
+        final Consumer<BlockEntityTagOutput> consumer,
         final CallbackInfoReturnable<LevelChunk> cir
     ) {
         if (VSGameUtilsKt.isChunkInShipyard(level, x, z)) {
@@ -85,6 +85,19 @@ public abstract class MixinClientChunkCache implements ClientChunkCacheDuck {
             for (int z = chunks.getZStart(); z <= chunks.getZEnd(); z++) {
                 this.removeShipChunk(x, z);
             }
+        }
+    }
+
+    @Inject(method = "drop", at = @At("HEAD"), cancellable = true)
+    public void preUnload(final int chunkX, final int chunkZ, final CallbackInfo ci) {
+        if (VSGameUtilsKt.isChunkInShipyard(level, chunkX, chunkZ)) {
+            vs$shipChunks.remove(ChunkPos.asLong(chunkX, chunkZ));
+            if (ValkyrienCommonMixinConfigPlugin.getVSRenderer() != VSRenderer.SODIUM) {
+                ((IVSViewAreaMethods) ((LevelRendererAccessor) ((ClientLevelAccessor) level).getLevelRenderer()).getViewArea())
+                    .unloadChunk(chunkX, chunkZ);
+            }
+            SodiumCompat.onChunkRemoved(this.level, chunkX, chunkZ);
+            ci.cancel();
         }
     }
 

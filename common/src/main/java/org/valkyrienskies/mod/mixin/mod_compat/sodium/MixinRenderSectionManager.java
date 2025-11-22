@@ -1,5 +1,7 @@
 package org.valkyrienskies.mod.mixin.mod_compat.sodium;
 
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -15,6 +17,8 @@ import me.jellysquid.mods.sodium.client.render.viewport.Viewport;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.LevelChunkSection;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -53,10 +57,16 @@ public abstract class MixinRenderSectionManager implements RenderSectionManagerD
     private ClientLevel world;
 
     @Shadow
+    private SortedRenderLists renderLists;
+
+    @Shadow
     protected abstract RenderSection getRenderSection(int x, int y, int z);
 
     @Shadow
     private Map<ChunkUpdateType, ArrayDeque<RenderSection>> rebuildLists;
+
+    @Shadow
+    public abstract void tickVisibleRenders();
 
     @Inject(at = @At("TAIL"), method = "createTerrainRenderList")
     private void afterIterateChunks(final Camera camera, final Viewport viewport, final int frame,
@@ -65,7 +75,15 @@ public abstract class MixinRenderSectionManager implements RenderSectionManagerD
             final VisibleChunkCollector collector = new VisibleChunkCollector(frame);
 
             ship.getActiveChunksSet().forEach((x, z) -> {
+                final LevelChunk levelChunk = world.getChunk(x, z);
                 for (int y = world.getMinSection(); y < world.getMaxSection(); y++) {
+                    // If the chunk section is empty then skip it
+                    final LevelChunkSection levelChunkSection = levelChunk.getSection(y - world.getMinSection());
+                    if (levelChunkSection.hasOnlyAir()) {
+                        continue;
+                    }
+                    // TODO: Add occlusion logic here?
+
                     final RenderSection section = getRenderSection(x, y, z);
 
                     if (section == null) {
@@ -91,6 +109,20 @@ public abstract class MixinRenderSectionManager implements RenderSectionManagerD
                 rebuildLists.addAll(rebuildSorted);
             }
         );
+    }
+
+    @WrapMethod(method = "tickVisibleRenders")
+    private void tickVisibleShipRenders(Operation<Void> original) {
+        original.call();
+
+        SortedRenderLists trueRenderLists = renderLists;
+
+        for (final SortedRenderLists currentShipRenderLists : shipRenderLists.values()) {
+            renderLists = currentShipRenderLists;
+            original.call();
+        }
+
+        renderLists = trueRenderLists;
     }
 
     @Inject(at = @At("TAIL"), method = "resetRenderLists")

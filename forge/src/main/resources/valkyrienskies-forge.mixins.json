@@ -2,8 +2,9 @@
   "required": true,
   "package": "org.valkyrienskies.mod.forge.mixin",
   "compatibilityLevel": "JAVA_17",
-  "plugin": "org.valkyrienskies.mod.forge.mixin.ValkyrienForgeMixinConfigPlugin",
+  "plugin": "org.valkyrienskies.mod.forge.mixin.ValkyrienSkiesForgeMixinPlugin",
   "mixins": [
+
     "compat.create.MixinBlockBreakingKineticTileEntity",
     "compat.create.MixinControlledContraptionEntity",
     "compat.create.client.MixinBlockEntityRenderHelper66",
@@ -11,14 +12,25 @@
     "compat.create.client.MixinSuperGlueSelectionHandler66",
     "compat.create.client.MixinSuperGlueSelectionHandler67",
     "compat.immersivengineering.MixinBlockEntityInventory",
+    "compat.integrateddynamics.MixinVoxelShapeComponents",
+    "compat.mekanism.MixinRadiationManager",
     "compat.mffs.MixinClientPacketHandler",
+    "compat.create_stuff_additions.MixinGrapplinWhiskChainsLineProcedure",
+    "compat.create_stuff_additions.MixinGrapplinWhiskItemInHandTickProcedure",
+    "compat.create_stuff_additions.MixinGrapplinWhiskRightclickedProcedure",
+    "compat.mffs.MixinFrequencyGrid",
     "compat.mffs.MixinFrequencyGrid",
     "compat.modular_routers.MixinRouterMenu",
     "compat.tfc.MixinTFCChunkGenerator",
     "compat.thermalexpansion.MixinTileCoFH",
     "entity.MixinContainerEntity",
+    "compat.tfc.MixinTFCChunkGenerator",
+    "compat.thermalexpansion.MixinTileCoFH",
+    "compat.twilightforest.ChunkGeneratorTwilightMixin",
     "feature.forge_interact.MixinIForge2Player",
     "feature.forge_interact.MixinIForgePlayer",
+    "feature.forge_interact.MixinIForgePlayer",
+    "feature.shipyard_entities.MixinPersistentEntitySectionManager",
     "feature.water_in_ships_entity.MixinEntity",
     "world.level.block.FireMixin"
   ],
@@ -27,6 +39,11 @@
     "compat.create.client.MixinChainConveyorBlockEntity",
     "compat.create.client.MixinContraptionHandlerClient",
     "compat.sodium.MixinRenderSectionManager"
+    "compat.create.client.MixinSuperGlueSelectionHandler",
+    "compat.sodium.MixinRenderSectionManager",
+    "compat.oc2r.MixinComputerRenderer",
+    "compat.oc2r.MixinMonitorRenderer",
+    "compat.oc2r.MixinProjectorDepthRenderer"
   ],
   "injectors": {
     "defaultRequire": 1

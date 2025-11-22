@@ -13,8 +13,10 @@ import net.minecraft.world.level.entity.EntityAccess
 import net.minecraft.world.level.entity.EntitySection
 import org.joml.Matrix4f
 import org.valkyrienskies.core.api.ships.ClientShip
+import org.valkyrienskies.core.api.ships.properties.ShipId
+import org.valkyrienskies.core.util.events.EventEmitterImpl
+import org.valkyrienskies.core.util.datastructures.DenseBlockPosSet
 import org.valkyrienskies.core.api.ships.Ship
-import org.valkyrienskies.core.impl.util.events.EventEmitterImpl
 import javax.swing.text.html.parser.Entity
 
 object VSGameEvents {
@@ -35,6 +37,8 @@ object VSGameEvents {
         val ship: Ship
     )
 
+    val shipSplit = EventEmitterImpl<ShipSplitEvent>()
+
     data class ShipStartRenderEvent(
         val renderer: LevelRenderer,
         val renderType: RenderType,
@@ -51,6 +55,12 @@ object VSGameEvents {
         val projectionMatrix: Matrix4f,
         val ship: ClientShip,
         val chunks: ObjectList<RenderChunkInfo>
+    )
+
+    data class ShipSplitEvent(
+        val ship: ShipId,
+        val newShip: ShipId,
+        val blocks: DenseBlockPosSet
     )
 
     data class ShipStartRenderEventSodium(
