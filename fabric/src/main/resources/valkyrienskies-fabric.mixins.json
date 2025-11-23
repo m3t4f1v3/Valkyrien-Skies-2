@@ -7,6 +7,7 @@
     "compat.create.MixinBlockBreakingKineticTileEntity",
     "compat.create.MixinControlledContraptionEntity",
     "compat.sodium.MixinRenderSectionManager",
+    "compat.very_many_players.MixinChunkMapVMPFabric",
     "entity.MixinContainerEntity",
     "feature.explosions.ClipContextMixin",
     "feature.shipyard_entities.MixinPersistentEntitySectionManager",

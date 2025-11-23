@@ -26,6 +26,7 @@ loom {
 
 dependencies {
     include(implementation(annotationProcessor("io.github.llamalad7:mixinextras-fabric:0.5.0")))
+    include(implementation(annotationProcessor("com.github.bawnorton.mixinsquared:mixinsquared-fabric:0.3.7-beta.1")))
 
     modImplementation("net.fabricmc:fabric-loader:${rootProject.fabric_loader_version}")
 
@@ -76,6 +77,9 @@ dependencies {
     //modRuntimeOnly("cc.tweaked:cc-tweaked-${minecraft_version}-fabric:${cc_tweaked_version}")
     // CC Restitched
     modCompileOnly("maven.modrinth:cc-tweaked:${cc_tweaked_version}")
+
+    //Very many players
+    modImplementation("curse.maven:vmp-fabric-552542:4754074")
 
     // EMF compat
     //todo: fix
