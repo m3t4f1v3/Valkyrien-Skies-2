@@ -63,6 +63,8 @@ dependencies {
     implementation(include("io.github.llamalad7:mixinextras-forge:0.4.1"))
     annotationProcessor("net.fabricmc:sponge-mixin:0.12.5+mixin.0.8.5") // use fabric mixin so we can write interface injectors (conditionally loaded if mixinbooster is enabled)
 
+    compileOnly(annotationProcessor("com.github.bawnorton.mixinsquared:mixinsquared-common:0.3.7-beta.1"))
+    implementation(include("com.github.bawnorton.mixinsquared:mixinsquared-forge:0.3.7-beta.1"))
 
     forge "net.minecraftforge:forge:${rootProject.forge_version}"
 
@@ -93,6 +95,8 @@ dependencies {
 
     // CC Tweaked
     modRuntimeOnly("cc.tweaked:cc-tweaked-${minecraft_version}-forge:${cc_tweaked_version}")
+
+    modImplementation("curse.maven:vmp-forge-892037:4657678")
 
     // OpenComputers 2: Reimagined
     modCompileOnly("maven.modrinth:oc2r:${oc2r_version}")
