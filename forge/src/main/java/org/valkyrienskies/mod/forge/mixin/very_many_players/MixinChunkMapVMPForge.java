@@ -23,7 +23,7 @@ import org.valkyrienskies.core.internal.world.VsiPlayer;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.util.MinecraftPlayer;
 
-@Mixin(ChunkMap.class)
+@Mixin(value = ChunkMap.class, priority = 1500)
 public class MixinChunkMapVMPForge {
 
     @Shadow

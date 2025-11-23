@@ -130,6 +130,9 @@ dependencies {
     modCompileOnly("curse.maven:cyclops-core-232758:5262063")
     modCompileOnly("curse.maven:common-capabilities-247007:4987207")
 
+    // Very Many Players
+    modCompileOnly("maven.modrinth:vmp-forge:0.2.0+beta.7.101+1.20.1")
+
     // Mekanism
     modCompileOnly ("curse.maven:mekanism-268560:4644795")
 
