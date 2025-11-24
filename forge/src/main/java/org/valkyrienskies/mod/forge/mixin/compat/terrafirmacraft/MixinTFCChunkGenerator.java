@@ -20,6 +20,7 @@ import net.minecraft.world.level.levelgen.NoiseSettings;
 import net.minecraft.world.level.levelgen.RandomState;
 import net.minecraft.world.level.levelgen.blending.Blender;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplateManager;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
@@ -30,13 +31,14 @@ import org.valkyrienskies.mod.common.VS2ChunkAllocator;
 
 @Mixin(TFCChunkGenerator.class)
 public class MixinTFCChunkGenerator {
+    @Final
     @Shadow
-    private Holder<NoiseGeneratorSettings> settings;
+    private Holder<NoiseGeneratorSettings> noiseSettings;
 
     @Inject(method = "getBaseColumn", at = @At("HEAD"), cancellable = true)
     private void preGetBaseColumn(int x, int y, LevelHeightAccessor level, RandomState random, CallbackInfoReturnable<NoiseColumn> cir) {
         if (VS2ChunkAllocator.INSTANCE.isChunkInShipyardCompanion(x, y)) {
-            final NoiseSettings ns = this.settings.value().noiseSettings();
+            final NoiseSettings ns = this.noiseSettings.value().noiseSettings();
             final int k = Math.max(ns.minY(), level.getMinBuildHeight());
             cir.setReturnValue(new NoiseColumn(k, new BlockState[0]));
         }
