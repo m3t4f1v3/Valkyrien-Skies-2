@@ -10,6 +10,7 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.LevelHeightAccessor;
 import net.minecraft.world.level.NoiseColumn;
 import net.minecraft.world.level.StructureManager;
+import net.minecraft.world.level.WorldGenLevel;
 import net.minecraft.world.level.biome.BiomeManager;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
@@ -79,6 +80,15 @@ public class MixinTFCChunkGenerator {
     @Inject(method = "spawnOriginalMobs", at = @At("HEAD"), cancellable = true)
     private void preSpawnOriginalMobs(WorldGenRegion worldGenRegion, CallbackInfo ci) {
         final ChunkPos chunkPos = worldGenRegion.getCenter();
+        if (VS2ChunkAllocator.INSTANCE.isChunkInShipyardCompanion(chunkPos.x, chunkPos.z)) {
+            ci.cancel();
+        }
+    }
+
+    @Inject(method = "applyBiomeDecoration", at = @At("HEAD"), cancellable = true)
+    private void preApplyBiomeDecoration(WorldGenLevel level, ChunkAccess chunk,
+        StructureManager structureFeatureManager, CallbackInfo ci) {
+        final ChunkPos chunkPos = chunk.getPos();
         if (VS2ChunkAllocator.INSTANCE.isChunkInShipyardCompanion(chunkPos.x, chunkPos.z)) {
             ci.cancel();
         }
