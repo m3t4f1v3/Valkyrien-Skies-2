@@ -28,7 +28,7 @@ import org.valkyrienskies.mod.common.entity.ShipMountedToData;
 import org.valkyrienskies.mod.common.entity.handling.VSEntityManager;
 import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
 
-@Mixin(EntityRenderDispatcher.class)
+@Mixin(value = EntityRenderDispatcher.class, priority = 500)
 public class MixinEntityRenderDispatcher {
 
     @Shadow
