@@ -10,9 +10,7 @@ class BlockPosSerializer : JsonSerializer<BlockPos>() {
     @Throws(IOException::class)
     override fun serialize(value: BlockPos, gen: JsonGenerator, serializers: SerializerProvider) {
         gen.writeStartObject()
-        gen.writeNumberField("centerX", value.center.x)
-        gen.writeNumberField("centerY", value.center.y)
-        gen.writeNumberField("centerZ", value.center.z)
+        gen.writeNumberField("long", value.asLong())
         gen.writeEndObject()
     }
 }

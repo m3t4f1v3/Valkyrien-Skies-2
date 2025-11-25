@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.TreeNode
 import com.fasterxml.jackson.databind.DeserializationContext
 import com.fasterxml.jackson.databind.JsonDeserializer
 import com.fasterxml.jackson.databind.node.DoubleNode
+import com.fasterxml.jackson.databind.node.LongNode
 import net.minecraft.core.BlockPos
 import java.io.IOException
 
@@ -13,11 +14,8 @@ class BlockPosDeserializer : JsonDeserializer<BlockPos>() {
     override fun deserialize(p: JsonParser, ctxt: DeserializationContext): BlockPos {
         val node = p.getCodec().readTree<TreeNode>(p)
 
-        // Probably a tider way to do this but meh
-        val centerX = (node["centerX"] as DoubleNode).numberValue() as Double
-        val centerY = (node["centerY"] as DoubleNode).numberValue() as Double
-        val centerZ = (node["centerZ"] as DoubleNode).numberValue() as Double
+        val long = (node["long"] as LongNode).numberValue() as Long
 
-        return BlockPos.containing(centerX, centerY, centerZ)
+        return BlockPos.of(long)
     }
 }
