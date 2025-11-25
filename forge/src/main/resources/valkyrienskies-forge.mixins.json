@@ -38,7 +38,6 @@
     "compat.oc2r.MixinMonitorRenderer",
     "compat.oc2r.MixinProjectorDepthRenderer",
     "compat.sodium.MixinSodiumWorldRenderer"
-    "compat.sodium.MixinRenderSectionManager"
   ],
   "injectors": {
     "defaultRequire": 1
