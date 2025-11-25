@@ -27,6 +27,8 @@ import org.valkyrienskies.mod.common.config.VSGameConfig
 import org.valkyrienskies.mod.common.entity.ShipMountingEntity
 import org.valkyrienskies.mod.common.entity.VSPhysicsEntity
 import org.valkyrienskies.mod.common.jackson.BlockPosDeserializer
+import org.valkyrienskies.mod.common.jackson.BlockPosKeyDeserializer
+import org.valkyrienskies.mod.common.jackson.BlockPosKeySerializer
 import org.valkyrienskies.mod.common.jackson.BlockPosSerializer
 import org.valkyrienskies.mod.common.networking.VSGamePackets
 import org.valkyrienskies.mod.common.util.GameToPhysicsAdapter
@@ -97,6 +99,8 @@ object ValkyrienSkiesMod {
         val aabbModule = SimpleModule()
         aabbModule.addSerializer(BlockPos::class.java, BlockPosSerializer())
         aabbModule.addDeserializer(BlockPos::class.java, BlockPosDeserializer())
+        aabbModule.addKeySerializer(BlockPos::class.java, BlockPosKeySerializer())
+        aabbModule.addKeyDeserializer(BlockPos::class.java, BlockPosKeyDeserializer())
         val mapper = ObjectMapper()
         mapper.registerModule(aabbModule)
         // end region
