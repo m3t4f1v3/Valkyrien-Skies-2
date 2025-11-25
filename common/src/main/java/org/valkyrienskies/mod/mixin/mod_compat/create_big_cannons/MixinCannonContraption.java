@@ -12,6 +12,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.valkyrienskies.core.api.ships.LoadedServerShip;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod;
+import org.valkyrienskies.mod.common.config.VSGameConfig;
 import org.valkyrienskies.mod.common.util.GameToPhysicsAdapter;
 import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
 import rbasamoyai.createbigcannons.cannon_control.ControlPitchContraption;
@@ -37,10 +38,10 @@ public class MixinCannonContraption {
     @Unique
     private void vs$handleRecoil(ControlPitchContraption instance, Vec3 vector, AbstractContraptionEntity cannon, float magnitude) {
         LoadedServerShip ship = (LoadedServerShip) VSGameUtilsKt.getShipObjectManagingPos(cannon.level(), BlockPos.containing(cannon.getAnchorVec()));
-        if (true) { //todo: config this
+        if (VSGameConfig.SERVER.getCbc().getShellRecoil()) {
             GameToPhysicsAdapter applier = ValkyrienSkiesMod.getOrCreateGTPA(VSGameUtilsKt.getDimensionId(cannon.level()));
             if (applier != null) {
-                double recoilForce = magnitude * 500000.0; //todo: configure
+                double recoilForce = magnitude * VSGameConfig.SERVER.getCbc().getShellRecoilMult();
                 applier.applyInvariantForceToPos(
                     ship.getId(),
                     ship.getTransform().getShipToWorldRotation().transform(VectorConversionsMCKt.toJOML(vector).negate().normalize()).mul(recoilForce),

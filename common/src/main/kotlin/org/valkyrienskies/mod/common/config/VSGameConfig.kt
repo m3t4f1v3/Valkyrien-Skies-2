@@ -119,6 +119,15 @@ object VSGameConfig {
             var showShipMass = true
         }
 
+        val Cbc = CBC()
+
+        class CBC {
+            @JsonSchema(description = "Should cannon shots apply a recoil force to ships")
+            var shellRecoil = false
+            @JsonSchema(description = "The force multiplier applied to recoil on ships")
+            var shellRecoilMult = 500000.0
+        }
+
 
         @JsonSchema(
             description = "By default, the vanilla server prevents block interacts past a certain distance " +

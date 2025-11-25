@@ -1,6 +1,9 @@
 package org.valkyrienskies.mod.common
 
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.module.SimpleModule
 import net.minecraft.client.Minecraft
+import net.minecraft.core.BlockPos
 import net.minecraft.core.registries.Registries
 import net.minecraft.network.chat.Component
 import net.minecraft.resources.ResourceKey
@@ -23,13 +26,16 @@ import org.valkyrienskies.mod.common.blockentity.TestThrusterBlockEntity
 import org.valkyrienskies.mod.common.config.VSGameConfig
 import org.valkyrienskies.mod.common.entity.ShipMountingEntity
 import org.valkyrienskies.mod.common.entity.VSPhysicsEntity
+import org.valkyrienskies.mod.common.jackson.BlockPosDeserializer
+import org.valkyrienskies.mod.common.jackson.BlockPosKeyDeserializer
+import org.valkyrienskies.mod.common.jackson.BlockPosKeySerializer
+import org.valkyrienskies.mod.common.jackson.BlockPosSerializer
 import org.valkyrienskies.mod.common.networking.VSGamePackets
 import org.valkyrienskies.mod.common.util.GameToPhysicsAdapter
 import org.valkyrienskies.mod.common.util.ShipSettings
 import org.valkyrienskies.mod.common.util.SplitHandler
 import org.valkyrienskies.mod.common.util.SplittingDisablerAttachment
 import org.valkyrienskies.mod.mixinducks.client.world.ClientChunkCacheDuck
-import java.lang.reflect.Method
 import java.util.ServiceLoader
 
 object ValkyrienSkiesMod {
@@ -88,6 +94,16 @@ object ValkyrienSkiesMod {
         BlockStateInfo.init()
         VSGamePackets.register()
         VSGamePackets.registerHandlers()
+
+        // region Register BlockPos for serialization in force inducers
+        val aabbModule = SimpleModule()
+        aabbModule.addSerializer(BlockPos::class.java, BlockPosSerializer())
+        aabbModule.addDeserializer(BlockPos::class.java, BlockPosDeserializer())
+        aabbModule.addKeySerializer(BlockPos::class.java, BlockPosKeySerializer())
+        aabbModule.addKeyDeserializer(BlockPos::class.java, BlockPosKeyDeserializer())
+        val mapper = ObjectMapper()
+        mapper.registerModule(aabbModule)
+        // end region
 
         core.registerConfigLegacy("vs", VSGameConfig::class.java)
 
