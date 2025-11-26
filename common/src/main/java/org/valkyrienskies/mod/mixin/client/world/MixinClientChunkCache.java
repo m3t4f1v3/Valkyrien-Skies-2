@@ -39,7 +39,7 @@ import org.valkyrienskies.mod.mixinducks.mod_compat.vanilla_renderer.LevelRender
 public abstract class MixinClientChunkCache implements ClientChunkCacheDuck {
     @Shadow
     @Final
-    ClientLevel level;
+    public ClientLevel level;
 
     public LongObjectMap<LevelChunk> vs$getShipChunks() {
         return vs$shipChunks;
@@ -73,7 +73,13 @@ public abstract class MixinClientChunkCache implements ClientChunkCacheDuck {
             }
 
             this.level.onChunkLoaded(pos);
-            SodiumCompat.onChunkAdded(this.level, x, z);
+            if (ValkyrienCommonMixinConfigPlugin.getVSRenderer() == VSRenderer.SODIUM) {
+                // getVSRenderer() only returns SODIUM if the mod is installed.
+                // Methods of SodiumCompat check if Sodium is present but calling them
+                // is not safe anyway as the class references Sodium classes so the game
+                // crashes with NoClassDefFoundError.
+                SodiumCompat.onChunkAdded(this.level, x, z);
+            }
             cir.setReturnValue(worldChunk);
         }
     }
@@ -95,8 +101,9 @@ public abstract class MixinClientChunkCache implements ClientChunkCacheDuck {
             if (ValkyrienCommonMixinConfigPlugin.getVSRenderer() != VSRenderer.SODIUM) {
                 ((IVSViewAreaMethods) ((LevelRendererAccessor) ((ClientLevelAccessor) level).getLevelRenderer()).getViewArea())
                     .unloadChunk(chunkX, chunkZ);
+            } else {
+                SodiumCompat.onChunkRemoved(this.level, chunkX, chunkZ);
             }
-            SodiumCompat.onChunkRemoved(this.level, chunkX, chunkZ);
             ci.cancel();
         }
     }
@@ -109,8 +116,9 @@ public abstract class MixinClientChunkCache implements ClientChunkCacheDuck {
         if (ValkyrienCommonMixinConfigPlugin.getVSRenderer() != VSRenderer.SODIUM) {
             ((IVSViewAreaMethods) ((LevelRendererAccessor) ((ClientLevelAccessor) level).getLevelRenderer()).getViewArea())
                 .unloadChunk(chunkX, chunkZ);
+        } else {
+            SodiumCompat.onChunkRemoved(this.level, chunkX, chunkZ);
         }
-        SodiumCompat.onChunkRemoved(this.level, chunkX, chunkZ);
     }
 
     @Inject(
