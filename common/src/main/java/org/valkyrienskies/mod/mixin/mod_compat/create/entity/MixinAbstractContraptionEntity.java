@@ -94,7 +94,7 @@ public abstract class MixinAbstractContraptionEntity extends Entity implements M
     @Nullable
     @Override
     public ShipMountedToData provideShipMountedToData(@NotNull final Entity passenger, @Nullable final Float partialTicks) {
-        final LoadedShip shipObjectEntityMountedTo = VSGameUtilsKt.getShipObjectManagingPos(passenger.level(), toJOML(this.position()));
+        final LoadedShip shipObjectEntityMountedTo = VSGameUtilsKt.getLoadedShipManagingPos(passenger.level(), toJOML(this.position()));
         if (shipObjectEntityMountedTo == null) return null;
 
         Vec3 transformedPos = this.getPassengerPosition(passenger, partialTicks == null ? 1 : partialTicks);
@@ -301,7 +301,7 @@ public abstract class MixinAbstractContraptionEntity extends Entity implements M
         final AbstractContraptionEntity thisAsAbstractContraptionEntity = AbstractContraptionEntity.class.cast(this);
         final Level level = thisAsAbstractContraptionEntity.level();
         if (wingGroupId != -1 && level instanceof final ServerLevel serverLevel) {
-            final LoadedServerShip ship = VSGameUtilsKt.getShipObjectManagingPos(serverLevel,
+            final LoadedServerShip ship = VSGameUtilsKt.getLoadedShipManagingPos(serverLevel,
                 VectorConversionsMCKt.toJOML(thisAsAbstractContraptionEntity.position()));
             if (ship != null) {
                 try {

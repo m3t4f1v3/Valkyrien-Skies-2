@@ -14,7 +14,7 @@ import org.valkyrienskies.core.api.ships.LoadedServerShip
 import org.valkyrienskies.mod.api.SeatedControllingPlayer
 import org.valkyrienskies.mod.common.entity.ShipMountingEntity
 import org.valkyrienskies.mod.common.entity.handling.VSEntityManager
-import org.valkyrienskies.mod.common.getShipObjectManagingPos
+import org.valkyrienskies.mod.common.getLoadedShipManagingPos
 import org.valkyrienskies.mod.common.shipObjectWorld
 import org.valkyrienskies.mod.common.toWorldCoordinates
 import org.valkyrienskies.mod.common.util.EntityLerper
@@ -42,7 +42,7 @@ object VSGamePackets {
             val seat = player.vehicle as? ShipMountingEntity
                 ?: return@registerServerHandler
             if (seat.isController) {
-                val ship = seat.level().getShipObjectManagingPos(seat.blockPosition()) as? LoadedServerShip
+                val ship = seat.level().getLoadedShipManagingPos(seat.blockPosition()) as? LoadedServerShip
                     ?: return@registerServerHandler
 
                 val attachment: SeatedControllingPlayer = ship.getAttachment<SeatedControllingPlayer>()

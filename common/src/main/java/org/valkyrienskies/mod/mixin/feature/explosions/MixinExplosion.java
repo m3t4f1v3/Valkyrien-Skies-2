@@ -76,7 +76,7 @@ public abstract class MixinExplosion {
                     if (result.getType() == Type.BLOCK) {
                         final BlockPos blockPos = result.getBlockPos();
                         final ServerShip ship =
-                            (ServerShip) VSGameUtilsKt.getShipObjectManagingPos(this.level, blockPos);
+                            (ServerShip) VSGameUtilsKt.getLoadedShipManagingPos(this.level, blockPos);
                         if (ship != null) {
                             final Vector3d forceVector =
                                 VectorConversionsMCKt.toJOML(

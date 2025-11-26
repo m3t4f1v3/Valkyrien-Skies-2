@@ -33,7 +33,7 @@ public abstract class MixinRenderSection {
     )
     private float squareDistanceIfInShipyard(float x, float y, float z, Operation<Float> original) {
         final ClientLevel world = Minecraft.getInstance().level;
-        final ClientShip shipObject = VSGameUtilsKt.getShipObjectManagingPos(world, this.getCenterX(), this.getCenterY(), this.getCenterZ());
+        final ClientShip shipObject = VSGameUtilsKt.getLoadedShipManagingPos(world, this.getCenterX(), this.getCenterY(), this.getCenterZ());
         if (shipObject != null) {
             final Vector3dc chunkPosInWorld = shipObject.getRenderTransform().getShipToWorld().transformPosition(
                 new Vector3d(this.getCenterX(), this.getCenterY(), this.getCenterZ())

@@ -75,7 +75,7 @@ public abstract class MixinSodiumWorldRenderer {
         if(!(dispatcher.level instanceof ClientLevel)) return;
 
         final ClientLevel level = (ClientLevel) dispatcher.level;
-        final ClientShip ship = VSGameUtilsKt.getShipObjectManagingPos(level, pos);
+        final ClientShip ship = VSGameUtilsKt.getLoadedShipManagingPos(level, pos);
 
         if (ship == null) {
             instance.translate(x, y, z);

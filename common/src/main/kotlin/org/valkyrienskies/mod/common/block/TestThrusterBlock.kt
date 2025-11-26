@@ -19,7 +19,7 @@ import net.minecraft.world.level.block.state.StateDefinition
 import org.valkyrienskies.mod.common.blockentity.DebugPhysicsTickables
 import org.valkyrienskies.mod.common.blockentity.TestHingeBlockEntity
 import org.valkyrienskies.mod.common.blockentity.TestThrusterBlockEntity
-import org.valkyrienskies.mod.common.getShipObjectManagingPos
+import org.valkyrienskies.mod.common.getLoadedShipManagingPos
 
 object TestThrusterBlock : DirectionalBlock(Properties.of().strength(10.0f, 1200.0f).sound(SoundType.METAL)), EntityBlock {
 
@@ -61,7 +61,7 @@ object TestThrusterBlock : DirectionalBlock(Properties.of().strength(10.0f, 1200
                 DebugPhysicsTickables.add(blockEntity)
             }
             blockEntity.isActive = blockState.getValue<Boolean>(LIT) as Boolean
-            blockEntity.shipMountedTo = serverLevel.getShipObjectManagingPos(blockPos)?.id ?: -1L
+            blockEntity.shipMountedTo = serverLevel.getLoadedShipManagingPos(blockPos)?.id ?: -1L
         }
     }
 

@@ -112,7 +112,7 @@ object BlockStateInfo {
 
         // region Inject wings
         if (level is ServerLevel) {
-            val loadedShip = level.getShipObjectManagingPos(x shr 4, z shr 4)
+            val loadedShip = level.getLoadedShipManagingPos(x shr 4, z shr 4)
             if (loadedShip != null) {
                 val wingManager = loadedShip.getAttachment(WingManager::class.java)!!
                 val wasOldBlockWing = prevBlockState.block is WingBlock

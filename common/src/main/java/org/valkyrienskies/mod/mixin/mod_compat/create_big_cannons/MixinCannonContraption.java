@@ -37,7 +37,7 @@ public class MixinCannonContraption {
 
     @Unique
     private void vs$handleRecoil(ControlPitchContraption instance, Vec3 vector, AbstractContraptionEntity cannon, float magnitude) {
-        LoadedServerShip ship = (LoadedServerShip) VSGameUtilsKt.getShipObjectManagingPos(cannon.level(), BlockPos.containing(cannon.getAnchorVec()));
+        LoadedServerShip ship = (LoadedServerShip) VSGameUtilsKt.getLoadedShipManagingPos(cannon.level(), BlockPos.containing(cannon.getAnchorVec()));
         if (VSGameConfig.SERVER.getCbc().getShellRecoil()) {
             GameToPhysicsAdapter applier = ValkyrienSkiesMod.getOrCreateGTPA(VSGameUtilsKt.getDimensionId(cannon.level()));
             if (applier != null) {
