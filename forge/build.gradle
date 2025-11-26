@@ -175,12 +175,12 @@ dependencies {
         transitive = false
     }
 
-    forgeRuntimeLibrary shadowCommon("org.valkyrienskies:physics_api_krunch:1.0.0+7de6258833") {
+    forgeRuntimeLibrary shadowCommon("org.valkyrienskies:physics_api_krunch:${rootProject.krunch_version}") {
         exclude group: 'org.joml', module: 'joml'
         transitive = false
     }
 
-    forgeRuntimeLibrary shadowCommon("org.valkyrienskies:physics_api:1.0.0+e38d2989db") {
+    forgeRuntimeLibrary shadowCommon("org.valkyrienskies:physics_api:${rootProject.krunch_api_version}") {
         exclude group: 'org.joml', module: 'joml'
         transitive = false
     }
