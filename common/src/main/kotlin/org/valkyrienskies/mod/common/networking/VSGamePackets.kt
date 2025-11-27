@@ -80,6 +80,7 @@ object VSGamePackets {
             if (entity is IEntityDraggingInformationProvider) {
                 if (entity.draggingInformation.lastShipStoodOn == null || entity.draggingInformation.lastShipStoodOn != setMotion.shipID) {
                     entity.draggingInformation.lastShipStoodOn = setMotion.shipID
+                    entity.draggingInformation.lastShipStoodOnServerWriteOnly = setMotion.shipID
                     entity.draggingInformation.ignoreNextGroundStand = true
                 }
                 entity.draggingInformation.shouldImpulseMovement = false
@@ -125,6 +126,7 @@ object VSGamePackets {
             if (entity is IEntityDraggingInformationProvider) {
                 if (entity.draggingInformation.lastShipStoodOn == null || entity.draggingInformation.lastShipStoodOn != setRotation.shipID) {
                     entity.draggingInformation.lastShipStoodOn = setRotation.shipID
+                    entity.draggingInformation.lastShipStoodOnServerWriteOnly = setRotation.shipID
                     entity.draggingInformation.ignoreNextGroundStand = true
                 }
                 entity.draggingInformation.relativeHeadYawOnShip = EntityLerper.yawToShip(ship, entity.yHeadRot.toDouble())
