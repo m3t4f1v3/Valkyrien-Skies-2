@@ -6,7 +6,7 @@ import org.joml.Vector3d
 import org.joml.Vector3dc
 import org.valkyrienskies.core.api.ships.ClientShip
 import org.valkyrienskies.core.api.ships.Ship
-import org.valkyrienskies.mod.common.getShipObjectManagingPos
+import org.valkyrienskies.mod.common.getLoadedShipManagingPos
 import org.valkyrienskies.mod.common.toWorldCoordinates
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -47,8 +47,8 @@ object EntityLerper {
                 //return
             }
 
-            val lerpship = entity.level().getShipObjectManagingPos(dragInfo.lerpPositionOnShip!!)
-            val posship = entity.level().getShipObjectManagingPos(dragInfo.relativePositionOnShip!!)
+            val lerpship = entity.level().getLoadedShipManagingPos(dragInfo.lerpPositionOnShip!!)
+            val posship = entity.level().getLoadedShipManagingPos(dragInfo.relativePositionOnShip!!)
             if (dragInfo.lerpPositionOnShip != null && lerpship != null && lerpship.id != ship.id) {
                 //transform it to the new ship
                 val worldPos = lerpship.transform.shipToWorld.transformPosition(Vector3d(dragInfo.lerpPositionOnShip), Vector3d())

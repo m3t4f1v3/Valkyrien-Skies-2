@@ -31,7 +31,7 @@ public abstract class MixinBlockEntity {
         if (LoadedMods.getFlywheel() != FlywheelVersion.V1) return;
         if (!FlywheelCompat.INSTANCE.validate((BlockEntity) (Object) this, level)) return;
 
-        ClientShip ship = (ClientShip) VSGameUtilsKt.getShipObjectManagingPos(level, this.getBlockPos());
+        ClientShip ship = (ClientShip) VSGameUtilsKt.getLoadedShipManagingPos(level, this.getBlockPos());
         if (ship == null) return;
 
         ShipEffect.Companion.getShipEffect(ship).queueRemoval((BlockEntity) (Object) this);

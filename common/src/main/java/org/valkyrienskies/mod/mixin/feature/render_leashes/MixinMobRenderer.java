@@ -30,7 +30,7 @@ public class MixinMobRenderer {
         final Vec3 origVec = getRopeHoldPosition.call(instance, partialTicks);
         final Vector3d vec = VectorConversionsMCKt.toJOML(origVec);
 
-        final LoadedShip ship = VSGameUtilsKt.getShipObjectManagingPos(instance.level(), vec);
+        final LoadedShip ship = VSGameUtilsKt.getLoadedShipManagingPos(instance.level(), vec);
         if (ship != null) {
             ship.getShipToWorld().transformPosition(vec);
             return VectorConversionsMCKt.toMinecraft(vec);
@@ -55,7 +55,7 @@ public class MixinMobRenderer {
             target = "Lnet/minecraft/client/renderer/culling/Frustum;isVisible(Lnet/minecraft/world/phys/AABB;)Z"
         )
     )
-    private boolean isTransformedAABBVisible(Frustum frustum, AABB aABB, @Local Entity leashHolder) {
+    private boolean isTransformedAABBVisible(final Frustum frustum, final AABB aABB, @Local final Entity leashHolder) {
         return frustum.isVisible(VSGameUtilsKt.transformRenderAABBToWorld(((ClientLevel) leashHolder.level()), leashHolder.position(),
             leashHolder.getBoundingBoxForCulling()));
     }

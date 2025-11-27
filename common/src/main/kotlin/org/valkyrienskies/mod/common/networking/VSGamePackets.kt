@@ -6,6 +6,7 @@ import net.minecraft.core.registries.BuiltInRegistries
 import net.minecraft.resources.ResourceLocation
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
+import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.phys.Vec3
 import org.joml.Vector3d
 import org.valkyrienskies.core.api.attachment.getAttachment
@@ -13,7 +14,7 @@ import org.valkyrienskies.core.api.ships.LoadedServerShip
 import org.valkyrienskies.mod.api.SeatedControllingPlayer
 import org.valkyrienskies.mod.common.entity.ShipMountingEntity
 import org.valkyrienskies.mod.common.entity.handling.VSEntityManager
-import org.valkyrienskies.mod.common.getShipObjectManagingPos
+import org.valkyrienskies.mod.common.getLoadedShipManagingPos
 import org.valkyrienskies.mod.common.shipObjectWorld
 import org.valkyrienskies.mod.common.toWorldCoordinates
 import org.valkyrienskies.mod.common.util.EntityLerper
@@ -41,7 +42,7 @@ object VSGamePackets {
             val seat = player.vehicle as? ShipMountingEntity
                 ?: return@registerServerHandler
             if (seat.isController) {
-                val ship = seat.level().getShipObjectManagingPos(seat.blockPosition()) as? LoadedServerShip
+                val ship = seat.level().getLoadedShipManagingPos(seat.blockPosition()) as? LoadedServerShip
                     ?: return@registerServerHandler
 
                 val attachment: SeatedControllingPlayer = ship.getAttachment<SeatedControllingPlayer>()
@@ -79,8 +80,10 @@ object VSGamePackets {
             if (entity is IEntityDraggingInformationProvider) {
                 if (entity.draggingInformation.lastShipStoodOn == null || entity.draggingInformation.lastShipStoodOn != setMotion.shipID) {
                     entity.draggingInformation.lastShipStoodOn = setMotion.shipID
+                    entity.draggingInformation.lastShipStoodOnServerWriteOnly = setMotion.shipID
                     entity.draggingInformation.ignoreNextGroundStand = true
                 }
+                entity.draggingInformation.shouldImpulseMovement = false
 
                 entity.draggingInformation.relativePositionOnShip = ship.worldToShip.transformPosition(
                     Vector3d(entity.x, entity.y, entity.z)
@@ -97,14 +100,16 @@ object VSGamePackets {
                 } else {
                     Vector3d(entity.x, entity.y, entity.z)
                 }
-                val worldPosition = ship.renderTransform.shipToWorld.transformPosition(Vector3d(setMotion.x, setMotion.y, setMotion.z))
+                val worldPosition = ship.transform.shipToWorld.transformPosition(Vector3d(setMotion.x, setMotion.y, setMotion.z))
                 entity.syncPacketPositionCodec(worldPosition.x, worldPosition.y, worldPosition.z)
-                val worldVelocity = ship.renderTransform.shipToWorld.transformDirection(Vector3d(setMotion.xVel, setMotion.yVel, setMotion.zVel))
+                val worldVelocity = ship.transform.shipToWorld.transformDirection(Vector3d(setMotion.xVel, setMotion.yVel, setMotion.zVel))
                 entity.setDeltaMovement(worldVelocity.x, worldVelocity.y, worldVelocity.z)
                 entity.draggingInformation.lerpSteps = 3
 
-                // entity.setPos(previousWorldPosition.x, previousWorldPosition.y, previousWorldPosition.z)
-                // entity.lerpTo(worldPosition.x, worldPosition.y, worldPosition.z, Math.toDegrees(setMotion.yRot).toFloat(), Math.toDegrees(setMotion.xRot).toFloat(), 3, true)
+                if(entity !is LivingEntity) { // EntityLerper is called only if the entity is ai-controlled. In other cases lerp is manual.
+                    entity.setPos(previousWorldPosition.x, previousWorldPosition.y, previousWorldPosition.z)
+                    entity.lerpTo(worldPosition.x, worldPosition.y, worldPosition.z, Math.toDegrees(setMotion.yRot).toFloat(), Math.toDegrees(setMotion.xRot).toFloat(), 3, true)
+                }
             }
         }
 
@@ -121,6 +126,7 @@ object VSGamePackets {
             if (entity is IEntityDraggingInformationProvider) {
                 if (entity.draggingInformation.lastShipStoodOn == null || entity.draggingInformation.lastShipStoodOn != setRotation.shipID) {
                     entity.draggingInformation.lastShipStoodOn = setRotation.shipID
+                    entity.draggingInformation.lastShipStoodOnServerWriteOnly = setRotation.shipID
                     entity.draggingInformation.ignoreNextGroundStand = true
                 }
                 entity.draggingInformation.relativeHeadYawOnShip = EntityLerper.yawToShip(ship, entity.yHeadRot.toDouble())
