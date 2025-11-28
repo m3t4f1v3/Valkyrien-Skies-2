@@ -153,12 +153,4 @@ interface VsApi : VsCoreApi {
     fun getShipsIntersecting(level: Level?, aabb: AABBdc?): Iterable<Ship>
 
     fun getShipsIntersecting(level: Level?, x: Double, y: Double, z: Double): Iterable<Ship>
-
-    @OptIn(PhysTickOnly::class)
-    fun addBlockEntityPhysTicker(dimensionId: DimensionId, pos: BlockPos, blockEntity: BlockEntityPhysicsListener)
-
-    @OptIn(PhysTickOnly::class)
-    fun getBlockEntityPhysTicker(dimensionId: DimensionId, pos: BlockPos): BlockEntityPhysicsListener?
-
-    fun removeBlockEntityPhysTicker(pos: BlockPos, dimensionId: DimensionId)
 }

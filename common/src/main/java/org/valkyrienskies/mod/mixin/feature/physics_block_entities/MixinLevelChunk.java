@@ -29,13 +29,13 @@ public class MixinLevelChunk {
         if (blockEntity instanceof BlockEntityPhysicsListener listener) {
             listener.setDimension(dimensionId);
             if (blockEntity.isRemoved()) {
-                ValkyrienSkies.api().removeBlockEntityPhysTicker(blockEntity.getBlockPos(), dimensionId);
+                ValkyrienSkiesMod.INSTANCE.removeBlockEntityPhysTicker(blockEntity.getBlockPos(), dimensionId);
                 return;
             }
-            ValkyrienSkies.api().addBlockEntityPhysTicker(dimensionId, blockEntity.getBlockPos(), listener);
+            ValkyrienSkiesMod.INSTANCE.addBlockEntityPhysTicker(dimensionId, blockEntity.getBlockPos(), listener);
 
         } else {
-            ValkyrienSkies.api().removeBlockEntityPhysTicker(blockEntity.getBlockPos(), dimensionId);
+            ValkyrienSkiesMod.INSTANCE.removeBlockEntityPhysTicker(blockEntity.getBlockPos(), dimensionId);
         }
     }
 
@@ -54,6 +54,6 @@ public class MixinLevelChunk {
         if (be instanceof BlockEntityPhysicsListener && !be.isRemoved()) {
             return;
         }
-        ValkyrienSkies.api().removeBlockEntityPhysTicker(blockPos, dimensionId);
+        ValkyrienSkiesMod.INSTANCE.removeBlockEntityPhysTicker(blockPos, dimensionId);
     }
 }

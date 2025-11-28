@@ -14,6 +14,7 @@ import net.minecraft.world.item.CreativeModeTab
 import net.minecraft.world.item.Item
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.level.block.Block
+import net.minecraft.world.level.block.entity.BlockEntity
 import net.minecraft.world.level.block.entity.BlockEntityType
 import org.valkyrienskies.core.api.ships.properties.ShipId
 import org.valkyrienskies.core.api.util.GameTickOnly
@@ -23,6 +24,7 @@ import org.valkyrienskies.core.internal.VsiCore
 import org.valkyrienskies.core.internal.VsiCoreClient
 import org.valkyrienskies.mod.api.BlockEntityPhysicsListener
 import org.valkyrienskies.mod.api.SeatedControllingPlayer
+import org.valkyrienskies.mod.api.getShipManagingBlock
 import org.valkyrienskies.mod.api_impl.events.VsApiImpl
 import org.valkyrienskies.mod.common.blockentity.TestHingeBlockEntity
 import org.valkyrienskies.mod.common.blockentity.TestThrusterBlockEntity
@@ -177,6 +179,27 @@ object ValkyrienSkiesMod {
                 output.accept(PHYSICS_ENTITY_CREATOR_ITEM)
             }
             .build()
+    }
+
+    fun addBlockEntityPhysTicker(
+        dimensionId: DimensionId, pos: BlockPos, blockEntity: BlockEntityPhysicsListener
+    ) {
+        val level = (blockEntity as BlockEntity).level ?: return
+        if (level.isClientSide) return
+        var shipId : ShipId? = null
+        if (!level.isClientSide) {
+            val ship = level.getShipManagingBlock(pos)
+            shipId = ship?.id
+        }
+        blockEntityPhysListeners.getOrPut(dimensionId, {HashMap()})[pos] = Pair(shipId, blockEntity)
+    }
+
+    fun getBlockEntityPhysTicker(dimensionId: DimensionId, pos: BlockPos): BlockEntityPhysicsListener? {
+        return blockEntityPhysListeners.getOrPut(dimensionId, {HashMap()})[pos]?.second
+    }
+
+    fun removeBlockEntityPhysTicker(pos: BlockPos, dimensionId: DimensionId) {
+        blockEntityPhysListeners.getOrPut(dimensionId, {HashMap()}).remove(pos)
     }
 
 }

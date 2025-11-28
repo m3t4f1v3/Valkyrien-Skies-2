@@ -116,24 +116,4 @@ class VsApiImpl(
     override fun getShipsIntersecting(level: Level?, x: Double, y: Double, z: Double): Iterable<Ship> =
         getShipsIntersecting(level, AABBd(x, y, z, x, y, z))
 
-    override fun addBlockEntityPhysTicker(
-        dimensionId: DimensionId, pos: BlockPos, blockEntity: BlockEntityPhysicsListener
-    ) {
-        val level = (blockEntity as BlockEntity).level ?: return
-        if (level.isClientSide) return
-        var shipId : ShipId? = null
-        if (!level.isClientSide) {
-            val ship = level.getShipManagingBlock(pos)
-            shipId = ship?.id
-        }
-        blockEntityPhysListeners.getOrPut(dimensionId, {HashMap()})[pos] = Pair(shipId, blockEntity)
-    }
-
-    override fun getBlockEntityPhysTicker(dimensionId: DimensionId, pos: BlockPos): BlockEntityPhysicsListener? {
-        return blockEntityPhysListeners.getOrPut(dimensionId, {HashMap()})[pos]?.second
-    }
-
-    override fun removeBlockEntityPhysTicker(pos: BlockPos, dimensionId: DimensionId) {
-        blockEntityPhysListeners.getOrPut(dimensionId, {HashMap()}).remove(pos)
-    }
 }
