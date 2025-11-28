@@ -16,6 +16,7 @@ import org.joml.primitives.AABBdc
 import org.valkyrienskies.core.api.VsCoreApi
 import org.valkyrienskies.core.api.event.ListenableEvent
 import org.valkyrienskies.core.api.ships.*
+import org.valkyrienskies.core.api.util.PhysTickOnly
 import org.valkyrienskies.core.api.world.ClientShipWorld
 import org.valkyrienskies.core.api.world.ServerShipWorld
 import org.valkyrienskies.core.api.world.ShipWorld
@@ -153,4 +154,11 @@ interface VsApi : VsCoreApi {
 
     fun getShipsIntersecting(level: Level?, x: Double, y: Double, z: Double): Iterable<Ship>
 
+    @OptIn(PhysTickOnly::class)
+    fun addBlockEntityPhysTicker(dimensionId: DimensionId, pos: BlockPos, blockEntity: BlockEntityPhysicsListener)
+
+    @OptIn(PhysTickOnly::class)
+    fun getBlockEntityPhysTicker(dimensionId: DimensionId, pos: BlockPos): BlockEntityPhysicsListener?
+
+    fun removeBlockEntityPhysTicker(pos: BlockPos, dimensionId: DimensionId)
 }

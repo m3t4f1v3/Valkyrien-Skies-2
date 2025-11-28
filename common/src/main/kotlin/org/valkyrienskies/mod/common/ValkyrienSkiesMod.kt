@@ -15,12 +15,15 @@ import net.minecraft.world.item.Item
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.entity.BlockEntityType
+import org.valkyrienskies.core.api.ships.properties.ShipId
+import org.valkyrienskies.core.api.util.GameTickOnly
+import org.valkyrienskies.core.api.util.PhysTickOnly
 import org.valkyrienskies.core.api.world.properties.DimensionId
 import org.valkyrienskies.core.internal.VsiCore
 import org.valkyrienskies.core.internal.VsiCoreClient
+import org.valkyrienskies.mod.api.BlockEntityPhysicsListener
 import org.valkyrienskies.mod.api.SeatedControllingPlayer
 import org.valkyrienskies.mod.api_impl.events.VsApiImpl
-import org.valkyrienskies.mod.common.blockentity.DebugPhysicsTickables
 import org.valkyrienskies.mod.common.blockentity.TestHingeBlockEntity
 import org.valkyrienskies.mod.common.blockentity.TestThrusterBlockEntity
 import org.valkyrienskies.mod.common.config.VSGameConfig
@@ -37,6 +40,7 @@ import org.valkyrienskies.mod.common.util.SplitHandler
 import org.valkyrienskies.mod.common.util.SplittingDisablerAttachment
 import org.valkyrienskies.mod.mixinducks.client.world.ClientChunkCacheDuck
 import java.util.ServiceLoader
+import java.util.concurrent.ConcurrentHashMap
 
 object ValkyrienSkiesMod {
     const val MOD_ID = "valkyrienskies"
@@ -85,9 +89,13 @@ object ValkyrienSkiesMod {
         VsApiImpl(vsCore)
     }
 
+    val blockEntityPhysListeners: ConcurrentHashMap<DimensionId, HashMap<BlockPos, Pair<ShipId?, BlockEntityPhysicsListener>>> =
+        ConcurrentHashMap()
+
     @JvmStatic
     lateinit var splitHandler: SplitHandler
 
+    @OptIn(PhysTickOnly::class, GameTickOnly::class)
     fun init() {
         val core = this.vsCore
 
@@ -121,13 +129,22 @@ object ValkyrienSkiesMod {
             event.ship.setAttachment(SplittingDisablerAttachment(false))
         }
 
-        this.vsCore.physTickEvent.on { event ->
+        core.physTickEvent.on { event ->
             dimensionalGTPAs.forEach { dimensionId, gameTickForceApplier ->
                 if (event.world.dimension == dimensionId) {
                     gameTickForceApplier.physTick(event.world, event.delta)
                 }
             }
-            DebugPhysicsTickables.physTick(event.world, event.delta)
+            blockEntityPhysListeners.getOrPut(event.world.dimension, {HashMap()}).forEach { pos, infoPair ->
+                val shipId = infoPair.first
+                val listener = infoPair.second
+                val ship = if (shipId != null) {
+                    event.world.getShipById(shipId)
+                } else {
+                    null
+                }
+                listener.physTick(ship, event.world)
+            }
         }
         core.shipUnloadEventClient.on { event ->
             val level = Minecraft.getInstance().level
