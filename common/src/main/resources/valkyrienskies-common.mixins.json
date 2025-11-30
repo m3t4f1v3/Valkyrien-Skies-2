@@ -147,6 +147,7 @@
     "mod_compat.create.client.MixinContraptionVisual",
     "mod_compat.create.client.MixinDeployTool",
     "mod_compat.create.client.MixinFlwContraption",
+    "mod_compat.create.client.MixinSchematicannonRenderer",
     "mod_compat.create.client.MixinSchematicToolBase",
     "mod_compat.create.client.MixinSchematicTransformation",
     "mod_compat.create.client.MixinSymmetryMirror",
