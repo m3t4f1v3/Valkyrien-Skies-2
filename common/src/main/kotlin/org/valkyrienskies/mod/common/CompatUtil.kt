@@ -23,7 +23,7 @@ object CompatUtil {
      * This method handles coordinates in worldspace, shipspace of other ships and shipspace of the same ship.
      */
     fun toSameSpaceAs(level: Level?, position: Vector3dc, targetShip: Ship?): Vector3d {
-        val result = position as Vector3d
+        val result = Vector3d(position)
         val ship = level?.getShipManagingPos(result)
         if (ship != targetShip) {
             ship?.shipToWorld?.transformPosition(result)
