@@ -26,6 +26,7 @@ class EntityDraggingInformation {
             shouldImpulseMovement = false
             field = value
         }
+    var ticksSinceLastServerPacket: Int = 0
     var ignoreNextGroundStand = false
     var mountedToEntity: Boolean = false
 
