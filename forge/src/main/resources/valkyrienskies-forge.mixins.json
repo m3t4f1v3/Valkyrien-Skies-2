@@ -27,7 +27,6 @@
     "feature.forge_interact.MixinIForgePlayer",
     "feature.shipyard_entities.MixinPersistentEntitySectionManager",
     "feature.water_in_ships_entity.MixinEntity",
-    "very_many_players.MixinChunkMapVMPForge",
     "world.level.block.FireMixin"
   ],
   "client": [

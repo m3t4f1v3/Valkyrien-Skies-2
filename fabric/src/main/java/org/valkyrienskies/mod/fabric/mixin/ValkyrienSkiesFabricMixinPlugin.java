@@ -2,7 +2,6 @@ package org.valkyrienskies.mod.fabric.mixin;
 
 import java.util.List;
 import java.util.Set;
-import net.fabricmc.loader.api.FabricLoader;
 import org.objectweb.asm.tree.ClassNode;
 import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
 import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
@@ -35,10 +34,6 @@ public class ValkyrienSkiesFabricMixinPlugin implements IMixinConfigPlugin {
 
         if (mixinClassName.contains("org.valkyrienskies.mod.fabric.mixin.compat.old_create")) {
             return LoadedMods.getOldCreate();
-        }
-
-        if(mixinClassName.contains("MixinChunkMapVMPFabric")) {
-            return FabricLoader.getInstance().isModLoaded("vmp");
         }
 
         return true;

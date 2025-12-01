@@ -114,7 +114,7 @@ object BlockStateInfo {
         if (level is ServerLevel) {
             val loadedShip = level.getLoadedShipManagingPos(x shr 4, z shr 4)
             if (loadedShip != null) {
-                val wingManager = loadedShip.getAttachment(WingManager::class.java)!!
+                val wingManager = loadedShip.wingManager!!
                 val wasOldBlockWing = prevBlockState.block is WingBlock
                 val newBlockStateBlock = newBlockState.block
                 val newWing: Wing? =
