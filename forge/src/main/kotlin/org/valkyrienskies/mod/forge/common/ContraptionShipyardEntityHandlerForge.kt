@@ -16,7 +16,7 @@ object ContraptionShipyardEntityHandlerForge: AbstractShipyardEntityHandler() {
         if (entity is AbstractContraptionEntity && ship is LoadedServerShip) {
             entity as ContraptionWingProvider
             val attachment = ship.wingManager!!
-            entity.wingGroupId = attachment.createWingGroup()
+            entity.wingGroupId = attachment.createWingGroup(true)
             entity.contraption.blocks.forEach { (pos: BlockPos, blockInfo: StructureTemplate.StructureBlockInfo) ->
                 val block = blockInfo.state.block
                 if (block is WingBlock) {
