@@ -5,7 +5,6 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.blaze3d.vertex.VertexFormat;
-import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.LevelRenderer;
@@ -279,20 +278,28 @@ public class MixinDebugRenderer {
         line.accept(p1.set(fx, fy + gizmoSize, backZ), p2.set(fx, fy, Mz));
     }
 
-    private static RenderType XRAY_LINES = RenderType.create(
-        "xray_lines",
-        DefaultVertexFormat.POSITION_COLOR_NORMAL,
-        VertexFormat.Mode.LINES,
-        256,
-        RenderType.CompositeState.builder()
-            .setShaderState(RenderStateShard.RENDERTYPE_LINES_SHADER)
-            .setLineState(RenderStateShard.DEFAULT_LINE) // Thinner than RenderType.LINES, though we do not really care.
-            .setLayeringState(RenderStateShard.VIEW_OFFSET_Z_LAYERING)
-            .setTransparencyState(RenderStateShard.TRANSLUCENT_TRANSPARENCY)
-            .setOutputState(RenderStateShard.ITEM_ENTITY_TARGET)
-            .setWriteMaskState(RenderStateShard.COLOR_DEPTH_WRITE)
-            .setCullState(RenderStateShard.NO_CULL)
-            .setDepthTestState(RenderStateShard.NO_DEPTH_TEST)
-            .createCompositeState(false)
-    );
+    @Unique
+    private static RenderType XRAY_LINES = new RenderStateShard(null, null, null) {
+        // RenderStateShard.RENDERTYPE_LINES_SHADER and others are public in Fabric but protected in Forge.
+        // Instead of accessor mixins or access transformers we will use a dummy anonymous class.
+        // It is only called once and references static methods and fields. This should be safe.
+        public static RenderType.CompositeRenderType createXrayLines() {
+            return RenderType.create(
+                "xray_lines",
+                DefaultVertexFormat.POSITION_COLOR_NORMAL,
+                VertexFormat.Mode.LINES,
+                256,
+                RenderType.CompositeState.builder()
+                    .setShaderState(RenderStateShard.RENDERTYPE_LINES_SHADER)
+                    .setLineState(RenderStateShard.DEFAULT_LINE) // Thinner than RenderType.LINES, though we do not really care.
+                    .setLayeringState(RenderStateShard.VIEW_OFFSET_Z_LAYERING)
+                    .setTransparencyState(RenderStateShard.TRANSLUCENT_TRANSPARENCY)
+                    .setOutputState(RenderStateShard.ITEM_ENTITY_TARGET)
+                    .setWriteMaskState(RenderStateShard.COLOR_DEPTH_WRITE)
+                    .setCullState(RenderStateShard.NO_CULL)
+                    .setDepthTestState(RenderStateShard.NO_DEPTH_TEST)
+                    .createCompositeState(false)
+            );
+        }
+    }.createXrayLines();
 }
