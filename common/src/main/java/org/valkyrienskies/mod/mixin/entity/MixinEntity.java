@@ -102,31 +102,31 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider 
         }
     }
 
-    /**
-     * @reason Needed for players to pick blocks correctly when mounted to a ship
-     */
-    @Inject(method = "getEyePosition(F)Lnet/minecraft/world/phys/Vec3;", at = @At("HEAD"), cancellable = true)
-    private void preGetEyePosition(final float partialTicks, final CallbackInfoReturnable<Vec3> cir) {
-        final ShipMountedToData shipMountedToData = VSGameUtilsKt.getShipMountedToData(Entity.class.cast(this), partialTicks);
-        if (shipMountedToData == null) {
-            return;
-        }
-        final LoadedShip shipMountedTo = shipMountedToData.getShipMountedTo();
+    // /**
+    //  * @reason Needed for players to pick blocks correctly when mounted to a ship
+    //  */
+    // @Inject(method = "getEyePosition(F)Lnet/minecraft/world/phys/Vec3;", at = @At("HEAD"), cancellable = true)
+    // private void preGetEyePosition(final float partialTicks, final CallbackInfoReturnable<Vec3> cir) {
+    //     final ShipMountedToData shipMountedToData = VSGameUtilsKt.getShipMountedToData(Entity.class.cast(this), partialTicks);
+    //     if (shipMountedToData == null) {
+    //         return;
+    //     }
+    //     final LoadedShip shipMountedTo = shipMountedToData.getShipMountedTo();
 
-        final ShipTransform shipTransform;
-        if (shipMountedTo instanceof ClientShip) {
-            shipTransform = ((ClientShip) shipMountedTo).getRenderTransform();
-        } else {
-            shipTransform = shipMountedTo.getShipTransform();
-        }
-        final Vector3dc basePos = shipTransform.getShipToWorldMatrix()
-            .transformPosition(shipMountedToData.getMountPosInShip(), new Vector3d());
-        final Vector3dc eyeRelativePos = shipTransform.getShipCoordinatesToWorldCoordinatesRotation().transform(
-            new Vector3d(0.0, getEyeHeight(), 0.0)
-        );
-        final Vec3 newEyePos = VectorConversionsMCKt.toMinecraft(basePos.add(eyeRelativePos, new Vector3d()));
-        cir.setReturnValue(newEyePos);
-    }
+    //     final ShipTransform shipTransform;
+    //     if (shipMountedTo instanceof ClientShip) {
+    //         shipTransform = ((ClientShip) shipMountedTo).getRenderTransform();
+    //     } else {
+    //         shipTransform = shipMountedTo.getShipTransform();
+    //     }
+    //     final Vector3dc basePos = shipTransform.getShipToWorldMatrix()
+    //         .transformPosition(shipMountedToData.getMountPosInShip(), new Vector3d());
+    //     final Vector3dc eyeRelativePos = shipTransform.getShipCoordinatesToWorldCoordinatesRotation().transform(
+    //         new Vector3d(0.0, getEyeHeight(), 0.0)
+    //     );
+    //     final Vec3 newEyePos = VectorConversionsMCKt.toMinecraft(basePos.add(eyeRelativePos, new Vector3d()));
+    //     cir.setReturnValue(newEyePos);
+    // }
 
     /**
      * @reason Needed for players to pick blocks correctly when mounted to a ship
