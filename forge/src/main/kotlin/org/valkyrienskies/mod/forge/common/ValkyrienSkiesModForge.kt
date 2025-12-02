@@ -1,5 +1,6 @@
 package org.valkyrienskies.mod.forge.common
 
+import dev.engine_room.flywheel.api.event.ReloadLevelRendererEvent
 import net.minecraft.commands.Commands.CommandSelection.ALL
 import net.minecraft.commands.Commands.CommandSelection.INTEGRATED
 import net.minecraft.core.registries.Registries
@@ -17,6 +18,7 @@ import net.minecraftforge.client.event.RegisterKeyMappingsEvent
 import net.minecraftforge.event.AddReloadListenerEvent
 import net.minecraftforge.event.RegisterCommandsEvent
 import net.minecraftforge.event.TagsUpdatedEvent
+import net.minecraftforge.event.entity.EntityAttributeCreationEvent
 import net.minecraftforge.fml.ModList
 import net.minecraftforge.fml.ModLoadingContext
 import net.minecraftforge.fml.common.Mod
@@ -26,16 +28,16 @@ import net.minecraftforge.fml.loading.FMLEnvironment
 import net.minecraftforge.registries.DeferredRegister
 import net.minecraftforge.registries.ForgeRegistries
 import net.minecraftforge.registries.RegistryObject
-import org.valkyrienskies.core.apigame.VSCoreFactory
+import org.valkyrienskies.core.internal.VsiCoreFactory
 import org.valkyrienskies.core.impl.config.VSCoreConfig
 import org.valkyrienskies.mod.client.EmptyRenderer
+import org.valkyrienskies.mod.client.VSPhysicsEntityModel
 import org.valkyrienskies.mod.client.VSPhysicsEntityRenderer
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod.MOD_ID
 import org.valkyrienskies.mod.common.block.TestChairBlock
 import org.valkyrienskies.mod.common.block.TestFlapBlock
 import org.valkyrienskies.mod.common.block.TestHingeBlock
-import org.valkyrienskies.mod.common.block.TestSphereBlock
 import org.valkyrienskies.mod.common.block.TestThrusterBlock
 import org.valkyrienskies.mod.common.block.TestWingBlock
 import org.valkyrienskies.mod.common.blockentity.TestHingeBlockEntity
@@ -56,6 +58,8 @@ import org.valkyrienskies.mod.common.item.ShipAssemblerItem
 import org.valkyrienskies.mod.common.item.ShipCreatorItem
 import org.valkyrienskies.mod.compat.LoadedMods
 import org.valkyrienskies.mod.compat.clothconfig.VSClothConfig
+import org.valkyrienskies.mod.compat.flywheel.ShipEmbeddingManager
+import org.valkyrienskies.mod.forge.compat.ForgeDynmapHandler
 import org.valkyrienskies.mod.compat.flywheel.FlywheelCompat
 import org.valkyrienskies.mod.forge.compat.epicfight.FracturedBlockStateInfoProvider
 
@@ -69,7 +73,6 @@ class ValkyrienSkiesModForge {
     private val TEST_HINGE_REGISTRY: RegistryObject<Block>
     private val TEST_FLAP_REGISTRY: RegistryObject<Block>
     private val TEST_WING_REGISTRY: RegistryObject<Block>
-    private val TEST_SPHERE_REGISTRY: RegistryObject<Block>
     private val TEST_THRUSTER_REGISTRY: RegistryObject<Block>
     private val CONNECTION_CHECKER_ITEM_REGISTRY: RegistryObject<Item>
     private val SHIP_CREATOR_ITEM_REGISTRY: RegistryObject<Item>
@@ -84,15 +87,8 @@ class ValkyrienSkiesModForge {
 
     init {
         val isClient = FMLEnvironment.dist.isClient
-        val vsCore = if (isClient) {
-            VSCoreFactory.instance.newVsCoreClient(ForgeHooksImpl)
-        } else {
-            VSCoreFactory.instance.newVsCoreServer(ForgeHooksImpl)
-        }
 
-        VSForgeNetworking.registerPacketHandlers(vsCore.hooks)
-
-        ValkyrienSkiesMod.init(vsCore)
+        ValkyrienSkiesMod.init()
         VSEntityManager.registerContraptionHandler(ContraptionShipyardEntityHandlerForge)
 
         val modBus = Bus.MOD.bus().get()
@@ -100,12 +96,17 @@ class ValkyrienSkiesModForge {
 
         BLOCKS.register(modBus)
         ITEMS.register(modBus)
+
         ENTITIES.register(modBus)
         BLOCK_ENTITIES.register(modBus)
         if (isClient) {
             modBus.addListener(::registerKeyBindings)
             modBus.addListener(::entityRenderers)
+            modBus.addListener(::registerLayerDefinitions)
             if (LoadedMods.flywheel == LoadedMods.FlywheelVersion.V1) FlywheelCompat.initClient()
+            if (ModList.get().isLoaded("flywheel")) {
+                forgeBus.addListener(::registerFlywheelReload)
+            }
         }
         modBus.addListener(::loadComplete)
 
@@ -127,7 +128,6 @@ class ValkyrienSkiesModForge {
         TEST_HINGE_REGISTRY = registerBlockAndItem("test_hinge") { TestHingeBlock }
         TEST_FLAP_REGISTRY = registerBlockAndItem("test_flap") { TestFlapBlock }
         TEST_WING_REGISTRY = registerBlockAndItem("test_wing") { TestWingBlock }
-        TEST_SPHERE_REGISTRY = registerBlockAndItem("test_sphere") { TestSphereBlock }
         TEST_THRUSTER_REGISTRY = registerBlockAndItem("test_thruster") { TestThrusterBlock }
         SHIP_CREATOR_ITEM_REGISTRY =
             ITEMS.register("ship_creator") {
@@ -177,11 +177,13 @@ class ValkyrienSkiesModForge {
             EntityType.Builder.of(
                 ::VSPhysicsEntity,
                 MobCategory.MISC
-            ).sized(.3f, .3f)
+            ).sized(1f, 1f)
                 .setUpdateInterval(1)
                 .clientTrackingRange(10)
                 .build(ResourceLocation(MOD_ID, "vs_physics_entity").toString())
         }
+        modBus.addListener(::registerAttributes)
+
 
         SHIP_ASSEMBLER_ITEM_REGISTRY =
             ITEMS.register("ship_assembler") { ShipAssemblerItem(Properties()) }
@@ -192,6 +194,8 @@ class ValkyrienSkiesModForge {
             BlockEntityType.Builder.of(::TestThrusterBlockEntity, TestThrusterBlock).build(null)
         }
 
+
+
         val deferredRegister = DeferredRegister.create(Registries.CREATIVE_MODE_TAB, MOD_ID)
         deferredRegister.register("general") {
             ValkyrienSkiesMod.createCreativeTab()
@@ -200,6 +204,11 @@ class ValkyrienSkiesModForge {
 
         if (ModList.get().isLoaded("epicfight")) {
             FracturedBlockStateInfoProvider.register()
+        }
+
+        if (ModList.get().isLoaded("dynmap")) {
+            ForgeDynmapHandler().register()
+            forgeBus.addListener(ForgeDynmapHandler::tick)
         }
     }
 
@@ -214,9 +223,24 @@ class ValkyrienSkiesModForge {
         }
     }
 
+    private fun registerFlywheelReload(event: ReloadLevelRendererEvent) {
+        ShipEmbeddingManager.INSTANCE.unloadAllShip()
+    }
+
     private fun entityRenderers(event: EntityRenderersEvent.RegisterRenderers) {
         event.registerEntityRenderer(SHIP_MOUNTING_ENTITY_REGISTRY.get(), ::EmptyRenderer)
         event.registerEntityRenderer(PHYSICS_ENTITY_TYPE_REGISTRY.get(), ::VSPhysicsEntityRenderer)
+    }
+
+    private fun registerLayerDefinitions(event: EntityRenderersEvent.RegisterLayerDefinitions) {
+        event.registerLayerDefinition(
+            VSPhysicsEntityModel.LAYER_LOCATION,
+            VSPhysicsEntityModel.Companion::createBodyLayer
+        )
+    }
+
+    fun registerAttributes(event: EntityAttributeCreationEvent) {
+        event.put(PHYSICS_ENTITY_TYPE_REGISTRY.get(), VSPhysicsEntity.createAttributes().build())
     }
 
     private fun registerBlockAndItem(registryName: String, blockSupplier: () -> Block): RegistryObject<Block> {
@@ -242,7 +266,6 @@ class ValkyrienSkiesModForge {
         ValkyrienSkiesMod.TEST_HINGE = TEST_HINGE_REGISTRY.get()
         ValkyrienSkiesMod.TEST_FLAP = TEST_FLAP_REGISTRY.get()
         ValkyrienSkiesMod.TEST_WING = TEST_WING_REGISTRY.get()
-        ValkyrienSkiesMod.TEST_SPHERE = TEST_SPHERE_REGISTRY.get()
         ValkyrienSkiesMod.TEST_THRUSTER = TEST_THRUSTER_REGISTRY.get()
         ValkyrienSkiesMod.CONNECTION_CHECKER_ITEM = CONNECTION_CHECKER_ITEM_REGISTRY.get()
         ValkyrienSkiesMod.SHIP_CREATOR_ITEM = SHIP_CREATOR_ITEM_REGISTRY.get()

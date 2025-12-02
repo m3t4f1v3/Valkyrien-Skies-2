@@ -26,8 +26,8 @@ import org.valkyrienskies.core.api.physics.blockstates.BoxesBlockShape
 import org.valkyrienskies.core.api.physics.blockstates.CollisionPoint
 import org.valkyrienskies.core.api.physics.blockstates.LiquidState
 import org.valkyrienskies.core.api.physics.blockstates.SolidBlockShape
-import org.valkyrienskies.core.apigame.physics.blockstates.VsBlockState
-import org.valkyrienskies.core.apigame.world.chunks.BlockType
+import org.valkyrienskies.core.internal.physics.blockstates.VsiBlockState
+import org.valkyrienskies.core.internal.world.chunks.VsiBlockType
 import org.valkyrienskies.mod.api_impl.events.RegisterBlockStateEventImpl
 import org.valkyrienskies.mod.common.BlockStateInfoProvider
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod
@@ -45,21 +45,16 @@ private data class VSBlockStateInfo(
     val mass: Double,
     val friction: Double,
     val elasticity: Double,
-    val type: BlockType?,
+    val type: VsiBlockType?,
 )
 
 object MassDatapackResolver : BlockStateInfoProvider {
     private val map = hashMapOf<ResourceLocation, VSBlockStateInfo>()
-    private val mcBlockStateToVs: MutableMap<BlockState, VsBlockState> = HashMap()
+    private val mcBlockStateToVs: MutableMap<BlockState, VsiBlockState> = HashMap()
 
-    val blockStateData: Collection<VsBlockState> = mcBlockStateToVs.values
+    val blockStateData: Collection<VsiBlockState> = mcBlockStateToVs.values
 
     val loader get() = VSMassDataLoader()
-
-    private const val DEFAULT_ELASTICITY = 0.3
-    private const val DEFAULT_FRICTION = 0.5
-    // Unused for now, placeholder for later
-    private const val DEFAULT_HARDNESS = 1.0
 
     override val priority: Int
         get() = 100
@@ -67,7 +62,7 @@ object MassDatapackResolver : BlockStateInfoProvider {
     override fun getBlockStateMass(blockState: BlockState): Double? =
         map[BuiltInRegistries.BLOCK.getKey(blockState.block)]?.mass
 
-    override fun getBlockStateType(blockState: BlockState): BlockType? {
+    override fun getBlockStateType(blockState: BlockState): VsiBlockType? {
         val vsState = mcBlockStateToVs[blockState] ?: return null
         return vsCore.blockTypes.getType(vsState)
     }
@@ -145,8 +140,8 @@ object MassDatapackResolver : BlockStateInfoProvider {
             val tag = element.asJsonObject["tag"]?.asString
             val weight = element.asJsonObject["mass"]?.asDouble
                 ?: throw IllegalArgumentException("No mass in file $origin")
-            val friction = element.asJsonObject["friction"]?.asDouble ?: DEFAULT_FRICTION
-            val elasticity = element.asJsonObject["elasticity"]?.asDouble ?: DEFAULT_ELASTICITY
+            val friction = element.asJsonObject["friction"]?.asDouble ?: VSGameConfig.SERVER.defaultBlockFriction
+            val elasticity = element.asJsonObject["elasticity"]?.asDouble ?: VSGameConfig.SERVER.defaultBlockElasticity
 
             val priority = element.asJsonObject["priority"]?.asInt ?: decideDefaultPriority(origin)
 
@@ -328,12 +323,12 @@ object MassDatapackResolver : BlockStateInfoProvider {
         }
 
         blockStates.forEach { blockState: BlockState ->
-            val vsBlockState: VsBlockState
+            val vsBlockState: VsiBlockState
             if (blockState.isAir) {
                 vsBlockState = vsCore.blockTypes.airState
             } else {
                 vsBlockState = if (blockState.liquid()) {
-                    VsBlockState(null, getFluidState(blockState.fluidState))
+                    VsiBlockState(null, getFluidState(blockState.fluidState))
                 } else if (blockState.isSolid) {
                     val voxelShape = blockState.getShape(dummyBlockGetter, BlockPos.ZERO)
 
@@ -356,9 +351,9 @@ object MassDatapackResolver : BlockStateInfoProvider {
                     // Create new solid block state
                     val solidState = vsCore.newSolidStateBuilder()
                         .shape(collisionShape)
-                        .elasticity(vsBlockStateInfo?.elasticity ?: DEFAULT_ELASTICITY)
-                        .friction(vsBlockStateInfo?.friction ?: DEFAULT_FRICTION)
-                        .hardness(DEFAULT_HARDNESS)
+                        .elasticity(vsBlockStateInfo?.elasticity ?: VSGameConfig.SERVER.defaultBlockElasticity)
+                        .friction(vsBlockStateInfo?.friction ?: VSGameConfig.SERVER.defaultBlockFriction)
+                        .hardness(VSGameConfig.SERVER.defaultBlockHardness) // Unused for now, placeholder for later
                         .build()
 
                     val fluidState = if (!blockState.fluidState.isEmpty) {
@@ -367,18 +362,17 @@ object MassDatapackResolver : BlockStateInfoProvider {
                         null
                     }
 
-                    VsBlockState(solidState, fluidState)
+                    VsiBlockState(solidState, fluidState)
                 } else {
                     vsCore.blockTypes.emptyState
                 }
             }
             mcBlockStateToVs[blockState] = vsBlockState
         }
-
+        runRegisterBlockStateEvent()
         registeredBlocks = true
     }
 
-    // TODO implement
     private fun runRegisterBlockStateEvent() {
         val event = RegisterBlockStateEventImpl()
         ValkyrienSkiesMod.api.registerBlockStateEvent.emit(event)
