@@ -1,6 +1,7 @@
 package org.valkyrienskies.mod.fabric.common
 
 import dev.engine_room.flywheel.api.event.ReloadLevelRendererCallback
+import fuzs.forgeconfigapiport.api.config.v2.ModConfigEvents
 import net.fabricmc.api.EnvType
 import net.fabricmc.api.ModInitializer
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper
@@ -42,6 +43,7 @@ import org.valkyrienskies.mod.common.blockentity.TestHingeBlockEntity
 import org.valkyrienskies.mod.common.blockentity.TestThrusterBlockEntity
 import org.valkyrienskies.mod.common.command.VSCommands
 import org.valkyrienskies.mod.common.config.MassDatapackResolver
+import org.valkyrienskies.mod.common.config.VSConfig
 import org.valkyrienskies.mod.common.config.VSEntityHandlerDataLoader
 import org.valkyrienskies.mod.common.config.VSGameConfig
 import org.valkyrienskies.mod.common.config.VSKeyBindings
@@ -70,6 +72,9 @@ class ValkyrienSkiesModFabric : ModInitializer {
 
     override fun onInitialize() {
         if (hasInitialized.getAndSet(true)) return
+
+        ModConfigEvents.reloading(ValkyrienSkiesMod.MOD_ID).register (VSConfig::update)
+        ModConfigEvents.loading(ValkyrienSkiesMod.MOD_ID).register (VSConfig::update)
 
         ValkyrienSkiesMod.TEST_CHAIR = TestChairBlock
         ValkyrienSkiesMod.TEST_HINGE = TestHingeBlock

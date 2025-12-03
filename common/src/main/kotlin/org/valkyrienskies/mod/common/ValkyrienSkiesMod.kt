@@ -28,7 +28,6 @@ import org.valkyrienskies.mod.api.getShipManagingBlock
 import org.valkyrienskies.mod.api_impl.events.VsApiImpl
 import org.valkyrienskies.mod.common.blockentity.TestHingeBlockEntity
 import org.valkyrienskies.mod.common.blockentity.TestThrusterBlockEntity
-import org.valkyrienskies.mod.common.config.VSGameConfig
 import org.valkyrienskies.mod.common.entity.ShipMountingEntity
 import org.valkyrienskies.mod.common.entity.VSPhysicsEntity
 import org.valkyrienskies.mod.common.jackson.BlockPosDeserializer
@@ -114,8 +113,6 @@ object ValkyrienSkiesMod {
         val mapper = ObjectMapper()
         mapper.registerModule(aabbModule)
         // end region
-
-        core.registerConfigLegacy("vs", VSGameConfig::class.java)
 
         splitHandler = SplitHandler(this.vsCore.hooks.enableBlockEdgeConnectivity, this.vsCore.hooks.enableBlockCornerConnectivity)
 
