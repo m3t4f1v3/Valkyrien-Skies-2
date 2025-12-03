@@ -283,12 +283,12 @@ public class MixinDebugRenderer {
         // RenderStateShard.RENDERTYPE_LINES_SHADER and others are public in Fabric but protected in Forge.
         // Instead of accessor mixins or access transformers we will use a dummy anonymous class.
         // It is only called once and references static methods and fields. This should be safe.
-        public static RenderType.CompositeRenderType createXrayLines() {
+        public static RenderType createXrayLines() {
             return RenderType.create(
                 "xray_lines",
                 DefaultVertexFormat.POSITION_COLOR_NORMAL,
                 VertexFormat.Mode.LINES,
-                256,
+                256, false, false,
                 RenderType.CompositeState.builder()
                     .setShaderState(RenderStateShard.RENDERTYPE_LINES_SHADER)
                     .setLineState(RenderStateShard.DEFAULT_LINE) // Thinner than RenderType.LINES, though we do not really care.
