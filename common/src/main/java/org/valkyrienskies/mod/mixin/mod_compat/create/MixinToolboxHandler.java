@@ -1,5 +1,7 @@
 package org.valkyrienskies.mod.mixin.mod_compat.create;
 
+import static com.simibubi.create.content.equipment.toolbox.ToolboxHandler.distance;
+
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
@@ -11,15 +13,12 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.valkyrienskies.mod.common.CompatUtil;
 
 @Mixin(ToolboxHandler.class)
 public abstract class MixinToolboxHandler {
-    @Shadow
-    public static double distance(Vec3 location, BlockPos p) { return 0; }
 
     // We need access to a Level to transform toolbox position to world. While getNearest itself has it accessible
     // through a Player, distance checks are called inside lambdas which do not have access to this variable.
