@@ -16,6 +16,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.valkyrienskies.core.api.ships.Ship;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
+import org.valkyrienskies.mod.common.util.IEntityDraggingInformationProvider;
 import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
 
 @Mixin(ServerPlayer.class)
@@ -65,8 +66,12 @@ public abstract class MixinServerPlayer extends Player {
             this.setYRot((float) yaw);
             this.setXRot((float) pitch);
 
-            final Vector3d inWorld = VSGameUtilsKt.toWorldCoordinates(ship, x, y, z);
-            this.teleportTo(level, inWorld.x, inWorld.y, inWorld.z, Set.of(), this.getYRot(), this.getXRot());
+            //Predict the position 2 ticks ahead for dismount
+            final Vector3d inWorld = ship.getTransform().getShipToWorld().transformPosition(x, y, z, new Vector3d());
+            final Vector3d inWorldPrev = ship.getPrevTickTransform().getShipToWorld().transformPosition(x, y, z, new Vector3d());
+            final Vector3d inWorldNext = inWorld.mul(3, new Vector3d()).sub(inWorldPrev.mul(2, new Vector3d()));
+            this.teleportTo(level, inWorldNext.x, inWorldNext.y, inWorldNext.z, Set.of(), this.getYRot(), this.getXRot());
+            ((IEntityDraggingInformationProvider)this).vs$dragImmediately(ship);
         }
     }
 }

@@ -369,11 +369,10 @@ object MassDatapackResolver : BlockStateInfoProvider {
             }
             mcBlockStateToVs[blockState] = vsBlockState
         }
-
+        runRegisterBlockStateEvent()
         registeredBlocks = true
     }
 
-    // TODO implement
     private fun runRegisterBlockStateEvent() {
         val event = RegisterBlockStateEventImpl()
         ValkyrienSkiesMod.api.registerBlockStateEvent.emit(event)
