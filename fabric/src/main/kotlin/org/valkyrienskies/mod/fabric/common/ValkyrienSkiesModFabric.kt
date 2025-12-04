@@ -1,6 +1,7 @@
 package org.valkyrienskies.mod.fabric.common
 
 import dev.engine_room.flywheel.api.event.ReloadLevelRendererCallback
+import fuzs.forgeconfigapiport.api.config.v2.ForgeConfigRegistry
 import fuzs.forgeconfigapiport.api.config.v2.ModConfigEvents
 import net.fabricmc.api.EnvType
 import net.fabricmc.api.ModInitializer
@@ -29,6 +30,7 @@ import net.minecraft.world.item.BlockItem
 import net.minecraft.world.item.Item
 import net.minecraft.world.item.Item.Properties
 import net.minecraft.world.level.block.Block
+import net.minecraftforge.fml.config.ModConfig
 import org.valkyrienskies.core.internal.VsiCoreFactory
 import org.valkyrienskies.mod.client.EmptyRenderer
 import org.valkyrienskies.mod.client.VSPhysicsEntityModel
@@ -72,6 +74,13 @@ class ValkyrienSkiesModFabric : ModInitializer {
 
     override fun onInitialize() {
         if (hasInitialized.getAndSet(true)) return
+
+        ForgeConfigRegistry.INSTANCE.apply {
+            register(ValkyrienSkiesMod.MOD_ID, ModConfig.Type.SERVER, VSConfig.CORE_SERVER_SPEC, "valkyrienskies/vs-core-server.toml")
+            register(ValkyrienSkiesMod.MOD_ID, ModConfig.Type.SERVER, VSConfig.SERVER_SPEC, "valkyrienskies/valkyrienskies-server.toml")
+            register(ValkyrienSkiesMod.MOD_ID, ModConfig.Type.COMMON, VSConfig.COMMON_SPEC, "valkyrienskies/valkyrienskies-common.toml")
+            register(ValkyrienSkiesMod.MOD_ID, ModConfig.Type.CLIENT, VSConfig.CLIENT_SPEC, "valkyrienskies/valkyrienskies-client.toml")
+        }
 
         ModConfigEvents.reloading(ValkyrienSkiesMod.MOD_ID).register (VSConfig::update)
         ModConfigEvents.loading(ValkyrienSkiesMod.MOD_ID).register (VSConfig::update)
