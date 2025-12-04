@@ -116,7 +116,11 @@ class ValkyrienSkiesModForge {
         forgeBus.addListener(::tagsUpdated)
         forgeBus.addListener(::registerResourceManagers)
 
-        ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, VSConfig.CORE_SERVER_SPEC)
+        ModLoadingContext.get().apply {
+            registerConfig(ModConfig.Type.SERVER, VSConfig.CORE_SERVER_SPEC)
+            registerConfig(ModConfig.Type.COMMON, VSConfig.COMMON_SPEC)
+            registerConfig(ModConfig.Type.CLIENT, VSConfig.CLIENT_SPEC)
+        }
 
         modBus.addListener(::onConfigLoad)
         modBus.addListener(::onConfigReload)
