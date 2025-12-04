@@ -31,7 +31,6 @@ import net.minecraft.world.item.Item
 import net.minecraft.world.item.Item.Properties
 import net.minecraft.world.level.block.Block
 import net.minecraftforge.fml.config.ModConfig
-import org.valkyrienskies.core.internal.VsiCoreFactory
 import org.valkyrienskies.mod.client.EmptyRenderer
 import org.valkyrienskies.mod.client.VSPhysicsEntityModel
 import org.valkyrienskies.mod.client.VSPhysicsEntityRenderer
@@ -45,7 +44,7 @@ import org.valkyrienskies.mod.common.blockentity.TestHingeBlockEntity
 import org.valkyrienskies.mod.common.blockentity.TestThrusterBlockEntity
 import org.valkyrienskies.mod.common.command.VSCommands
 import org.valkyrienskies.mod.common.config.MassDatapackResolver
-import org.valkyrienskies.mod.common.config.VSConfig
+import org.valkyrienskies.mod.common.config.VSConfigUpdater
 import org.valkyrienskies.mod.common.config.VSEntityHandlerDataLoader
 import org.valkyrienskies.mod.common.config.VSGameConfig
 import org.valkyrienskies.mod.common.config.VSKeyBindings
@@ -76,14 +75,14 @@ class ValkyrienSkiesModFabric : ModInitializer {
         if (hasInitialized.getAndSet(true)) return
 
         ForgeConfigRegistry.INSTANCE.apply {
-            register(ValkyrienSkiesMod.MOD_ID, ModConfig.Type.SERVER, VSConfig.CORE_SERVER_SPEC, "valkyrienskies/vs-core-server.toml")
-            register(ValkyrienSkiesMod.MOD_ID, ModConfig.Type.SERVER, VSConfig.SERVER_SPEC, "valkyrienskies/valkyrienskies-server.toml")
-            register(ValkyrienSkiesMod.MOD_ID, ModConfig.Type.COMMON, VSConfig.COMMON_SPEC, "valkyrienskies/valkyrienskies-common.toml")
-            register(ValkyrienSkiesMod.MOD_ID, ModConfig.Type.CLIENT, VSConfig.CLIENT_SPEC, "valkyrienskies/valkyrienskies-client.toml")
+            register(ValkyrienSkiesMod.MOD_ID, ModConfig.Type.SERVER, VSConfigUpdater.CORE_SERVER_SPEC, "valkyrienskies/vs-core-server.toml")
+            register(ValkyrienSkiesMod.MOD_ID, ModConfig.Type.SERVER, VSConfigUpdater.SERVER_SPEC, "valkyrienskies/valkyrienskies-server.toml")
+            register(ValkyrienSkiesMod.MOD_ID, ModConfig.Type.COMMON, VSConfigUpdater.COMMON_SPEC, "valkyrienskies/valkyrienskies-common.toml")
+            register(ValkyrienSkiesMod.MOD_ID, ModConfig.Type.CLIENT, VSConfigUpdater.CLIENT_SPEC, "valkyrienskies/valkyrienskies-client.toml")
         }
 
-        ModConfigEvents.reloading(ValkyrienSkiesMod.MOD_ID).register (VSConfig::update)
-        ModConfigEvents.loading(ValkyrienSkiesMod.MOD_ID).register (VSConfig::update)
+        ModConfigEvents.reloading(ValkyrienSkiesMod.MOD_ID).register (VSConfigUpdater::update)
+        ModConfigEvents.loading(ValkyrienSkiesMod.MOD_ID).register (VSConfigUpdater::update)
 
         ValkyrienSkiesMod.TEST_CHAIR = TestChairBlock
         ValkyrienSkiesMod.TEST_HINGE = TestHingeBlock

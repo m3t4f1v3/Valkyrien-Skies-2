@@ -7,25 +7,30 @@ import org.valkyrienskies.core.internal.config.VsiConfigModel
 import org.valkyrienskies.core.internal.config.VsiConfigModelCategory
 import org.valkyrienskies.core.internal.config.VsiConfigModelEntry
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod
+import kotlin.collections.iterator
 
-object VSConfig {
+object VSConfigUpdater {
 
     private val core_server_config = ValkyrienSkiesMod.vsCore.getServerConfig()
     val CORE_SERVER_SPEC: ForgeConfigSpec = buildCategory(core_server_config.root, ForgeConfigSpec.Builder()).build()
 
-    private val server_config = VsiConfigModelImpl.build(VSGameConfig.SERVER, "VS Server")
+    private val server_config = VsiConfigModelImpl.build(VSGameConfig.SERVER)
     val SERVER_SPEC: ForgeConfigSpec = buildCategory(server_config.root, ForgeConfigSpec.Builder()).build()
 
-    private val common_config = VsiConfigModelImpl.build(VSGameConfig.COMMON, "VS Common")
+    private val common_config = VsiConfigModelImpl.build(VSGameConfig.COMMON)
     val COMMON_SPEC: ForgeConfigSpec = buildCategory(common_config.root, ForgeConfigSpec.Builder()).build()
 
-    private val client_config = VsiConfigModelImpl.build(VSGameConfig.CLIENT, "VS Client")
+    private val client_config = VsiConfigModelImpl.build(VSGameConfig.CLIENT)
     val CLIENT_SPEC: ForgeConfigSpec = buildCategory(client_config.root, ForgeConfigSpec.Builder()).build()
 
-    // Helper function to properly call defineEnum with the correct generic type
-    private fun <T : Enum<T>> defineEnum(builder: ForgeConfigSpec.Builder, name: String, value: Enum<*>) {
-        @Suppress("UNCHECKED_CAST")
-        builder.defineEnum(name, value as T)
+    /**
+     * Call this from platform events when config is loaded or updated
+     **/
+    fun update(config: ModConfig) {
+        core_server_config.update(config)
+        server_config.update(config)
+        common_config.update(config)
+        client_config.update(config)
     }
 
     private fun buildCategory(configCategory: VsiConfigModelCategory, builder: ForgeConfigSpec.Builder ): ForgeConfigSpec.Builder {
@@ -38,6 +43,11 @@ object VSConfig {
             } else if (entry is VsiConfigModelEntry<*>){
                 fun <T> define(v: T) = builder.define<T>(entry.name, v)
 
+                @Suppress("UNCHECKED_CAST")
+                fun <T : Enum<T>> defineEnum(builder: ForgeConfigSpec.Builder, value: Enum<*>) {
+                    builder.defineEnum(entry.name, value as T)
+                }
+
                 builder.comment(entry.description)
 
                 when (val v = entry.getValue()) {
@@ -47,7 +57,7 @@ object VSConfig {
                     is Double -> builder.defineInRange(entry.name, v, entry.min as Double, entry.max as Double)
                     is Boolean -> define(v)
                     is String -> define(v)
-                    is Enum<*> -> defineEnum(builder, entry.name, v)
+                    is Enum<*> -> defineEnum(builder, v)
                     else -> {
                         throw IllegalArgumentException("invalid config type $v of class ${v?.javaClass}")
                     }
@@ -57,35 +67,14 @@ object VSConfig {
         return builder
     }
 
-
-    fun update(config: ModConfig) {
-        core_server_config.update(config)
-        server_config.update(config)
-        common_config.update(config)
-        client_config.update(config)
-    }
-
     private fun VsiConfigModel.update(forgeConfig: ModConfig) {
-        forEachEntry { path, node ->
+        root.forEachEntry { path, node ->
             forgeConfig.configData.get<Any>("$path${node.name}")?.let { newValue ->
                 val defaultValue = node.default
                 if (defaultValue != null) {
                     val convertedValue = when {
                         // Handle Float stored as Double in Forge config
                         defaultValue is Float && newValue is Double -> newValue.toFloat()
-                        // Handle Enum - just in case it gets converted to a String
-                        defaultValue is Enum<*> -> {
-                            when (newValue) {
-                                is String -> {
-                                    // Convert string name to enum instance
-                                    @Suppress("UNCHECKED_CAST")
-                                    val enumConstants = defaultValue.declaringJavaClass.enumConstants as Array<Enum<*>>
-                                    enumConstants.find { it.name == newValue }
-                                }
-                                is Enum<*> -> newValue
-                                else -> null
-                            }
-                        }
                         defaultValue::class.isInstance(newValue) -> newValue
                         else -> null
                     }
@@ -95,6 +84,17 @@ object VSConfig {
                         (node as VsiConfigModelEntry<Any>).setValue(convertedValue)
                     }
                 }
+            }
+        }
+    }
+
+    private fun VsiConfigModelCategory.forEachEntry(path: String = "", callback: (String, VsiConfigModelEntry<*>) -> Unit) {
+        for (node in children) {
+            val value = node.value
+            if (value is VsiConfigModelEntry<*>) {
+                callback(path, value)
+            } else if (value is VsiConfigModelCategory) {
+                value.forEachEntry("$path${value.title}.", callback)
             }
         }
     }
