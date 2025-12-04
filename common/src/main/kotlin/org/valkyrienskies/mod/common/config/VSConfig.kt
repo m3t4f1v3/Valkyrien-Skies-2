@@ -13,6 +13,9 @@ object VSConfig {
     private val core_server_config = ValkyrienSkiesMod.vsCore.getServerConfig()
     val CORE_SERVER_SPEC: ForgeConfigSpec = buildCategory(core_server_config.root, ForgeConfigSpec.Builder()).build()
 
+    private val server_config = VsiConfigModelImpl.build(VSGameConfig.SERVER, "VS Server")
+    val SERVER_SPEC: ForgeConfigSpec = buildCategory(server_config.root, ForgeConfigSpec.Builder()).build()
+
     private val common_config = VsiConfigModelImpl.build(VSGameConfig.COMMON, "VS Common")
     val COMMON_SPEC: ForgeConfigSpec = buildCategory(common_config.root, ForgeConfigSpec.Builder()).build()
 

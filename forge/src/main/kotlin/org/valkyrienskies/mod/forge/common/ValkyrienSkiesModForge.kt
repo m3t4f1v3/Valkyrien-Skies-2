@@ -117,9 +117,10 @@ class ValkyrienSkiesModForge {
         forgeBus.addListener(::registerResourceManagers)
 
         ModLoadingContext.get().apply {
-            registerConfig(ModConfig.Type.SERVER, VSConfig.CORE_SERVER_SPEC)
-            registerConfig(ModConfig.Type.COMMON, VSConfig.COMMON_SPEC)
-            registerConfig(ModConfig.Type.CLIENT, VSConfig.CLIENT_SPEC)
+            registerConfig(ModConfig.Type.SERVER, VSConfig.CORE_SERVER_SPEC, "valkyrienskies/vs-core-server.toml")
+            registerConfig(ModConfig.Type.SERVER, VSConfig.SERVER_SPEC, "valkyrienskies/valkyrienskies-server.toml")
+            registerConfig(ModConfig.Type.COMMON, VSConfig.COMMON_SPEC, "valkyrienskies/valkyrienskies-common.toml")
+            registerConfig(ModConfig.Type.CLIENT, VSConfig.CLIENT_SPEC, "valkyrienskies/valkyrienskies-client.toml")
         }
 
         modBus.addListener(::onConfigLoad)
