@@ -13,6 +13,7 @@ import net.minecraft.world.entity.decoration.HangingEntity;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Quaternionf;
 import org.joml.Vector3d;
+import org.joml.Vector3dc;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Constant;
@@ -20,8 +21,9 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyConstant;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.valkyrienskies.core.api.ships.ClientShip;
+import org.valkyrienskies.core.api.ships.Ship;
+import org.valkyrienskies.mod.common.CompatUtil;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
-import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
 
 @Mixin(value = ChainKnotEntityRenderer.class, remap = false)
 public abstract class MixinChainKnotEntityRenderer {
@@ -35,16 +37,25 @@ public abstract class MixinChainKnotEntityRenderer {
         @Local(ordinal = 3) LocalRef<Vec3> srcPos, @Local(ordinal = 4) LocalRef<Vec3> destPos) {
         ClientShip srcShip = (ClientShip)VSGameUtilsKt.getShipManaging(link.primary);
         ClientShip destShip = (ClientShip)VSGameUtilsKt.getShipManaging(link.secondary);
-        if (srcShip != destShip) {
+        if (srcShip != null || destShip != null) {
+            // Both positions are transformed to worldspace. This makes proper vertical dripping trivial and allows
+            // using the same code for ship-to-ship, ship-to-player, ship-to-world connections.
+            // This conflicts with rotation of rendered shipyard entities, but we take care of that later.
+            Vec3 newSrcPos = CompatUtil.INSTANCE.toSameSpaceAs(link.primary.level(), srcPos.get(), (Ship)null);
+            Vec3 newDestPos = CompatUtil.INSTANCE.toSameSpaceAs(link.secondary.level(), destPos.get(), (Ship)null);
+            srcPos.set(newSrcPos);
             if (srcShip != null) {
-                srcPos.set(VectorConversionsMCKt.toMinecraft(srcShip.getRenderTransform().getShipToWorld()
-                    .transformPosition(VectorConversionsMCKt.toJOML(srcPos.get()))));
-                // Negate the rotation that will happen when the shipyard entity is rendered.
+                Vector3dc scale = srcShip.getRenderTransform().getScaling();
+                // destPos is in worldspace but the chain link is drawn an entity on a ship which is scaled.
+                // To compensate for that, we artificially move destPos inversely to the ship scale.
+                // After scaling is reapplied when the entity is rendered, the position will match the intended one.
+                destPos.set(
+                    newSrcPos.add(newDestPos.subtract(newSrcPos).multiply(1 / scale.x(), 1 / scale.y(), 1 / scale.z()))
+                );
+                // Negate the rotation that will happen when the shipyard entity is rendered. Scaling is preserved.
                 matrices.mulPose(new Quaternionf(srcShip.getRenderTransform().getShipToWorldRotation()).invert());
-            }
-            if (destShip != null) {
-                destPos.set(VectorConversionsMCKt.toMinecraft(destShip.getRenderTransform().getShipToWorld()
-                    .transformPosition(VectorConversionsMCKt.toJOML(destPos.get()))));
+            } else {
+                destPos.set(newDestPos);
             }
         }
     }
@@ -54,7 +65,8 @@ public abstract class MixinChainKnotEntityRenderer {
         at = @At(
             value = "INVOKE",
             target = "Lnet/minecraft/world/entity/Entity;shouldRender(DDD)Z"
-        )
+        ),
+        remap = true
     )
     private boolean adjustHolderAABB(Entity chainHolder, double x, double y, double z, Operation<Boolean> original) {
         ClientShip ship = (ClientShip)VSGameUtilsKt.getShipManaging(chainHolder);

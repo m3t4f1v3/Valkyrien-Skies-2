@@ -16,16 +16,18 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Quaternionf;
+import org.joml.Vector3dc;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.valkyrienskies.core.api.ships.ClientShip;
+import org.valkyrienskies.core.api.ships.Ship;
+import org.valkyrienskies.mod.common.CompatUtil;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
-import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
 
-@Mixin(value = ChainKnotEntityRenderer.class, remap = false)
+@Mixin(ChainKnotEntityRenderer.class)
 public abstract class MixinChainKnotEntityRenderer {
     @Unique
     ClientLevel valkyrienskies$level;
@@ -67,21 +69,27 @@ public abstract class MixinChainKnotEntityRenderer {
         // We don't have access to entities acting as chain ends so instead of `getShipManaging` we have to rely on
         // determining ships from level and coordinates. It is possible to do better with a mixin to `render`, the
         // caller of this function.
-        ClientShip srcShip = VSGameUtilsKt.getShipObjectManagingPos(valkyrienskies$level, srcPos.get());
-        ClientShip destShip = VSGameUtilsKt.getShipObjectManagingPos(valkyrienskies$level, destPos.get());
-        if (srcShip != destShip) {
+        ClientShip srcShip = VSGameUtilsKt.getLoadedShipManagingPos(valkyrienskies$level, srcPos.get());
+        ClientShip destShip = VSGameUtilsKt.getLoadedShipManagingPos(valkyrienskies$level, destPos.get());
+        if (srcShip != null || destShip != null) {
+            // Both positions are transformed to worldspace. This makes proper vertical dripping trivial and allows
+            // using the same code for ship-to-ship, ship-to-player, ship-to-world connections.
+            // This conflicts with rotation of rendered shipyard entities, but we take care of that later.
+            Vec3 newSrcPos = CompatUtil.INSTANCE.toSameSpaceAs(valkyrienskies$level, srcPos.get(), (Ship)null);
+            Vec3 newDestPos = CompatUtil.INSTANCE.toSameSpaceAs(valkyrienskies$level, destPos.get(), (Ship)null);
+            srcPos.set(newSrcPos);
             if (srcShip != null) {
-                srcPos.set(VectorConversionsMCKt.toMinecraft(srcShip.getRenderTransform().getShipToWorld()
-                    .transformPosition(VectorConversionsMCKt.toJOML(srcPos.get()))));
-                // As the knot is a shipyard entity it is rendered with a transform matching the one of this ship.
-                // This is undesirable as both source and destination positions are in world coordinates, so we negate
-                // the transform.
+                Vector3dc scale = srcShip.getRenderTransform().getScaling();
+                // destPos is in worldspace but the chain link is drawn an entity on a ship which is scaled.
+                // To compensate for that, we artificially move destPos inversely to the ship scale.
+                // After scaling is reapplied when the entity is rendered, the position will match the intended one.
+                destPos.set(
+                    newSrcPos.add(newDestPos.subtract(newSrcPos).multiply(1 / scale.x(), 1 / scale.y(), 1 / scale.z()))
+                );
+                // Negate the rotation that will happen when the shipyard entity is rendered. Scaling is preserved.
                 matrices.mulPose(new Quaternionf(srcShip.getRenderTransform().getShipToWorldRotation()).invert());
-            }
-            if (destShip != null) {
-                destPos.set(VectorConversionsMCKt.toMinecraft(destShip.getRenderTransform().getShipToWorld()
-                    .transformPosition(VectorConversionsMCKt.toJOML(destPos.get()))));
-                // No complex transforms involved as the knot we're rendering is positioned in worldspace.
+            } else {
+                destPos.set(newDestPos);
             }
         }
     }
