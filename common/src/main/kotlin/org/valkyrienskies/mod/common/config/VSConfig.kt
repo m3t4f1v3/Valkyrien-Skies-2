@@ -22,6 +22,12 @@ object VSConfig {
     private val client_config = VsiConfigModelImpl.build(VSGameConfig.CLIENT, "VS Client")
     val CLIENT_SPEC: ForgeConfigSpec = buildCategory(client_config.root, ForgeConfigSpec.Builder()).build()
 
+    // Helper function to properly call defineEnum with the correct generic type
+    private fun <T : Enum<T>> defineEnum(builder: ForgeConfigSpec.Builder, name: String, value: Enum<*>) {
+        @Suppress("UNCHECKED_CAST")
+        builder.defineEnum(name, value as T)
+    }
+
     private fun buildCategory(configCategory: VsiConfigModelCategory, builder: ForgeConfigSpec.Builder ): ForgeConfigSpec.Builder {
         for (node in configCategory.children) {
             val entry = node.value
@@ -41,15 +47,7 @@ object VSConfig {
                     is Double -> builder.defineInRange(entry.name, v, entry.min as Double, entry.max as Double)
                     is Boolean -> define(v)
                     is String -> define(v)
-                    is Enum<*> -> {
-                        // Use define with enum validator since defineEnum requires specific generic type
-                        val enumClass = v.javaClass
-                        @Suppress("UNCHECKED_CAST")
-                        val enumValues = enumClass.enumConstants as Array<Enum<*>>
-                        builder.define(entry.name, v) { obj ->
-                            obj is Enum<*> && enumValues.contains(obj)
-                        }
-                    }
+                    is Enum<*> -> defineEnum(builder, entry.name, v)
                     else -> {
                         throw IllegalArgumentException("invalid config type $v of class ${v?.javaClass}")
                     }
@@ -62,6 +60,7 @@ object VSConfig {
 
     fun update(config: ModConfig) {
         core_server_config.update(config)
+        server_config.update(config)
         common_config.update(config)
         client_config.update(config)
     }
@@ -69,11 +68,25 @@ object VSConfig {
     private fun VsiConfigModel.update(forgeConfig: ModConfig) {
         forEachEntry { path, node ->
             forgeConfig.configData.get<Any>("$path${node.name}")?.let { newValue ->
-                if (node.default != null) {
+                val defaultValue = node.default
+                if (defaultValue != null) {
                     val convertedValue = when {
                         // Handle Float stored as Double in Forge config
-                        node.default is Float && newValue is Double -> newValue.toFloat()
-                        node.default!!::class.isInstance(newValue) -> newValue
+                        defaultValue is Float && newValue is Double -> newValue.toFloat()
+                        // Handle Enum - just in case it gets converted to a String
+                        defaultValue is Enum<*> -> {
+                            when (newValue) {
+                                is String -> {
+                                    // Convert string name to enum instance
+                                    @Suppress("UNCHECKED_CAST")
+                                    val enumConstants = defaultValue.declaringJavaClass.enumConstants as Array<Enum<*>>
+                                    enumConstants.find { it.name == newValue }
+                                }
+                                is Enum<*> -> newValue
+                                else -> null
+                            }
+                        }
+                        defaultValue::class.isInstance(newValue) -> newValue
                         else -> null
                     }
 
