@@ -48,13 +48,26 @@ object VSConfigUpdater {
                     builder.defineEnum(entry.name, value as T)
                 }
 
-                builder.comment(entry.description)
+                fun <T : Comparable<T>> defineNumeric(v: T) {
+                    if (entry.min == null || entry.max == null) {
+                        define(if (v is Float) v.toDouble() else v)
+                    } else {
+                        when (v) {
+                            is Int -> builder.defineInRange(entry.name, v, entry.min as Int, entry.max as Int)
+                            is Long -> builder.defineInRange(entry.name, v, entry.min as Long, entry.max as Long)
+                            is Float -> builder.defineInRange(entry.name, v.toDouble(), (entry.min as Float).toDouble(), (entry.max as Float).toDouble())
+                            is Double -> builder.defineInRange(entry.name, v, entry.min as Double, entry.max as Double)
+                        }
+                    }
+                }
+
+                entry.description?.let(builder::comment)
 
                 when (val v = entry.getValue()) {
-                    is Int -> builder.defineInRange(entry.name, v, entry.min as Int, entry.max as Int)
-                    is Long -> builder.defineInRange(entry.name, v, entry.min as Long, entry.max as Long)
-                    is Float -> builder.defineInRange(entry.name, v.toDouble(), (entry.min as Float).toDouble(), (entry.max as Float).toDouble())
-                    is Double -> builder.defineInRange(entry.name, v, entry.min as Double, entry.max as Double)
+                    is Int -> defineNumeric(v)
+                    is Long -> defineNumeric(v)
+                    is Float -> defineNumeric(v)
+                    is Double -> defineNumeric(v)
                     is Boolean -> define(v)
                     is String -> define(v)
                     is Enum<*> -> defineEnum(builder, v)
