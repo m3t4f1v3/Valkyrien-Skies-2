@@ -18,9 +18,6 @@
   "entrypoints": {
     "main": [
       "org.valkyrienskies.mod.fabric.common.ValkyrienSkiesModFabric"
-    ],
-    "modmenu": [
-      "org.valkyrienskies.mod.fabric.compat.modmenu.ValkyrienModMenu"
     ]
   },
   "mixins": [

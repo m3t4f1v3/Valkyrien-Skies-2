@@ -146,6 +146,11 @@ subprojects {
                     includeGroup("dev.ftb.mods")
                 }
             }
+
+            maven {
+                name = "Forge Config Api Port"
+                url = "https://raw.githubusercontent.com/Fuzss/modresources/main/maven/"
+            }
         }
         maven {
             name = "Valkyrien Skies Internal"

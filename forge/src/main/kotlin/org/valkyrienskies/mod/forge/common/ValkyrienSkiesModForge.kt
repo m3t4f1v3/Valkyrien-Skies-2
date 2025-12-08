@@ -12,7 +12,6 @@ import net.minecraft.world.item.Item
 import net.minecraft.world.item.Item.Properties
 import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.entity.BlockEntityType
-import net.minecraftforge.client.ConfigScreenHandler
 import net.minecraftforge.client.event.EntityRenderersEvent
 import net.minecraftforge.client.event.RegisterKeyMappingsEvent
 import net.minecraftforge.event.AddReloadListenerEvent
@@ -23,13 +22,13 @@ import net.minecraftforge.fml.ModList
 import net.minecraftforge.fml.ModLoadingContext
 import net.minecraftforge.fml.common.Mod
 import net.minecraftforge.fml.common.Mod.EventBusSubscriber.Bus
+import net.minecraftforge.fml.config.ModConfig
+import net.minecraftforge.fml.event.config.ModConfigEvent
 import net.minecraftforge.fml.event.lifecycle.FMLLoadCompleteEvent
 import net.minecraftforge.fml.loading.FMLEnvironment
 import net.minecraftforge.registries.DeferredRegister
 import net.minecraftforge.registries.ForgeRegistries
 import net.minecraftforge.registries.RegistryObject
-import org.valkyrienskies.core.internal.VsiCoreFactory
-import org.valkyrienskies.core.impl.config.VSCoreConfig
 import org.valkyrienskies.mod.client.EmptyRenderer
 import org.valkyrienskies.mod.client.VSPhysicsEntityModel
 import org.valkyrienskies.mod.client.VSPhysicsEntityRenderer
@@ -44,6 +43,7 @@ import org.valkyrienskies.mod.common.blockentity.TestHingeBlockEntity
 import org.valkyrienskies.mod.common.blockentity.TestThrusterBlockEntity
 import org.valkyrienskies.mod.common.command.VSCommands
 import org.valkyrienskies.mod.common.config.MassDatapackResolver
+import org.valkyrienskies.mod.common.config.VSConfigUpdater
 import org.valkyrienskies.mod.common.config.VSEntityHandlerDataLoader
 import org.valkyrienskies.mod.common.config.VSGameConfig
 import org.valkyrienskies.mod.common.config.VSKeyBindings
@@ -57,7 +57,6 @@ import org.valkyrienskies.mod.common.item.PhysicsEntityCreatorItem
 import org.valkyrienskies.mod.common.item.ShipAssemblerItem
 import org.valkyrienskies.mod.common.item.ShipCreatorItem
 import org.valkyrienskies.mod.compat.LoadedMods
-import org.valkyrienskies.mod.compat.clothconfig.VSClothConfig
 import org.valkyrienskies.mod.compat.flywheel.ShipEmbeddingManager
 import org.valkyrienskies.mod.forge.compat.ForgeDynmapHandler
 import org.valkyrienskies.mod.compat.flywheel.FlywheelCompat
@@ -114,15 +113,15 @@ class ValkyrienSkiesModForge {
         forgeBus.addListener(::tagsUpdated)
         forgeBus.addListener(::registerResourceManagers)
 
-        ModLoadingContext.get().registerExtensionPoint(ConfigScreenHandler.ConfigScreenFactory::class.java) {
-            ConfigScreenHandler.ConfigScreenFactory { _, parent ->
-                VSClothConfig.createConfigScreenFor(
-                    parent,
-                    VSCoreConfig::class.java,
-                    VSGameConfig::class.java
-                )
-            }
+        ModLoadingContext.get().apply {
+            registerConfig(ModConfig.Type.SERVER, VSConfigUpdater.CORE_SERVER_SPEC, "valkyrienskies/vs-core-server.toml")
+            registerConfig(ModConfig.Type.SERVER, VSConfigUpdater.SERVER_SPEC, "valkyrienskies/valkyrienskies-server.toml")
+            registerConfig(ModConfig.Type.COMMON, VSConfigUpdater.COMMON_SPEC, "valkyrienskies/valkyrienskies-common.toml")
+            registerConfig(ModConfig.Type.CLIENT, VSConfigUpdater.CLIENT_SPEC, "valkyrienskies/valkyrienskies-client.toml")
         }
+
+        modBus.addListener(::onConfigLoad)
+        modBus.addListener(::onConfigReload)
 
         TEST_CHAIR_REGISTRY = registerBlockAndItem("test_chair") { TestChairBlock }
         TEST_HINGE_REGISTRY = registerBlockAndItem("test_hinge") { TestHingeBlock }
@@ -209,6 +208,18 @@ class ValkyrienSkiesModForge {
         if (ModList.get().isLoaded("dynmap")) {
             ForgeDynmapHandler().register()
             forgeBus.addListener(ForgeDynmapHandler::tick)
+        }
+    }
+
+    private fun onConfigLoad(event: ModConfigEvent.Loading) {
+        if (event.config.modId == MOD_ID) {
+            VSConfigUpdater.update(event.config)
+        }
+    }
+
+    private fun onConfigReload(event: ModConfigEvent.Reloading) {
+        if (event.config.modId == MOD_ID) {
+            VSConfigUpdater.update(event.config)
         }
     }
 
