@@ -72,10 +72,6 @@ subprojects {
 
     configurations.each { it.resolutionStrategy.useGlobalDependencySubstitutionRules.set(false) }
 
-    base {
-        archivesName = rootProject.archives_base_name + "-" + project.name
-    }
-
     repositories {
         try {
             def vsCoreBuild = gradle.includedBuild("vs-core")
