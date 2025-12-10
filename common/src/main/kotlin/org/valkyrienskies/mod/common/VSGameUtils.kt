@@ -1,7 +1,6 @@
 package org.valkyrienskies.mod.common
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation
-import com.mojang.logging.LogUtils
 import net.minecraft.client.Minecraft
 import net.minecraft.client.multiplayer.ClientLevel
 import net.minecraft.core.BlockPos
@@ -17,6 +16,7 @@ import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.level.ChunkPos
 import net.minecraft.world.level.Level
+import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.chunk.LevelChunkSection
 import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
@@ -38,11 +38,11 @@ import org.valkyrienskies.core.internal.world.VsiServerShipWorld
 import org.valkyrienskies.core.internal.world.VsiShipWorld
 import org.valkyrienskies.core.internal.world.chunks.VsiTerrainUpdate
 import org.valkyrienskies.core.util.expand
+import org.valkyrienskies.mod.common.ValkyrienSkiesMod.ASSEMBLE_BLACKLIST
 import org.valkyrienskies.mod.common.entity.ShipMountedToData
 import org.valkyrienskies.mod.common.entity.ShipMountedToDataProvider
 import org.valkyrienskies.mod.common.util.DimensionIdProvider
 import org.valkyrienskies.mod.common.util.EntityDragger.serversideEyePosition
-import org.valkyrienskies.mod.common.util.IEntityDraggingInformationProvider
 import org.valkyrienskies.mod.common.util.MinecraftPlayer
 import org.valkyrienskies.mod.common.util.set
 import org.valkyrienskies.mod.common.util.toJOML
@@ -536,4 +536,13 @@ fun Entity?.applyShipVelocity(ship: Ship?) {
         .add(ship.angularVelocity.cross(relPos, Vector3d()))
         .mul(0.05)
     this.push(shipSpeed.x, shipSpeed.y, shipSpeed.z)
+}
+
+/**
+ * Is the [BlockState] in the `assemble_blacklist`
+ * ([ValkyrienSkiesMod.ASSEMBLE_BLACKLIST]) block tag
+ */
+@Suppress("unused")
+fun BlockState?.inAssemblyBlacklist(): Boolean {
+    return this?.`is`(ASSEMBLE_BLACKLIST) ?: false
 }
