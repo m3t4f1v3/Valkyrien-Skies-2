@@ -80,14 +80,6 @@ loom {
     accessWidenerPath = file("src/main/resources/valkyrienskies-common.accesswidener")
 }
 
-sourceSets {
-    main {
-        resources {
-            srcDir 'src/generated/resources'
-        }
-    }
-}
-
 jar {
     // Exclude dummy Optifine classes
     exclude "net/optifine/**"
