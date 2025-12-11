@@ -13,28 +13,17 @@ import org.valkyrienskies.mod.common.ValkyrienSkiesMod
 import java.util.concurrent.CompletableFuture
 import kotlin.io.path.name
 
+/**
+ * Extend this class and implement {@link VSBlockInfoDataProvider#registerEntries}.
+ * Register an instance of the class with your platform's data generator.
+ */
 abstract class VSBlockInfoDataProvider(val output: PackOutput, val modId: String) : DataProvider {
-    protected abstract fun registerEntries()
-    private val entries: MutableList<Info> = mutableListOf()
+    private val entries: HashMap<ResourceLocation, Info> = HashMap()
 
-    private data class Info(
-        val tag: Boolean,
-        val id: ResourceLocation,
-        val mass: Double?,
-        val friction: Double?,
-        val elasticity: Double?,
-        val priority: Int?
-    ) {
-        fun toJson(): JsonObject {
-            val obj = JsonObject()
-            obj.add(if (tag) "tag" else "block", JsonPrimitive(id.toString()))
-            mass?.let { d -> obj.add("mass", JsonPrimitive(d)) }
-            friction?.let { d -> obj.add("friction", JsonPrimitive(d)) }
-            elasticity?.let { d -> obj.add("elasticity", JsonPrimitive(d)) }
-            priority?.let { d -> obj.add("priority", JsonPrimitive(d)) }
-            return obj
-        }
-    }
+    /**
+     * Implement this method and then use the {@link VSBlockInfoDataProvider#addBlock} and {@link VSBlockInfoDataProvider#addBlockTag} methods.
+     */
+    protected abstract fun registerEntries()
 
     /**
      * Adds the given Block ID to the mass datapack JSON
@@ -52,7 +41,8 @@ abstract class VSBlockInfoDataProvider(val output: PackOutput, val modId: String
         elasticity: Double? = null,
         priority: Int? = null
     ) {
-        entries.add(Info(false, id, mass, friction, elasticity, priority))
+        entries[id]?.let { throw RuntimeException("Duplicate Block Into Entries for $id") }
+        entries[id] = Info(false, mass, friction, elasticity, priority)
     }
 
     /**
@@ -71,7 +61,8 @@ abstract class VSBlockInfoDataProvider(val output: PackOutput, val modId: String
         elasticity: Double? = null,
         priority: Int? = null
     ) {
-        entries.add(Info(true, id, mass, friction, elasticity, priority))
+        entries[id]?.let { throw RuntimeException("Duplicate Block Into Entries for $id") }
+        entries[id] = Info(true, mass, friction, elasticity, priority)
     }
 
     /**
@@ -124,16 +115,34 @@ abstract class VSBlockInfoDataProvider(val output: PackOutput, val modId: String
 
             try {
                 val array = JsonArray(entries.size)
-                entries.forEach { info -> array.add(info.toJson()) }
+                entries.forEach { (id, info) -> array.add(info.toJson(id)) }
 
                 return@supplyAsync DataProvider.saveStable(cachedOutput, array, path)
             } catch (e: Exception) {
-                throw RuntimeException("Failed to save ${path.name}", e)
+                throw RuntimeException("Failed to save $path", e)
             }
         }.get()
     }
 
     override fun getName(): String {
         return "VS Block Info Data Provider: $modId.json"
+    }
+
+    private data class Info(
+        val tag: Boolean,
+        val mass: Double?,
+        val friction: Double?,
+        val elasticity: Double?,
+        val priority: Int?
+    ) {
+        fun toJson(id: ResourceLocation): JsonObject {
+            val obj = JsonObject()
+            obj.add(if (tag) "tag" else "block", JsonPrimitive(id.toString()))
+            mass?.let { d -> obj.add("mass", JsonPrimitive(d)) }
+            friction?.let { d -> obj.add("friction", JsonPrimitive(d)) }
+            elasticity?.let { d -> obj.add("elasticity", JsonPrimitive(d)) }
+            priority?.let { d -> obj.add("priority", JsonPrimitive(d)) }
+            return obj
+        }
     }
 }
