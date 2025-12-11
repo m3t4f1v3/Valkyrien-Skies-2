@@ -47,10 +47,10 @@ abstract class VSBlockInfoDataProvider(val output: PackOutput, val modId: String
      */
     protected fun addBlock(
         id: ResourceLocation,
-        mass: Double?,
-        friction: Double?,
-        elasticity: Double?,
-        priority: Int?
+        mass: Double? = null,
+        friction: Double? = null,
+        elasticity: Double? = null,
+        priority: Int? = null
     ) {
         entries.add(Info(false, id, mass, friction, elasticity, priority))
     }
@@ -66,10 +66,10 @@ abstract class VSBlockInfoDataProvider(val output: PackOutput, val modId: String
      */
     protected fun addBlockTag(
         id: ResourceLocation,
-        mass: Double?,
-        friction: Double?,
-        elasticity: Double?,
-        priority: Int?
+        mass: Double? = null,
+        friction: Double? = null,
+        elasticity: Double? = null,
+        priority: Int? = null
     ) {
         entries.add(Info(true, id, mass, friction, elasticity, priority))
     }
@@ -85,10 +85,10 @@ abstract class VSBlockInfoDataProvider(val output: PackOutput, val modId: String
      */
     protected fun addBlock(
         block: Block,
-        mass: Double?,
-        friction: Double?,
-        elasticity: Double?,
-        priority: Int?
+        mass: Double? = null,
+        friction: Double? = null,
+        elasticity: Double? = null,
+        priority: Int? = null
     ) {
         addBlock(block.builtInRegistryHolder().key().location(), mass, friction, elasticity, priority)
     }
@@ -104,10 +104,10 @@ abstract class VSBlockInfoDataProvider(val output: PackOutput, val modId: String
      */
     protected fun addBlockTag(
         tag: TagKey<Block>,
-        mass: Double?,
-        friction: Double?,
-        elasticity: Double?,
-        priority: Int?
+        mass: Double? = null,
+        friction: Double? = null,
+        elasticity: Double? = null,
+        priority: Int? = null
     ) {
         addBlockTag(tag.location, mass, friction, elasticity, priority)
     }
@@ -119,15 +119,18 @@ abstract class VSBlockInfoDataProvider(val output: PackOutput, val modId: String
                 .resolve(ValkyrienSkiesMod.MOD_ID)
                 .resolve("vs_mass")
                 .resolve("$modId.json")
+
+            registerEntries()
+
             try {
-                val array = JsonArray()
+                val array = JsonArray(entries.size)
                 entries.forEach { info -> array.add(info.toJson()) }
 
-                return@supplyAsync DataProvider.saveStable(CachedOutput.NO_CACHE, array, path)
+                return@supplyAsync DataProvider.saveStable(cachedOutput, array, path)
             } catch (e: Exception) {
                 throw RuntimeException("Failed to save ${path.name}", e)
             }
-        }
+        }.get()
     }
 
     override fun getName(): String {
