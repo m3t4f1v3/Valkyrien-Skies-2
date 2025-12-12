@@ -97,6 +97,19 @@ object VSConfigUpdater {
                     val convertedValue = when {
                         // Handle Float stored as Double in Forge config
                         defaultValue is Float && newValue is Double -> newValue.toFloat()
+                        // Handle existing enum value stored as String
+                        defaultValue is Enum<*> -> {
+                            when (newValue) {
+                                is String -> {
+                                    // Convert string name to enum instance
+                                    @Suppress("UNCHECKED_CAST")
+                                    val enumConstants = defaultValue.declaringJavaClass.enumConstants as Array<Enum<*>>
+                                    enumConstants.find { it.name == newValue }
+                                }
+                                is Enum<*> -> newValue
+                                else -> null
+                            }
+                        }
                         defaultValue::class.isInstance(newValue) -> newValue
                         else -> null
                     }
