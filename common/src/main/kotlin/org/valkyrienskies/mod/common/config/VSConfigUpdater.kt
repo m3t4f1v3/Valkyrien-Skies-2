@@ -7,6 +7,8 @@ import org.valkyrienskies.core.internal.config.VsiConfigModel
 import org.valkyrienskies.core.internal.config.VsiConfigModelCategory
 import org.valkyrienskies.core.internal.config.VsiConfigModelEntry
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod
+import org.valkyrienskies.mod.common.hooks.VSGameEvents
+import org.valkyrienskies.mod.common.hooks.VSGameEvents.ConfigUpdateEntry
 import kotlin.collections.iterator
 
 object VSConfigUpdater {
@@ -27,10 +29,16 @@ object VSConfigUpdater {
      * Call this from platform events when config is loaded or updated
      **/
     fun update(config: ModConfig) {
-        core_server_config.update(config)
-        server_config.update(config)
-        common_config.update(config)
-        client_config.update(config)
+        val updatedEntries = mutableSetOf<ConfigUpdateEntry>()
+
+        core_server_config.update(config, ConfigType.CORE_SERVER, updatedEntries)
+        server_config.update(config, ConfigType.SERVER, updatedEntries)
+        common_config.update(config, ConfigType.COMMON, updatedEntries)
+        client_config.update(config, ConfigType.CLIENT, updatedEntries)
+
+        if (updatedEntries.isNotEmpty()) {
+            VSGameEvents.configUpdated.emit(updatedEntries)
+        }
     }
 
     private fun buildCategory(configCategory: VsiConfigModelCategory, builder: ForgeConfigSpec.Builder ): ForgeConfigSpec.Builder {
@@ -80,9 +88,10 @@ object VSConfigUpdater {
         return builder
     }
 
-    private fun VsiConfigModel.update(forgeConfig: ModConfig) {
-        root.forEachEntry { path, node ->
-            forgeConfig.configData.get<Any>("$path${node.name}")?.let { newValue ->
+    private fun VsiConfigModel.update(forgeConfig: ModConfig, configType: ConfigType, updatedEntries: MutableSet<ConfigUpdateEntry>) {
+        root.forEachEntry { category, node ->
+            val forgeKey = (category + node.name).joinToString(".")
+            forgeConfig.configData.get<Any>(forgeKey)?.let { newValue ->
                 val defaultValue = node.default
                 if (defaultValue != null) {
                     val convertedValue = when {
@@ -90,6 +99,10 @@ object VSConfigUpdater {
                         defaultValue is Float && newValue is Double -> newValue.toFloat()
                         defaultValue::class.isInstance(newValue) -> newValue
                         else -> null
+                    }
+
+                    if (convertedValue != node.getValue()) {
+                        updatedEntries.add(ConfigUpdateEntry(configType, category, node.name))
                     }
 
                     if (convertedValue != null) {
@@ -101,13 +114,13 @@ object VSConfigUpdater {
         }
     }
 
-    private fun VsiConfigModelCategory.forEachEntry(path: String = "", callback: (String, VsiConfigModelEntry<*>) -> Unit) {
+    private fun VsiConfigModelCategory.forEachEntry(category: List<String> = emptyList(), callback: (List<String>, VsiConfigModelEntry<*>) -> Unit) {
         for (node in children) {
             val value = node.value
             if (value is VsiConfigModelEntry<*>) {
-                callback(path, value)
+                callback(category, value)
             } else if (value is VsiConfigModelCategory) {
-                value.forEachEntry("$path${value.title}.", callback)
+                value.forEachEntry(category + value.title, callback)
             }
         }
     }
