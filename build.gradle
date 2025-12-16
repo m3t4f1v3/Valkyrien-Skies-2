@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile
+
 buildscript {
     // Lock plugin dependencies
     configurations.classpath {
@@ -145,6 +147,15 @@ subprojects {
                 name = "Forge Config Api Port"
                 url = "https://raw.githubusercontent.com/Fuzss/modresources/main/maven/"
             }
+            maven { // Hexcasting
+                url = "https://maven.blamejared.com"
+            }
+            maven { // Hexical via temporary Maven
+                url = "https://maven.pool.net.eu.org/"
+            }
+            maven { // Hexal
+                url = uri("https://maven.hexxy.media")
+            }
         }
         maven {
             name = "Valkyrien Skies Internal"
@@ -224,6 +235,13 @@ allprojects {
         options.encoding = "UTF-8"
 
         options.release = 17
+    }
+
+    tasks.withType(KotlinJvmCompile).configureEach {
+        kotlinOptions {
+            jvmTarget = "17"
+            freeCompilerArgs += "-Xjvm-default=all"
+        }
     }
 
     java {

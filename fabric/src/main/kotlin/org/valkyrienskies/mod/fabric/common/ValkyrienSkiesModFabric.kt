@@ -74,7 +74,9 @@ import org.valkyrienskies.mod.common.item.ShipCreatorItem
 import org.valkyrienskies.mod.compat.LoadedMods
 import org.valkyrienskies.mod.compat.flywheel.FlywheelCompat
 import org.valkyrienskies.mod.compat.flywheel.ShipEmbeddingManager
+import org.valkyrienskies.mod.compat.hexcasting.HexcastingCompat
 import org.valkyrienskies.mod.fabric.compat.dynmap.FabricDynmapHandler
+import org.valkyrienskies.mod.fabric.compat.hexcasting.FabricShipAmbit
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executor
 import java.util.concurrent.atomic.AtomicBoolean
@@ -283,6 +285,9 @@ class ValkyrienSkiesModFabric : ModInitializer {
 
         if (FabricLoader.getInstance().isModLoaded("dynmap"))
             FabricDynmapHandler().register()
+
+        if (FabricLoader.getInstance().isModLoaded("hexcasting"))
+            HexcastingCompat.register(FabricShipAmbit::class.java)
     }
 
     /**

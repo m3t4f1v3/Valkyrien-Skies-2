@@ -108,6 +108,21 @@ dependencies {
     // Dynmap
     modCompileOnly("maven.modrinth:dynmap:${dynmap_version}")
 
+    // Hexcasting
+    modCompileOnly("at.petra-k.hexcasting:hexcasting-fabric-${minecraft_version}:${hexcasting_version}")
+
+    // HexTweaks
+    modCompileOnly("maven.modrinth:hextweaks:$hextweaks_version")
+
+    // Hexical
+    modCompileOnly("miyucomics.hexical:hexical:$hexical_version") { transitive = false }
+
+    // Ephemera
+    modCompileOnly("maven.modrinth:ephemera:$ephemera_version")
+
+    // Hexal
+    modCompileOnly("ram.talia.hexal:hexal-fabric-$minecraft_version:$hexal_version") { transitive = false }
+
     modCompileOnly("com.github.iPortalTeam.ImmersivePortalsMod:imm_ptl_core:${immptl_version}")
     modCompileOnly("com.github.iPortalTeam.ImmersivePortalsMod:q_misc_util:${immptl_version}")
     modCompileOnly("com.github.iPortalTeam.ImmersivePortalsMod:build:${immptl_version}")
