@@ -1,14 +1,13 @@
 
 dependencies {
     implementation(annotationProcessor("io.github.llamalad7:mixinextras-common:0.4.1"))
-    implementation(annotationProcessor("com.github.bawnorton.mixinsquared:mixinsquared-fabric:0.3.7-beta.1"))
 
     compileOnly 'com.google.code.findbugs:jsr305:3.0.2'
     // We depend on fabric loader here to use the fabric @Environment annotations
     // Do NOT use other classes from fabric loader
     modImplementation "net.fabricmc:fabric-loader:${rootProject.fabric_loader_version}"
 
-    modApi("me.shedaniel.cloth:cloth-config:${cloth_config_version}")
+    modCompileOnly "fuzs.forgeconfigapiport:forgeconfigapiport-common:${rootProject.fcap_version}"
 
     modCompileOnly("maven.modrinth:sodium:${sodium_version}")
 
@@ -37,6 +36,18 @@ dependencies {
 
     // Dynmap
     modCompileOnly("maven.modrinth:dynmap:${dynmap_version}")
+
+    // Hexcasting
+    modCompileOnly("at.petra-k.hexcasting:hexcasting-common-$minecraft_version:$hexcasting_version")
+
+    // HexTweaks
+    modCompileOnly("maven.modrinth:hextweaks:$hextweaks_version")
+
+    // Ephemera
+    modCompileOnly("maven.modrinth:ephemera:$ephemera_version")
+
+    // Hexal
+    modCompileOnly("ram.talia.hexal:hexal-fabric-$minecraft_version:$hexal_version") { transitive = false }
 
     // Common create compat,
     // We just use a version from a platform and hope the classes exist on both versions and mixins apply correctly
@@ -85,6 +96,10 @@ jar {
     // Exclude dummy Optifine classes
     exclude "net/optifine/**"
 }
+
+compileKotlin { doLast {
+    file(compileKotlin.destinationDirectory.get().toString() + "/META-INF/valkyrienskies-120.kotlin_module").renameTo(file(compileKotlin.destinationDirectory.get().toString() + "/META-INF/valkyrienskies-120_common.kotlin_module"))
+} }
 
 publishing {
     publications {

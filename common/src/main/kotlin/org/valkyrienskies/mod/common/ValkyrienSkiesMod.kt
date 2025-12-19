@@ -28,7 +28,6 @@ import org.valkyrienskies.mod.api.getShipManagingBlock
 import org.valkyrienskies.mod.api_impl.events.VsApiImpl
 import org.valkyrienskies.mod.common.blockentity.TestHingeBlockEntity
 import org.valkyrienskies.mod.common.blockentity.TestThrusterBlockEntity
-import org.valkyrienskies.mod.common.config.VSGameConfig
 import org.valkyrienskies.mod.common.entity.ShipMountingEntity
 import org.valkyrienskies.mod.common.entity.VSPhysicsEntity
 import org.valkyrienskies.mod.common.jackson.BlockPosDeserializer
@@ -91,7 +90,7 @@ object ValkyrienSkiesMod {
         VsApiImpl(vsCore)
     }
 
-    val blockEntityPhysListeners: ConcurrentHashMap<DimensionId, HashMap<BlockPos, Pair<ShipId?, BlockEntityPhysicsListener>>> =
+    val blockEntityPhysListeners: ConcurrentHashMap<DimensionId, ConcurrentHashMap<BlockPos, Pair<ShipId?, BlockEntityPhysicsListener>>> =
         ConcurrentHashMap()
 
     @JvmStatic
@@ -115,8 +114,6 @@ object ValkyrienSkiesMod {
         mapper.registerModule(aabbModule)
         // end region
 
-        core.registerConfigLegacy("vs", VSGameConfig::class.java)
-
         splitHandler = SplitHandler(this.vsCore.hooks.enableBlockEdgeConnectivity, this.vsCore.hooks.enableBlockCornerConnectivity)
 
         core.registerAttachment(ShipSettings::class.java)
@@ -137,7 +134,7 @@ object ValkyrienSkiesMod {
                     gameTickForceApplier.physTick(event.world, event.delta)
                 }
             }
-            blockEntityPhysListeners.getOrPut(event.world.dimension, {HashMap()}).forEach { pos, infoPair ->
+            blockEntityPhysListeners.getOrPut(event.world.dimension, { ConcurrentHashMap() }).forEach { pos, infoPair ->
                 val shipId = infoPair.first
                 val listener = infoPair.second
                 val ship = if (shipId != null) {
@@ -161,26 +158,6 @@ object ValkyrienSkiesMod {
         return dimensionalGTPAs.getOrPut(dimensionId) { GameToPhysicsAdapter() }
     }
 
-    fun createCreativeTab(): CreativeModeTab {
-        return CreativeModeTab.builder(CreativeModeTab.Row.TOP, 0)
-            .title(Component.translatable("itemGroup.valkyrienSkies"))
-            .icon { ItemStack(SHIP_CREATOR_ITEM) }
-            .displayItems { _, output ->
-                output.accept(TEST_CHAIR.asItem())
-                output.accept(TEST_HINGE.asItem())
-                output.accept(TEST_FLAP.asItem())
-                output.accept(TEST_WING.asItem())
-                output.accept(TEST_THRUSTER.asItem())
-                output.accept(CONNECTION_CHECKER_ITEM)
-                output.accept(SHIP_CREATOR_ITEM)
-                output.accept(SHIP_ASSEMBLER_ITEM)
-                output.accept(SHIP_CREATOR_ITEM_SMALLER)
-                output.accept(AREA_ASSEMBLER_ITEM)
-                output.accept(PHYSICS_ENTITY_CREATOR_ITEM)
-            }
-            .build()
-    }
-
     fun addBlockEntityPhysTicker(
         dimensionId: DimensionId, pos: BlockPos, blockEntity: BlockEntityPhysicsListener
     ) {
@@ -191,15 +168,15 @@ object ValkyrienSkiesMod {
             val ship = level.getShipManagingBlock(pos)
             shipId = ship?.id
         }
-        blockEntityPhysListeners.getOrPut(dimensionId, {HashMap()})[pos] = Pair(shipId, blockEntity)
+        blockEntityPhysListeners.getOrPut(dimensionId, { ConcurrentHashMap() })[pos] = Pair(shipId, blockEntity)
     }
 
     fun getBlockEntityPhysTicker(dimensionId: DimensionId, pos: BlockPos): BlockEntityPhysicsListener? {
-        return blockEntityPhysListeners.getOrPut(dimensionId, {HashMap()})[pos]?.second
+        return blockEntityPhysListeners.getOrPut(dimensionId, { ConcurrentHashMap() })[pos]?.second
     }
 
     fun removeBlockEntityPhysTicker(pos: BlockPos, dimensionId: DimensionId) {
-        blockEntityPhysListeners.getOrPut(dimensionId, {HashMap()}).remove(pos)
+        blockEntityPhysListeners.getOrPut(dimensionId, { ConcurrentHashMap() }).remove(pos)
     }
 
 }

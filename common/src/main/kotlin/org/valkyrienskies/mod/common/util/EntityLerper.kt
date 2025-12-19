@@ -22,6 +22,11 @@ object EntityLerper {
             return
         }
         val ship = refship as ClientShip
+        dragInfo.ticksSinceLastServerPacket++
+        if (dragInfo.ticksSinceLastServerPacket > 19) {
+            // Ping server to ask for an update, we're probably stuck!
+
+        }
         if (dragInfo.lerpSteps > 0) {
             if (dragInfo.changedShipLastTick) {
                 //dragInfo.lerpSteps = 0

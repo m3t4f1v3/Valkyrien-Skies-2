@@ -26,7 +26,6 @@ loom {
 
 dependencies {
     include(implementation(annotationProcessor("io.github.llamalad7:mixinextras-fabric:0.5.0")))
-    include(implementation(annotationProcessor("com.github.bawnorton.mixinsquared:mixinsquared-fabric:0.3.7-beta.1")))
 
     modImplementation("net.fabricmc:fabric-loader:${rootProject.fabric_loader_version}")
 
@@ -39,7 +38,10 @@ dependencies {
 
     // Depend on the fabric kotlin mod
     include(modImplementation("net.fabricmc:fabric-language-kotlin:${kotlin_fabric_version}"))
-    include(modImplementation("me.shedaniel.cloth:cloth-config-fabric:${cloth_config_version}"))
+
+    include(modImplementation "fuzs.forgeconfigapiport:forgeconfigapiport-fabric:${rootProject.fcap_version}")
+    modRuntimeOnly("maven.modrinth:forge-config-screens:v8.0.2-1.20.1-Fabric")
+
 
     modCompileOnly("maven.modrinth:create-utilities:${create_utilities_version}")
     modCompileOnly("maven.modrinth:sodium:${sodium_version}")
@@ -105,6 +107,21 @@ dependencies {
 
     // Dynmap
     modCompileOnly("maven.modrinth:dynmap:${dynmap_version}")
+
+    // Hexcasting
+    modCompileOnly("at.petra-k.hexcasting:hexcasting-fabric-${minecraft_version}:${hexcasting_version}")
+
+    // HexTweaks
+    modCompileOnly("maven.modrinth:hextweaks:$hextweaks_version")
+
+    // Hexical
+    // fixme modCompileOnly("miyucomics.hexical:hexical:$hexical_version") { transitive = false }
+
+    // Ephemera
+    modCompileOnly("maven.modrinth:ephemera:$ephemera_version")
+
+    // Hexal
+    modCompileOnly("ram.talia.hexal:hexal-fabric-$minecraft_version:$hexal_version") { transitive = false }
 
     modCompileOnly("com.github.iPortalTeam.ImmersivePortalsMod:imm_ptl_core:${immptl_version}")
     modCompileOnly("com.github.iPortalTeam.ImmersivePortalsMod:q_misc_util:${immptl_version}")
