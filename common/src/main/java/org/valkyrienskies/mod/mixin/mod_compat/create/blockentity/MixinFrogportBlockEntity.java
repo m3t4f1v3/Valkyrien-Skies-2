@@ -29,7 +29,7 @@ public abstract class MixinFrogportBlockEntity extends PackagePortBlockEntity {
         cancellable = true
     )
     private void cancelIfTooFar(CallbackInfo ci) {
-        BlockPos targetPos = getBlockPos().offset(target.relativePos);
+        BlockPos targetPos = getBlockPos().offset(target != null ? target.relativePos : BlockPos.ZERO);
         double dist = CompatUtil.INSTANCE.toSameSpaceAs(
             level,
             getBlockPos().getCenter(),
