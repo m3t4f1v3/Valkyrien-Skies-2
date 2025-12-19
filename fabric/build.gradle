@@ -115,7 +115,7 @@ dependencies {
     modCompileOnly("maven.modrinth:hextweaks:$hextweaks_version")
 
     // Hexical
-    modCompileOnly("miyucomics.hexical:hexical:$hexical_version") { transitive = false }
+    // fixme modCompileOnly("miyucomics.hexical:hexical:$hexical_version") { transitive = false }
 
     // Ephemera
     modCompileOnly("maven.modrinth:ephemera:$ephemera_version")
