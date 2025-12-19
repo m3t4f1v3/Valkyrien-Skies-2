@@ -257,6 +257,7 @@
     "mod_compat.create.client.MixinAbstractContraptionEntityClient",
     "mod_compat.create.client.MixinBlockClusterOutline",
     "mod_compat.create.client.MixinCarriageSounds",
+    "mod_compat.create.client.MixinChainConveyorConnectionHandler",
     "mod_compat.create.client.MixinChainConveyorRenderer",
     "mod_compat.create.client.MixinChainConveyorVisual",
     "mod_compat.create.client.MixinCogwheelBlockItem",
