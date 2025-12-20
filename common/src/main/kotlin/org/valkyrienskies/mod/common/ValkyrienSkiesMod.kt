@@ -9,6 +9,7 @@ import net.minecraft.network.chat.Component
 import net.minecraft.resources.ResourceKey
 import net.minecraft.resources.ResourceLocation
 import net.minecraft.server.MinecraftServer
+import net.minecraft.tags.TagKey
 import net.minecraft.world.entity.EntityType
 import net.minecraft.world.item.CreativeModeTab
 import net.minecraft.world.item.Item
@@ -66,6 +67,9 @@ object ValkyrienSkiesMod {
     private val dimensionalGTPAs: HashMap<DimensionId, GameToPhysicsAdapter> = HashMap()
 
     val VS_CREATIVE_TAB = ResourceKey.create(Registries.CREATIVE_MODE_TAB, ResourceLocation("valkyrienskies"))
+
+    val ASSEMBLE_BLACKLIST: TagKey<Block> =
+        TagKey.create(Registries.BLOCK, ResourceLocation(MOD_ID, "assemble_blacklist"))
 
     @JvmStatic
     var currentServer: MinecraftServer? = null
