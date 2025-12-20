@@ -1,68 +1,58 @@
 # ⚒️ Pull Request Offering
 
-> _Nothing enters the world untested.  
-> The server ticks remember all lies._
+> _We shall not introduce more regressions  \
+> Lest we face eternal digressions_
 
 ---
-
 ## 🧾 What This PR Does
-Describe, plainly and without illusion, what this change introduces.
-- Bug fix?
-- Feature?
-- Refactor?
-- Dark ritual?
+- Bug fix?  
+- Feature?  
+- Refactor?  
+- Data/config update?  
+
+
+## 🔍 How This Was Tested
+- [ ] GameTest framework  
+- [ ] Singleplayer / Server  
+- [ ] Logs looked sane  
+- [ ] The vibes felt right *(sometimes you really do just have to vibe it)*
+
+
+## ⚠️ Breaking Changes
+- [ ] Yes (describe)  
+- [ ] No  (are you *really* sure?)
 
 ---
 
-## 🧪 GameTest Oath (REQUIRED)
+## 🧪 GameTest Oath
+- [ ] Please include at least one `@GameTest`  
+or  
+- [ ] PR does not require a `@GameTest`   
+  - [ ] True if this change is only a data/config/docs/logs change  
+  - [ ] Also True *if* you can make a good case on why you shouldn't have to add one
 
-☑ **This PR includes at least ONE new Minecraft Forge `@GameTest`.**
-
-- [ ] I have added **at least one new `@GameTest`**
-- [ ] The test meaningfully exercises the new or changed behavior
-- [ ] The test passes in a clean GameTest environment
-
-### 📍 GameTest Details
+### 📍 GameTest Details (Optional Unless Required)
 Provide the location and intent of the test(s):
 
 - **Test class:** `com.example.mod.gametest.YourTestClass`
 - **Test name(s):**
   - `test_something_does_not_break_reality`
 - **What it verifies:**
-  - (Brief explanation)
+  - *(Brief explanation)*
 
-> PRs without a new GameTest **will not be merged**  
-> unless explicitly exempted by a maintainer.
-
----
-
-## 🔍 How This Was Tested
-- [ ] GameTest framework (`/test run`)
-- [ ] Singleplayer
-- [ ] Dedicated server
-- [ ] I stared into the logs until they blinked first
-
----
-
-## ⚠️ Breaking Changes
-Does this alter APIs, data formats, configs, or world behavior?
-
-- [ ] Yes (describe below)
-- [ ] No
+> PRs without a new GameTest **will not be merged**  (If they are determined to be required) \
+> _unless explicitly exempted by a maintainer._
 
 ---
 
 ## 🗝️ Additional Notes
-Anything reviewers should know:
-performance concerns, edge cases, cursed knowledge, etc.
+Anything else reviewers might need to know:
+performance concerns, edge cases, forbidden knowledge, etc. 💀
 
 ---
 
-## 🜏 Final Declaration
-
-By submitting this pull request, I affirm that:
-- The code compiles
-- The tests speak truth
-- The world will not collapse (probably)
-
-_If it does, I accept responsibility._
+## 🜏 Declaration
+By submitting this PR, I affirm:  
+- Code/data compiles and loads  
+- Tests _(if any)_ pass  
+- No worlds shall be harmed in the making or merging of this PR 💀
