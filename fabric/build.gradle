@@ -83,6 +83,9 @@ dependencies {
     //Very many players
     modImplementation("curse.maven:vmp-fabric-552542:4754074")
 
+    // Terra
+    modCompileOnly("maven.modrinth:terra:6.3.1-BETA-fabric")
+
     // EMF compat
     //todo: fix
     modCompileOnly("curse.maven:entity-model-features-844662:5696901")
