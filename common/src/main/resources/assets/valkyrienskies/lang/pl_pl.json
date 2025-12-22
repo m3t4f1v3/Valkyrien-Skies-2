@@ -3,7 +3,7 @@
 
   "tooltip.valkyrienskies.mass": "Masa",
   "category.valkyrienskies.driving": "Sterowanie",
-  "key.valkyrienskies.ship_cruise": "Rejs",
+  "key.valkyrienskies.ship_cruise": "Wnoszenie",
   "key.valkyrienskies.ship_down": "Opadanie",
 
   "block.valkyrienskies.test_chair": "Krzesło Debugowe",
@@ -17,8 +17,8 @@
   "item.valkyrienskies.ship_assembler": "Konstruktor Statku",
   "item.valkyrienskies.area_assembler": "Konstruktor Obszaru",
   "item.valkyrienskies.connection_checker": "Sprawdzacz Połączeń",
-  "item.valkyrienskies.physics_entity_creator": "Kreator Jednostki Fizycznej",
-  "entity.valkyrienskies.vs_physics_entity": "Jednostka Fizyczna",
+  "item.valkyrienskies.physics_entity_creator": "Kreator Bytu Fizycznego",
+  "entity.valkyrienskies.vs_physics_entity": "Byt Fizyczny",
 
   "argument.valkyrienskies.ship.no_found": "Nie znaleziono statku",
   "argument.valkyrienskies.ship.multiple_found": "Znaleziono wiele statków",
