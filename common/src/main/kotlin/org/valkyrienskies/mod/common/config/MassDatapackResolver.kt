@@ -335,15 +335,21 @@ object MassDatapackResolver : BlockStateInfoProvider {
             }
         }
 
+
         blockStates.forEach { blockState: BlockState ->
             val vsBlockState: VsiBlockState
             if (blockState.isAir) {
                 vsBlockState = vsCore.blockTypes.airState
             } else {
-                vsBlockState = if (blockState.liquid()) {
+                vsBlockState = if (blockState.liquid()) { //TODO: This is also deprecated. I could check if the blockState is wet and not waterlogged but couldn't be sure if that's what this is for.
                     VsiBlockState(null, getFluidState(blockState.fluidState))
-                } else if (blockState.isSolid) {
-                    val voxelShape = blockState.getShape(dummyBlockGetter, BlockPos.ZERO)
+                } else {
+                    val voxelShape: VoxelShape
+                    if (blockState.isSolid) {
+                        voxelShape = blockState.getShape(dummyBlockGetter, BlockPos.ZERO)
+                    } else {
+                        voxelShape = blockState.getCollisionShape(dummyBlockGetter, BlockPos.ZERO)
+                    }
 
                     val collisionShape: SolidBlockShape = if (voxelShapeToCollisionShapeMap.contains(voxelShape)) {
                         voxelShapeToCollisionShapeMap[voxelShape]!!
@@ -376,63 +382,9 @@ object MassDatapackResolver : BlockStateInfoProvider {
                     }
 
                     VsiBlockState(solidState, fluidState)
-                } else {
-                    vsCore.blockTypes.emptyState
                 }
             }
-
-            blockStates.forEach { blockState: BlockState ->
-                val vsBlockState: VsiBlockState
-                if (blockState.isAir) {
-                    vsBlockState = vsCore.blockTypes.airState
-                } else {
-                    vsBlockState = if (blockState.liquid()) { //TODO: This is also deprecated. I could check if the blockState is wet and not waterlogged but couldn't be sure if that's what this is for.
-                        VsiBlockState(null, getFluidState(blockState.fluidState))
-                    } else {
-                        val voxelShape: VoxelShape
-                        if (blockState.isSolid) {
-                            voxelShape = blockState.getShape(dummyBlockGetter, BlockPos.ZERO)
-                        } else {
-                            voxelShape = blockState.getCollisionShape(dummyBlockGetter, BlockPos.ZERO)
-                        }
-
-                        val collisionShape: SolidBlockShape = if (voxelShapeToCollisionShapeMap.contains(voxelShape)) {
-                            voxelShapeToCollisionShapeMap[voxelShape]!!
-                        } else if (generatedCollisionShapesMap.contains(voxelShape)) {
-                            if (generatedCollisionShapesMap[voxelShape] != null) {
-                                generatedCollisionShapesMap[voxelShape]!!
-                            } else {
-                                fullBlockCollisionShape
-                            }
-                        } else {
-                            val generated = generateShapeFromVoxel(voxelShape)
-                            generatedCollisionShapesMap[voxelShape] = generated
-                            generated ?: fullBlockCollisionShape
-                        }
-
-                        val vsBlockStateInfo = map[BuiltInRegistries.BLOCK.getKey(blockState.block)]
-
-                        // Create new solid block state
-                        val solidState = vsCore.newSolidStateBuilder()
-                            .shape(collisionShape)
-                            .elasticity(vsBlockStateInfo?.elasticity ?: VSGameConfig.SERVER.defaultBlockElasticity)
-                            .friction(vsBlockStateInfo?.friction ?: VSGameConfig.SERVER.defaultBlockFriction)
-                            .hardness(VSGameConfig.SERVER.defaultBlockHardness) // Unused for now, placeholder for later
-                            .build()
-
-                        val fluidState = if (!blockState.fluidState.isEmpty) {
-                            getFluidState(blockState.fluidState)
-                        } else {
-                            null
-                        }
-
-                        VsiBlockState(solidState, fluidState)
-                    }
-                }
-                mcBlockStateToVs[blockState] = vsBlockState
-            }
-
-
+            mcBlockStateToVs[blockState] = vsBlockState
         }
 
         runRegisterBlockStateEvent()
