@@ -23,8 +23,7 @@ public abstract class MixinSchematicannonRenderer {
         at = @At(
             value = "FIELD",
             target = "Lcom/simibubi/create/content/schematics/cannon/SchematicannonBlockEntity;previousTarget:Lnet/minecraft/core/BlockPos;"
-        ),
-        remap = false
+        )
     )
     private static BlockPos transformPreviousTarget(
         BlockPos original,
