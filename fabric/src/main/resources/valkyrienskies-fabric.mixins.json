@@ -4,6 +4,7 @@
   "compatibilityLevel": "JAVA_8",
   "plugin": "org.valkyrienskies.mod.fabric.mixin.ValkyrienSkiesFabricMixinPlugin",
   "mixins": [
+    "compat.connectiblechains.MixinChainable",
     "compat.create.MixinBlockBreakingKineticTileEntity",
     "compat.create.MixinControlledContraptionEntity",
     "entity.MixinContainerEntity",
@@ -17,6 +18,7 @@
   ],
   "client": [
     "client.render.MixinLevelRenderer",
+    "compat.connectiblechains.client.MixinChainKnotEntityRenderer",
     "compat.create.client.MixinBlockEntityRenderHelper",
     "compat.create.client.MixinChainConveyorBlockEntity",
     "compat.create.client.MixinContraptionHandlerClient",
