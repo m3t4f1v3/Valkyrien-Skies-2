@@ -12,7 +12,8 @@ Massive backend, api, and QOL update.
 
 **NOTE: ALL VS Addons will need to update to the new api. Allow time for them to update before updating your pack**
 
-But here are the bug fixes we do remember (in no specific order):
+Other changes:
+_non-exhaustive, and in no particular order_
 - Added block shape based default masses
 - Inter-ship frogport functionality
 - Added a default assembly blacklist (for addons)
