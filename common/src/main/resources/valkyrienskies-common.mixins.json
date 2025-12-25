@@ -290,7 +290,6 @@
     "mod_compat.create.client.MixinTrainRelocator",
     "mod_compat.create.client.MixinValueBox",
     "mod_compat.create.client.gui.menu.MixinClipboardScreen",
-    "mod_compat.emf.MixinEMFAnimationEntityContext",
     "mod_compat.etf.MixinBlockEntity",
     "mod_compat.flywheel_renderer.MixinViewArea",
     "mod_compat.immersive_portals.MixinMyBuiltChunkStorage",
