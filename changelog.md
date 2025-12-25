@@ -6,6 +6,8 @@ Massive backend, api, and QOL update.
 - Updated (Krunch) backend to be more performant
 - Added PhysX backend option, currently a bit unstable but very performant. Stability will be increased in the future. 
 - Revamped API for VS addons, with lots more documentation and requested additions
+- Ships have aerodynamics now! No longer will they drift forever with zero-G. Shape based lift is also now a thing!
+- Updated entity dragging. No longer should you be left behind by a fast ship, or be unable to interact with blocks at high speed. Multiplayer is also fixed, no more will your friends lag behind the ship! (mostly) 
 - Many, many, many bug fixes. Like so many. We've actually lost track.  
 
 **NOTE: ALL VS Addons will need to update to the new api. Allow time for them to update before updating your pack**
@@ -20,7 +22,6 @@ But here are the bug fixes we do remember (in no specific order):
 - Added atmospheric drag for ships, with datapackable values
 - Added datapackable dimension gravity
 - Some reworked mass values  
-- Improved aerodynamic system, including better wings/flaps and shape-based drag+lift
 - Fixed players getting shipyarded when respawning on deleted ships
 - Fixed toolbox interactions on ships
 - Fixed compat with very many players
