@@ -23,7 +23,8 @@ public class MixinEMFAnimationEntityContext {
     @Inject(
         at = @At("HEAD"),
         method = "distanceOfEntityFrom",
-        cancellable = true
+        cancellable = true,
+        remap = false
     )
     private static void distanceOfEntityFrom(final BlockPos pos, final CallbackInfoReturnable<Integer> cir) {
 
