@@ -157,8 +157,8 @@ object MassDatapackResolver : BlockStateInfoProvider {
     }
 
     fun decideDefaultPriority(resourceLocation: ResourceLocation) = when {
-        resourceLocation.namespace.equals(ValkyrienSkiesMod.MOD_ID) -> 1000
-        resourceLocation.namespace.equals("custom") -> 50
+        resourceLocation.namespace.equals(ValkyrienSkiesMod.MOD_ID) -> 50
+        resourceLocation.namespace.equals("custom") -> 1000
         else -> 100
     }
 
