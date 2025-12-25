@@ -6,7 +6,7 @@
   },
   {
     "block": "minecraft:gilded_blackstone",
-    "mass": 300.0,
+    "mass": 360.0,
     "friction": 0.7
   },
   {
@@ -21,17 +21,17 @@
   },
   {
     "block": "minecraft:blackstone_wall",
-    "mass": 125.0,
+    "mass": 175.0,
     "friction": 0.7
   },
   {
     "block": "minecraft:chiseled_polished_blackstone",
-    "mass": 250.0,
+    "mass": 350.0,
     "friction": 0.6
   },
   {
     "block": "minecraft:polished_blackstone",
-    "mass": 250.0,
+    "mass": 350.0,
     "friction": 0.5
   },
   {
@@ -46,7 +46,40 @@
   },
   {
     "block": "minecraft:polished_blackstone_wall",
-    "mass": 125.0,
+    "mass": 175.0,
     "friction": 0.5
+  },
+  {
+    "block": "minecraft:polished_blackstone_pressure_plate",
+    "mass": 20.0
+  },
+  {
+    "block": "minecraft:polished_blackstone_button",
+    "mass": 5.0
+  },
+  {
+    "block": "minecraft:polished_blackstone_bricks",
+    "mass": 250.0,
+    "friction": 0.4
+  },
+  {
+    "block": "minecraft:cracked_polished_blackstone_bricks",
+    "mass": 250.0,
+    "friction": 0.6
+  },
+  {
+    "block": "minecraft:polished_blackstone_brick_stairs",
+    "mass": 262.5,
+    "friction": 0.4
+  },
+  {
+    "block": "minecraft:polished_blackstone_brick_slab",
+    "mass": 175.0,
+    "friction": 0.5
+  },
+  {
+    "block": "minecraft:polished_blackstone_brick_wall",
+    "mass": 175.0,
+    "friction": 0.4
   }
 ]

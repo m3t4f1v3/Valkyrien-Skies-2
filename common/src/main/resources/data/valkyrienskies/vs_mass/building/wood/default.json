@@ -1,27 +1,27 @@
 [
   {
     "tag": "minecraft:logs",
-    "mass": 400.0,
+    "mass": 80.0,
     "friction": 0.6
   },
   {
     "tag": "minecraft:planks",
-    "mass": 100.0,
-    "friction": 0.5
-  },
-  {
-    "tag": "minecraft:wooden_stairs",
-    "mass": 75.0,
-    "friction": 0.5
-  },
-  {
-    "tag": "minecraft:wooden_slabs",
     "mass": 50.0,
     "friction": 0.5
   },
   {
+    "tag": "minecraft:wooden_stairs",
+    "mass": 37.5,
+    "friction": 0.5
+  },
+  {
+    "tag": "minecraft:wooden_slabs",
+    "mass": 25.0,
+    "friction": 0.5
+  },
+  {
     "tag": "minecraft:wooden_doors",
-    "mass": 25.0
+    "mass": 10.0
   },
 
   {

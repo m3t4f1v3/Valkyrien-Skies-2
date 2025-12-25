@@ -1,7 +1,7 @@
 [
   {
     "block": "minecraft:mud",
-    "mass": 100.0,
+    "mass": 125.0,
     "friction": 0.9
   },
   {
@@ -26,7 +26,7 @@
   },
   {
     "block": "minecraft:mud_brick_wall",
-    "mass": 125.0,
+    "mass": 75.0,
     "friction": 0.7
   }
 ]

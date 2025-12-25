@@ -16,17 +16,17 @@
   },
   {
     "block": "minecraft:ice",
-    "mass": 125.0,
+    "mass": 80.0,
     "friction": 0.05
   },
   {
     "block": "minecraft:packed_ice",
-    "mass": 250.0,
+    "mass": 90.0,
     "friction": 0.02
   },
   {
     "block": "minecraft:blue_ice",
-    "mass": 400.0,
+    "mass": 100.0,
     "friction": 0.0
   },
   {
@@ -41,11 +41,11 @@
   },
   {
     "block": "minecraft:crimson_nylium",
-    "mass": 1180.0
+    "mass": 118.0
   },
   {
     "block": "minecraft:warped_nylium",
-    "mass": 1180.0
+    "mass": 118.0
   },
   {
     "block": "minecraft:soul_sand",
@@ -84,7 +84,7 @@
   },
   {
     "tag": "minecraft:nylium",
-    "mass": 125.0,
+    "mass": 118.0,
     "friction": 0.5
   },
   {
@@ -116,13 +116,13 @@
   },
   {
     "block": "minecraft:dried_kelp_block",
-    "mass": 100.0,
+    "mass": 40.0,
     "friction": 0.6,
     "elasticity": 0.3
   },
   {
     "block": "minecraft:honeycomb_block",
-    "mass": 150.0,
+    "mass": 90.0,
     "friction": 0.8
   },
   {

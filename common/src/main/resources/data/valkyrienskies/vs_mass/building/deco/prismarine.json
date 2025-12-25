@@ -6,17 +6,17 @@
   },
   {
     "block": "minecraft:prismarine",
-    "mass": 300.0,
+    "mass": 200.0,
     "friction": 0.8
   },
   {
     "block": "minecraft:prismarine_stairs",
-    "mass": 225.0,
+    "mass": 150.0,
     "friction": 0.8
   },
   {
     "block": "minecraft:prismarine_slab",
-    "mass": 150.0,
+    "mass": 100.0,
     "friction": 0.8
   },
   {

@@ -125,7 +125,12 @@
   },
   {
     "block": "minecraft:pumpkin",
-    "mass": 100.0,
+    "mass": 80.0,
+    "friction": 0.3
+  },
+  {
+    "block": "minecraft:carved_pumpkin",
+    "mass": 40.0,
     "friction": 0.3
   },
   {

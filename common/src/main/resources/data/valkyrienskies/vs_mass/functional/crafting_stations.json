@@ -34,6 +34,11 @@
     "mass": 40.0
   },
   {
+    "block": "minecraft:furnace",
+    "mass": 280.0,
+    "friction": 0.5
+  },
+  {
     "block": "minecraft:smoker",
     "mass": 280.0,
     "friction": 0.5

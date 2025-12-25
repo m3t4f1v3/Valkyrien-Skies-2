@@ -19,7 +19,7 @@
   },
   {
     "block": "minecraft:lever",
-    "mass": 5.0
+    "mass": 1.0
   },
   {
     "block": "minecraft:tripwire_hook",

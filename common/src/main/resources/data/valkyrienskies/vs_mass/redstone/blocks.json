@@ -1,7 +1,7 @@
 [
   {
     "block": "minecraft:target",
-    "mass": 100.0,
+    "mass": 20.0,
     "elasticity": 0.3
   },
   {
@@ -18,7 +18,7 @@
   },
   {
     "block": "minecraft:lectern",
-    "mass": 150.0
+    "mass": 15.0
   },
   {
     "block": "minecraft:daylight_detector",
@@ -83,22 +83,12 @@
   },
   {
     "block": "minecraft:barrel",
-    "mass": 125.0,
+    "mass": 40.0,
     "friction": 0.4
   },
   {
-    "block": "minecraft:chiseled_bookshelf",
-    "mass": 150.0,
-    "friction": 0.5
-  },
-  {
-    "block": "minecraft:furnace",
-    "mass": 280.0,
-    "friction": 0.5
-  },
-  {
     "block": "minecraft:trapped_chest",
-    "mass": 150.0
+    "mass": 105.0
   },
   {
     "block": "minecraft:jukebox",
@@ -117,7 +107,7 @@
   },
   {
     "block": "minecraft:composter",
-    "mass": 70.0,
+    "mass": 35.0,
     "friction": 0.5
   },
   {
@@ -132,22 +122,22 @@
   },
   {
     "block": "minecraft:rail",
-    "mass": 100.0,
+    "mass": 35.0,
     "friction": 0.7
   },
   {
     "block": "minecraft:powered_rail",
-    "mass": 150.0,
+    "mass": 80.0,
     "friction": 0.7
   },
   {
     "block": "minecraft:detector_rail",
-    "mass": 100.0,
+    "mass": 40.0,
     "friction": 0.7
   },
   {
     "block": "minecraft:activator_rail",
-    "mass": 100.0,
+    "mass": 35.0,
     "friction": 0.7
   },
   {
@@ -156,7 +146,7 @@
   },
   {
     "block": "minecraft:redstone_lamp",
-    "mass": 150.0,
+    "mass": 125.0,
     "friction": 0.2
   },
   {

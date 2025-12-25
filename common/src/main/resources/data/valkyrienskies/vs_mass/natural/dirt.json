@@ -16,7 +16,7 @@
   },
   {
     "block": "minecraft:dirt_path",
-    "mass": 100.0,
+    "mass": 115.0,
     "friction": 0.5
   },
   {
@@ -31,7 +31,7 @@
   },
   {
     "block": "minecraft:rooted_dirt",
-    "mass": 110.0,
+    "mass": 120.0,
     "friction": 0.7
   },
   {
