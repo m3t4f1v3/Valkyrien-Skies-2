@@ -32,12 +32,7 @@ public abstract class MixinLevelChunk {
         String dimensionId = ValkyrienSkies.getDimensionId(this.level);
         if (blockEntity instanceof BlockEntityPhysicsListener listener) {
             listener.setDimension(dimensionId);
-            if (blockEntity.isRemoved()) {
-                ValkyrienSkiesMod.INSTANCE.removeBlockEntityPhysTicker(blockEntity.getBlockPos(), dimensionId);
-                return;
-            }
             ValkyrienSkiesMod.INSTANCE.addBlockEntityPhysTicker(dimensionId, blockEntity.getBlockPos(), listener);
-
         } else {
             ValkyrienSkiesMod.INSTANCE.removeBlockEntityPhysTicker(blockEntity.getBlockPos(), dimensionId);
         }
@@ -55,14 +50,7 @@ public abstract class MixinLevelChunk {
 
     @Inject(method = "removeBlockEntity", at = @At("TAIL"))
     private void onRemoveBlockEntityTickerHead(BlockPos blockPos, CallbackInfo ci) {
-        if (!loaded) {
-            return;
-        }
         String dimensionId = ValkyrienSkies.getDimensionId(this.level);
-        BlockEntity be = level.getBlockEntity(blockPos);
-        if (be instanceof BlockEntityPhysicsListener && !be.isRemoved()) {
-            return;
-        }
         ValkyrienSkiesMod.INSTANCE.removeBlockEntityPhysTicker(blockPos, dimensionId);
     }
 }
