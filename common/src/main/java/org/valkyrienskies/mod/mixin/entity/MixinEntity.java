@@ -218,8 +218,8 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider 
     private void onShouldRender(double d, double e, double f, CallbackInfoReturnable<Boolean> cir) {
         if (this.draggingInformation.isEntityBeingDraggedByAShip() && this.level.isClientSide) {
             final Ship ship = VSGameUtilsKt.getShipObjectWorld(this.level).getAllShips().getById(this.draggingInformation.getLastShipStoodOn());
-            if (ship != null && ship instanceof final ClientShip clientShip) {
-                final ShipTransform shipTransform = clientShip.getRenderTransform();
+            if (ship != null) {
+                final ShipTransform shipTransform = ship instanceof final ClientShip clientShip ? clientShip.getRenderTransform() : ship.getTransform();
                 if (this.draggingInformation.getRelativePositionOnShip() != null) {
                     Vector3dc redir = shipTransform.getShipToWorld().transformPosition(this.draggingInformation.getRelativePositionOnShip(), new Vector3d());
                     double distX = redir.x() - d;
