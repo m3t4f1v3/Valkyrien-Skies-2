@@ -25,14 +25,9 @@ import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.Shapes;
 import org.apache.commons.lang3.tuple.Pair;
-import org.joml.Intersectionf;
-import org.joml.Matrix4d;
-import org.joml.Vector2f;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
 import org.joml.primitives.AABBd;
-import org.joml.primitives.AABBi;
-import org.joml.primitives.AABBic;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -48,7 +43,6 @@ import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.entity.handling.DefaultShipyardEntityHandler;
 import org.valkyrienskies.mod.common.entity.handling.VSEntityManager;
 import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
-import org.valkyrienskies.mod.common.world.RaycastUtilsKt;
 import org.valkyrienskies.mod.compat.create.AdvancedAirCurrentSegment;
 import org.valkyrienskies.mod.compat.create.AirFlowClipContext;
 import org.valkyrienskies.mod.mixinducks.mod_compat.create.IExtendedAirCurrentSource;
@@ -81,6 +75,8 @@ public abstract class MixinAirCurrent {
 
     @Unique
     private double shipScale = 1.0;
+    @Unique
+    private FanProcessingType initialProcessingType = null;
     @Unique
     private List<AdvancedAirCurrentSegment> segments = new ArrayList<>();
 
@@ -177,6 +173,11 @@ public abstract class MixinAirCurrent {
         }
     }
 
+    @Inject(method = "rebuild", at = @At(value = "INVOKE", target = "Lcom/simibubi/create/content/kinetics/fan/AirCurrent;getLimit()I"), remap = false)
+    private void stealInitialType(CallbackInfo ci, @Local(name = "type") FanProcessingType type) {
+        initialProcessingType = type;
+    }
+
     /**
      * MIT License
      * Copyright (c) The Create Team / The Creators of Create
@@ -204,7 +205,7 @@ public abstract class MixinAirCurrent {
         final BlockPos start = this.source.getAirCurrentPos();
         final Vec3 startCenter = start.getCenter();
         AdvancedAirCurrentSegment currentSegment = null;
-        FanProcessingType type = null;
+        FanProcessingType type = initialProcessingType; // do not assume this to be null, might be modified by another mixin ;)
 
         final int limit = this.getLimit();
         // Note: Weird create behaviour that makes pulling fan process depot right under a processor
