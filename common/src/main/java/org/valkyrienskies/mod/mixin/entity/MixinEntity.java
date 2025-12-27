@@ -5,7 +5,6 @@ import static org.valkyrienskies.mod.common.util.VectorConversionsMCKt.toJOML;
 import net.minecraft.CrashReport;
 import net.minecraft.CrashReportCategory;
 import net.minecraft.ReportedException;
-import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
@@ -218,9 +217,9 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider 
     @Inject(method = "shouldRender", at = @At("HEAD"), cancellable = true)
     private void onShouldRender(double d, double e, double f, CallbackInfoReturnable<Boolean> cir) {
         if (this.draggingInformation.isEntityBeingDraggedByAShip() && this.level.isClientSide) {
-            final ClientShip ship = VSGameUtilsKt.getShipObjectWorld((ClientLevel) this.level).getAllShips().getById(this.draggingInformation.getLastShipStoodOn());
-            if (ship != null) {
-                final ShipTransform shipTransform = ship.getRenderTransform();
+            final Ship ship = VSGameUtilsKt.getShipObjectWorld(this.level).getAllShips().getById(this.draggingInformation.getLastShipStoodOn());
+            if (ship != null && ship instanceof final ClientShip clientShip) {
+                final ShipTransform shipTransform = clientShip.getRenderTransform();
                 if (this.draggingInformation.getRelativePositionOnShip() != null) {
                     Vector3dc redir = shipTransform.getShipToWorld().transformPosition(this.draggingInformation.getRelativePositionOnShip(), new Vector3d());
                     double distX = redir.x() - d;
