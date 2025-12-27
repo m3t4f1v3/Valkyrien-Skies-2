@@ -36,7 +36,8 @@
     "compat.oc2r.MixinComputerRenderer",
     "compat.oc2r.MixinMonitorRenderer",
     "compat.oc2r.MixinProjectorDepthRenderer",
-    "compat.sodium.MixinSodiumWorldRenderer"
+    "compat.sodium.MixinSodiumWorldRenderer",
+    "compat.emf.MixinEMFAnimationEntityContext"
   ],
   "injectors": {
     "defaultRequire": 1
