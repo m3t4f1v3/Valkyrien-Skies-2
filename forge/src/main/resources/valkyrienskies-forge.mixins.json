@@ -12,7 +12,6 @@
     "compat.create.client.MixinSuperGlueSelectionHandler67",
     "compat.create_stuff_additions.MixinGrapplinWhiskChainsLineProcedure",
     "compat.create_stuff_additions.MixinGrapplinWhiskItemInHandTickProcedure",
-    "compat.create_stuff_additions.MixinGrapplinWhiskRightclickedProcedure",
     "compat.immersivengineering.MixinBlockEntityInventory",
     "compat.integrateddynamics.MixinVoxelShapeComponents",
     "compat.mekanism.MixinRadiationManager",
