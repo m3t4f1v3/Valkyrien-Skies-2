@@ -1,112 +1,112 @@
 [
   {
     "block": "minecraft:coal_ore",
-    "mass": 245.0,
+    "mass": 2450.0,
     "friction": 0.6
   },
   {
     "block": "minecraft:deepslate_coal_ore",
-    "mass": 271.5,
+    "mass": 2715.0,
     "friction": 0.5
   },
   {
     "block": "minecraft:iron_ore",
-    "mass": 315.0,
+    "mass": 3150.0,
     "friction": 0.6
   },
   {
     "block": "minecraft:deepslate_iron_ore",
-    "mass": 345.0,
+    "mass": 3450.0,
     "friction": 0.5
   },
   {
     "block": "minecraft:copper_ore",
-    "mass": 325.0,
+    "mass": 3250.0,
     "friction": 0.6
   },
   {
     "block": "minecraft:deepslate_copper_ore",
-    "mass": 355.0,
+    "mass": 3550.0,
     "friction": 0.5
   },
   {
     "block": "minecraft:gold_ore",
-    "mass": 445.0,
+    "mass": 4450.0,
     "friction": 0.6
   },
   {
     "block": "minecraft:deepslate_gold_ore",
-    "mass": 470.0,
+    "mass": 4700.0,
     "friction": 0.5
   },
   {
     "block": "minecraft:redstone_ore",
-    "mass": 195.0,
+    "mass": 1950.0,
     "friction": 0.6
   },
   {
     "block": "minecraft:deepslate_redstone_ore",
-    "mass": 222.5,
+    "mass": 2225.0,
     "friction": 0.5
   },
   {
     "block": "minecraft:emerald_ore",
-    "mass": 260.0,
+    "mass": 2600.0,
     "friction": 0.6
   },
   {
     "block": "minecraft:deepslate_emerald_ore",
-    "mass": 285.5,
+    "mass": 2855.0,
     "friction": 0.5
   },
   {
     "block": "minecraft:lapis_ore",
-    "mass": 270.0,
+    "mass": 2700.0,
     "friction": 0.6
   },
   {
     "block": "minecraft:deepslate_lapis_ore",
-    "mass": 295.0,
+    "mass": 2950.0,
     "friction": 0.5
   },
   {
     "block": "minecraft:diamond_ore",
-    "mass": 270.0,
+    "mass": 2700.0,
     "friction": 0.6
   },
   {
     "block": "minecraft:deepslate_diamond_ore",
-    "mass": 295.0,
+    "mass": 2950.0,
     "friction": 0.5
   },
   {
     "block": "minecraft:nether_gold_ore",
-    "mass": 225.0,
+    "mass": 2250.0,
     "friction": 0.4
   },
   {
     "block": "minecraft:nether_quartz_ore",
-    "mass": 150.0,
+    "mass": 1500.0,
     "friction": 0.4
   },
   {
     "block": "minecraft:ancient_debris",
-    "mass": 315.0,
+    "mass": 3150.0,
     "friction": 0.8
   },
   {
     "block": "minecraft:raw_iron_block",
-    "mass": 785.0,
+    "mass": 7850.0,
     "friction": 0.8
   },
   {
     "block": "minecraft:raw_copper_block",
-    "mass": 900.0,
+    "mass": 9000.0,
     "friction": 0.8
   },
   {
     "block": "minecraft:raw_gold_block",
-    "mass": 1930.0,
+    "mass": 19300.0,
     "friction": 0.8
   }
 ]

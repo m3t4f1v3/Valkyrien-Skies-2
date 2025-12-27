@@ -1,42 +1,42 @@
 [
   {
     "block": "minecraft:bamboo_block",
-    "mass": 80.0,
+    "mass": 800.0,
     "friction": 0.6
   },
   {
     "block": "minecraft:stripped_bamboo_block",
-    "mass": 80.0,
+    "mass": 800.0,
     "friction": 0.4
   },
   {
     "block": "minecraft:bamboo_planks",
-    "mass": 40.0,
+    "mass": 400.0,
     "friction": 0.5
   },
   {
     "block": "minecraft:bamboo_mosaic",
-    "mass": 40.0,
+    "mass": 400.0,
     "friction": 0.5
   },
   {
     "block": "minecraft:bamboo_mosaic_slab",
-    "mass": 20.0,
+    "mass": 200.0,
     "friction": 0.5
   },
   {
     "block": "minecraft:bamboo_slab",
-    "mass": 20.0,
+    "mass": 200.0,
     "friction": 0.5
   },
   {
     "block": "minecraft:bamboo_stairs",
-    "mass": 30.0,
+    "mass": 300.0,
     "friction": 0.5
   },
   {
     "block": "minecraft:bamboo_mosaic_stairs",
-    "mass": 30.0,
+    "mass": 300.0,
     "friction": 0.5
   }
 ]
