@@ -6,8 +6,10 @@ import net.minecraft.CrashReport;
 import net.minecraft.CrashReportCategory;
 import net.minecraft.ReportedException;
 import net.minecraft.core.BlockPos;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
@@ -32,6 +34,7 @@ import org.valkyrienskies.core.api.ships.Ship;
 import org.valkyrienskies.core.api.ships.properties.ShipTransform;
 import org.valkyrienskies.mod.common.entity.ShipMountedToData;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
+import org.valkyrienskies.mod.common.util.EntityDragger;
 import org.valkyrienskies.mod.common.util.EntityDraggingInformation;
 import org.valkyrienskies.mod.common.util.IEntityDraggingInformationProvider;
 import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
@@ -105,6 +108,29 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider 
     private void preGetEyePosition(final float partialTicks, final CallbackInfoReturnable<Vec3> cir) {
         final ShipMountedToData shipMountedToData = VSGameUtilsKt.getShipMountedToData(Entity.class.cast(this), partialTicks);
         if (shipMountedToData == null) {
+            //return;
+            if (Entity.class.cast(this) instanceof final Player player && player instanceof final IEntityDraggingInformationProvider dragProvider) {
+                if (dragProvider.getDraggingInformation().isEntityBeingDraggedByAShip() && dragProvider.getDraggingInformation().getServerRelativePlayerYaw() != null) {
+                    final Ship shipDraggedBy = VSGameUtilsKt.getAllShips(level).getById(dragProvider.getDraggingInformation().getLastShipStoodOn());
+                    if (shipDraggedBy != null) {
+                        final Vec3 localEyePosition = EntityDragger.INSTANCE.serversideEyePosition(player);
+                        if (!VSGameUtilsKt.isBlockInShipyard(level, localEyePosition)) {
+                            return;
+                        }
+
+                        final ShipTransform shipTransform;
+                        if (shipDraggedBy instanceof ClientShip) {
+                            shipTransform = ((ClientShip) shipDraggedBy).getRenderTransform();
+                        } else {
+                            shipTransform = shipDraggedBy.getShipTransform();
+                        }
+                        final Vec3 worldEyePosition = VectorConversionsMCKt.toMinecraft(
+                            shipTransform.getShipToWorld().transformPosition(VectorConversionsMCKt.toJOML(localEyePosition))
+                        );
+                        cir.setReturnValue(worldEyePosition);
+                    }
+                }
+            }
             return;
         }
         final LoadedShip shipMountedTo = shipMountedToData.getShipMountedTo();
@@ -113,11 +139,11 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider 
         if (shipMountedTo instanceof ClientShip) {
             shipTransform = ((ClientShip) shipMountedTo).getRenderTransform();
         } else {
-            shipTransform = shipMountedTo.getShipTransform();
+            shipTransform = shipMountedTo.getTransform();
         }
-        final Vector3dc basePos = shipTransform.getShipToWorldMatrix()
+        final Vector3dc basePos = shipTransform.getShipToWorld()
             .transformPosition(shipMountedToData.getMountPosInShip(), new Vector3d());
-        final Vector3dc eyeRelativePos = shipTransform.getShipCoordinatesToWorldCoordinatesRotation().transform(
+        final Vector3dc eyeRelativePos = shipTransform.getShipToWorldRotation().transform(
             new Vector3d(0.0, getEyeHeight(), 0.0)
         );
         final Vec3 newEyePos = VectorConversionsMCKt.toMinecraft(basePos.add(eyeRelativePos, new Vector3d()));
@@ -158,36 +184,35 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider 
      * Additionally, this has to have dragging information included or it breaks. This is because of reasons that I literally
      * do not know or understand, but minecraft's rendering pipeline is like that.
      */
-    /*
     @Inject(method = "calculateViewVector", at = @At("HEAD"), cancellable = true)
     private void preCalculateViewVector(final float xRot, final float yRot, final CallbackInfoReturnable<Vec3> cir) {
         final LoadedShip shipMountedTo = VSGameUtilsKt.getShipMountedTo(Entity.class.cast(this));
         if (shipMountedTo == null) {
-            if (Entity.class.cast(this) instanceof final ServerPlayer sPlayer && sPlayer instanceof final IEntityDraggingInformationProvider dragProvider) {
-                if (dragProvider.getDraggingInformation().isEntityBeingDraggedByAShip() && dragProvider.getDraggingInformation().getServerRelativePlayerYaw() != null) {
-                    final Ship shipDraggedBy = VSGameUtilsKt.getAllShips(level).getById(dragProvider.getDraggingInformation().getLastShipStoodOn());
-                    if (shipDraggedBy != null) {
-                        final float realYRot = (float) EntityDragger.INSTANCE.serversideWorldEyeRotationOrDefault(sPlayer, shipDraggedBy, yRot);
-                        final float f = xRot * (float) (Math.PI / 180.0);
-                        final float g = -realYRot * (float) (Math.PI / 180.0);
-                        final float h = Mth.cos(g);
-                        final float i = Mth.sin(g);
-                        final float j = Mth.cos(f);
-                        final float k = Mth.sin(f);
-                        final Vector3dc originalViewVector = new Vector3d(i * j, -k, h * j);
-
-                        final ShipTransform shipTransform;
-                        if (shipDraggedBy instanceof ClientShip) {
-                            shipTransform = ((ClientShip) shipDraggedBy).getRenderTransform();
-                        } else {
-                            shipTransform = shipDraggedBy.getShipTransform();
-                        }
-                        final Vec3 newViewVector = VectorConversionsMCKt.toMinecraft(
-                            shipTransform.getShipCoordinatesToWorldCoordinatesRotation().transform(originalViewVector, new Vector3d()));
-                        cir.setReturnValue(newViewVector);
-                    }
-                }
-            }
+//            if (Entity.class.cast(this) instanceof final ServerPlayer sPlayer && sPlayer instanceof final IEntityDraggingInformationProvider dragProvider) {
+//                if (dragProvider.getDraggingInformation().isEntityBeingDraggedByAShip() && dragProvider.getDraggingInformation().getServerRelativePlayerYaw() != null) {
+//                    final Ship shipDraggedBy = VSGameUtilsKt.getAllShips(level).getById(dragProvider.getDraggingInformation().getLastShipStoodOn());
+//                    if (shipDraggedBy != null) {
+//                        final float realYRot = (float) EntityDragger.INSTANCE.serversideWorldEyeRotationOrDefault(sPlayer, shipDraggedBy, yRot);
+//                        final float f = xRot * (float) (Math.PI / 180.0);
+//                        final float g = -realYRot * (float) (Math.PI / 180.0);
+//                        final float h = Mth.cos(g);
+//                        final float i = Mth.sin(g);
+//                        final float j = Mth.cos(f);
+//                        final float k = Mth.sin(f);
+//                        final Vector3dc originalViewVector = new Vector3d(i * j, -k, h * j);
+//
+//                        final ShipTransform shipTransform;
+//                        if (shipDraggedBy instanceof ClientShip) {
+//                            shipTransform = ((ClientShip) shipDraggedBy).getRenderTransform();
+//                        } else {
+//                            shipTransform = shipDraggedBy.getShipTransform();
+//                        }
+//                        final Vec3 newViewVector = VectorConversionsMCKt.toMinecraft(
+//                            shipTransform.getShipCoordinatesToWorldCoordinatesRotation().transform(originalViewVector, new Vector3d()));
+//                        cir.setReturnValue(newViewVector);
+//                    }
+//                }
+//            }
             return;
         }
         final float f = xRot * (float) (Math.PI / 180.0);
@@ -202,13 +227,12 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider 
         if (shipMountedTo instanceof ClientShip) {
             shipTransform = ((ClientShip) shipMountedTo).getRenderTransform();
         } else {
-            shipTransform = shipMountedTo.getShipTransform();
+            shipTransform = shipMountedTo.getTransform();
         }
         final Vec3 newViewVector = VectorConversionsMCKt.toMinecraft(
-            shipTransform.getShipCoordinatesToWorldCoordinatesRotation().transform(originalViewVector, new Vector3d()));
+            shipTransform.getShipToWorldRotation().transform(originalViewVector, new Vector3d()));
         cir.setReturnValue(newViewVector);
     }
-    */
 
     /**
      * @reason Without this and that other mixin, things don't render correctly at high speeds.

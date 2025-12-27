@@ -1,3 +1,29 @@
+## VS 2.4.1
+First major patch of 2.4.
+
+#### Changes:
+- Added issues link to fabric.mod.json (Credit: millenIumAMbiguity)
+- Added comment explaining why forge malds about MixinVibrationSystem (Credit: zaafonin)
+
+#### Bugfixes:
+- Fixed an issue where BlockEntityPhysicsListeners wouldn't reload without a blockstate update. (Credit: theplasticpotato)
+- Fixed a crash on dedicated servers due to a ClientLevel reference in a mixin. (Credit: zaafonin & m3t4f1v3)
+- Fixed polish translations (Credit: KAW0)
+- Fixed Create: Stuff & Additions mixins (Credit: zaafonin)
+- Fixed EMF/ETF compatibility (Credit: EnderBoy9217)
+- Fixed a long standing issue where block mass was calculated at corner rather than block center (Credit: StewStrong) - MAY BREAK THINGS!!
+- Fixed joints applying large forces when created (Credit: StewStrong)
+- Fixed issue with fan airstreams on ships where the first fan processing type was incorrectly assumed to be null (Credit: Zaafonin)
+- Fixed sneaking on ships (Credit: theplasticpotato)
+- Fixed placing and breaking blocks on fast moving ships (mostly, still fails in extreme speeds due to zaafonin's pillar fix PR)  (Credit: theplasticpotato)
+- Fixed interactions with blocks on ships at high speed  (Credit: theplasticpotato)
+- Fixed using valueboxes at high speed  (Credit: theplasticpotato)
+- Fixed incorrect eye position and rotation on ships  (Credit: theplasticpotato)
+- Fixed incorrect rotation when seated on a ship  (Credit: theplasticpotato)
+- Fixed boats or other vehicles causing crashes when riding them onto a ship  (Credit: theplasticpotato)
+- Added a missing null check to getLastShipStoodOn  (Credit: theplasticpotato)
+- Fixed entity dragging becoming stuck when jumping onto a non full block on ships (Credit: theplasticpotato)
+
 ## VS 2.4
 
 Massive backend, api, and QOL update. 
