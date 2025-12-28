@@ -42,7 +42,7 @@ object ShipAssembler {
             throw IllegalArgumentException("No blocks to assemble.")
         }
 
-        val existingShip = sLevel.getLoadedShipManagingPos(blocks.find { !sLevel.getBlockState(it).isAir } ?: throw IllegalArgumentException())
+        val existingShip = sLevel.getLoadedShipManagingPos(blocks.find { !sLevel.getBlockState(it).isAir } ?: throw IllegalArgumentException("Existing ship"))
 
         var structureCornerMin: BlockPos? = null
         var structureCornerMax: BlockPos? = null

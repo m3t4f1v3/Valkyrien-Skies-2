@@ -14,6 +14,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.valkyrienskies.mod.api.BlockEntityPhysicsListener;
 import org.valkyrienskies.mod.api.ValkyrienSkies;
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod;
+import org.valkyrienskies.mod.util.PhysicsBlockEntityUtil;
 
 @Mixin(LevelChunk.class)
 public abstract class MixinLevelChunk {
@@ -32,9 +33,10 @@ public abstract class MixinLevelChunk {
         String dimensionId = ValkyrienSkies.getDimensionId(this.level);
         if (blockEntity instanceof BlockEntityPhysicsListener listener) {
             listener.setDimension(dimensionId);
-            ValkyrienSkiesMod.INSTANCE.addBlockEntityPhysTicker(dimensionId, blockEntity.getBlockPos(), listener);
+            PhysicsBlockEntityUtil.onLoad(listener, blockEntity.getBlockPos(), this.level, "[ADDED] updateBlockEntityTicker");
         } else {
-            ValkyrienSkiesMod.INSTANCE.removeBlockEntityPhysTicker(blockEntity.getBlockPos(), dimensionId);
+            //ValkyrienSkiesMod.INSTANCE.removeBlockEntityPhysTicker(blockEntity.getBlockPos(), dimensionId);
+            PhysicsBlockEntityUtil.onRemove(blockEntity.getBlockPos(), this.level, "[REMOVED] updateBlockEntityTicker");
         }
     }
 
@@ -42,15 +44,13 @@ public abstract class MixinLevelChunk {
     private void onClearAllBlockEntitiesHead(CallbackInfo ci) {
         getBlockEntities().forEach((blockPos, blockEntity) -> {
             if (blockEntity instanceof BlockEntityPhysicsListener listener) {
-                String dimensionId = ValkyrienSkies.getDimensionId(this.level);
-                ValkyrienSkiesMod.INSTANCE.removeBlockEntityPhysTicker(blockPos, dimensionId);
+                PhysicsBlockEntityUtil.onRemove(blockPos, this.level, "clearAllBlockEntities");
             }
         });
     }
 
     @Inject(method = "removeBlockEntity", at = @At("TAIL"))
     private void onRemoveBlockEntityTickerHead(BlockPos blockPos, CallbackInfo ci) {
-        String dimensionId = ValkyrienSkies.getDimensionId(this.level);
-        ValkyrienSkiesMod.INSTANCE.removeBlockEntityPhysTicker(blockPos, dimensionId);
+        PhysicsBlockEntityUtil.onRemove(blockPos, this.level, "removeBlockEntity");
     }
 }

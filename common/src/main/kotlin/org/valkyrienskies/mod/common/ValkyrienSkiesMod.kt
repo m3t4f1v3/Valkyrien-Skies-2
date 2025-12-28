@@ -27,6 +27,7 @@ import org.valkyrienskies.mod.api.BlockEntityPhysicsListener
 import org.valkyrienskies.mod.api.SeatedControllingPlayer
 import org.valkyrienskies.mod.api.getShipManagingBlock
 import org.valkyrienskies.mod.api_impl.events.VsApiImpl
+import org.valkyrienskies.mod.common.blockentity.TestAntigravBlockEntity
 import org.valkyrienskies.mod.common.blockentity.TestHingeBlockEntity
 import org.valkyrienskies.mod.common.blockentity.TestThrusterBlockEntity
 import org.valkyrienskies.mod.common.entity.ShipMountingEntity
@@ -53,6 +54,7 @@ object ValkyrienSkiesMod {
     lateinit var TEST_WING: Block
     lateinit var TEST_SPHERE: Block
     lateinit var TEST_THRUSTER: Block
+    lateinit var TEST_ANTIGRAV: Block
     lateinit var CONNECTION_CHECKER_ITEM: Item
     lateinit var SHIP_CREATOR_ITEM: Item
     lateinit var SHIP_ASSEMBLER_ITEM: Item
@@ -63,6 +65,7 @@ object ValkyrienSkiesMod {
     lateinit var PHYSICS_ENTITY_TYPE: EntityType<VSPhysicsEntity>
     lateinit var TEST_HINGE_BLOCK_ENTITY_TYPE: BlockEntityType<TestHingeBlockEntity>
     lateinit var TEST_THRUSTER_BLOCK_ENTITY_TYPE: BlockEntityType<TestThrusterBlockEntity>
+    lateinit var TEST_ANTIGRAV_BLOCK_ENTITY_TYPE: BlockEntityType<TestAntigravBlockEntity>
 
     private val dimensionalGTPAs: HashMap<DimensionId, GameToPhysicsAdapter> = HashMap()
 

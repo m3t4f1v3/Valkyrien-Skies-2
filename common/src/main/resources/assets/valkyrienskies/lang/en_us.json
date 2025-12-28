@@ -12,6 +12,7 @@
   "block.valkyrienskies.test_wing": "Debug Wing",
   "block.valkyrienskies.test_sphere": "Debug Sphere",
   "block.valkyrienskies.test_thruster": "Debug Thruster",
+  "block.valkyrienskies.test_antigrav": "Debug Levitator",
   "item.valkyrienskies.ship_creator": "Ship Creator",
   "item.valkyrienskies.ship_creator_smaller": "Mini Ship Creator",
   "item.valkyrienskies.ship_assembler": "Ship Assembler",

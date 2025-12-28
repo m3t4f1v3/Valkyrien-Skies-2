@@ -43,16 +43,19 @@ import org.valkyrienskies.mod.common.ValkyrienSkiesMod.PHYSICS_ENTITY_CREATOR_IT
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod.SHIP_ASSEMBLER_ITEM
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod.SHIP_CREATOR_ITEM
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod.SHIP_CREATOR_ITEM_SMALLER
+import org.valkyrienskies.mod.common.ValkyrienSkiesMod.TEST_ANTIGRAV
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod.TEST_CHAIR
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod.TEST_FLAP
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod.TEST_HINGE
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod.TEST_THRUSTER
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod.TEST_WING
+import org.valkyrienskies.mod.common.block.TestAntigravBlock
 import org.valkyrienskies.mod.common.block.TestChairBlock
 import org.valkyrienskies.mod.common.block.TestFlapBlock
 import org.valkyrienskies.mod.common.block.TestHingeBlock
 import org.valkyrienskies.mod.common.block.TestThrusterBlock
 import org.valkyrienskies.mod.common.block.TestWingBlock
+import org.valkyrienskies.mod.common.blockentity.TestAntigravBlockEntity
 import org.valkyrienskies.mod.common.blockentity.TestHingeBlockEntity
 import org.valkyrienskies.mod.common.blockentity.TestThrusterBlockEntity
 import org.valkyrienskies.mod.common.command.VSCommands
@@ -105,6 +108,7 @@ class ValkyrienSkiesModFabric : ModInitializer {
         ValkyrienSkiesMod.TEST_FLAP = TestFlapBlock
         ValkyrienSkiesMod.TEST_WING = TestWingBlock
         ValkyrienSkiesMod.TEST_THRUSTER = TestThrusterBlock
+        ValkyrienSkiesMod.TEST_ANTIGRAV = TestAntigravBlock
         ValkyrienSkiesMod.CONNECTION_CHECKER_ITEM = ConnectionCheckerItem(
             Properties(),
             { 1.0 },
@@ -148,6 +152,9 @@ class ValkyrienSkiesModFabric : ModInitializer {
         ValkyrienSkiesMod.TEST_THRUSTER_BLOCK_ENTITY_TYPE =
             FabricBlockEntityTypeBuilder.create(::TestThrusterBlockEntity, ValkyrienSkiesMod.TEST_THRUSTER).build()
 
+        ValkyrienSkiesMod.TEST_ANTIGRAV_BLOCK_ENTITY_TYPE =
+            FabricBlockEntityTypeBuilder.create(::TestAntigravBlockEntity, ValkyrienSkiesMod.TEST_ANTIGRAV).build()
+
         val isClient = FabricLoader.getInstance().environmentType == EnvType.CLIENT
 
         ValkyrienSkiesMod.init()
@@ -161,6 +168,7 @@ class ValkyrienSkiesModFabric : ModInitializer {
         registerBlockAndItem("test_flap", ValkyrienSkiesMod.TEST_FLAP)
         registerBlockAndItem("test_wing", ValkyrienSkiesMod.TEST_WING)
         registerBlockAndItem("test_thruster", ValkyrienSkiesMod.TEST_THRUSTER)
+        registerBlockAndItem("test_antigrav", ValkyrienSkiesMod.TEST_ANTIGRAV)
         Registry.register(
             BuiltInRegistries.ITEM, ResourceLocation(ValkyrienSkiesMod.MOD_ID, "connection_checker"),
             ValkyrienSkiesMod.CONNECTION_CHECKER_ITEM
@@ -218,6 +226,7 @@ class ValkyrienSkiesModFabric : ModInitializer {
             event.accept(TEST_FLAP.asItem())
             event.accept(TEST_WING.asItem())
             event.accept(TEST_THRUSTER.asItem())
+            event.accept(TEST_ANTIGRAV.asItem())
             event.accept(CONNECTION_CHECKER_ITEM)
             event.accept(SHIP_CREATOR_ITEM)
             event.accept(SHIP_ASSEMBLER_ITEM)
