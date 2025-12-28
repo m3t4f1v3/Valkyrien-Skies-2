@@ -16,6 +16,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.valkyrienskies.mod.common.CompatUtil;
+import org.valkyrienskies.mod.common.VSGameUtilsKt;
 
 @Mixin(FrogportBlockEntity.class)
 public abstract class MixinFrogportBlockEntity extends PackagePortBlockEntity {
@@ -30,6 +31,9 @@ public abstract class MixinFrogportBlockEntity extends PackagePortBlockEntity {
     )
     private void cancelIfTooFar(CallbackInfo ci) {
         BlockPos targetPos = getBlockPos().offset(target != null ? target.relativePos : BlockPos.ZERO);
+        if (
+            VSGameUtilsKt.getShipManagingPos(level, worldPosition) == VSGameUtilsKt.getShipManagingPos(level, targetPos)
+        ) return;
         double dist = CompatUtil.INSTANCE.toSameSpaceAs(
             level,
             getBlockPos().getCenter(),
