@@ -289,6 +289,7 @@
     "mod_compat.create.client.MixinTrackTargetingClient",
     "mod_compat.create.client.MixinTrainRelocator",
     "mod_compat.create.client.MixinValueBox",
+    "mod_compat.create.client.MixinTickableSoundInstances",
     "mod_compat.create.client.gui.menu.MixinClipboardScreen",
     "mod_compat.etf.MixinBlockEntity",
     "mod_compat.flywheel_renderer.MixinViewArea",
