@@ -1,3 +1,18 @@
+## VS 2.4.2
+Small patch fixing some issues from 2.4.1
+
+#### Changes:
+- Minor adjustment to the function of BlockEntityPhysicsListeners (credit: theplasticpotato)
+- Added Debug Levitator for testing BEPLs (credit: theplasticpotato)
+- Rebalanced weights to be similar to how they were in 2.3 (credit: Verquinox)
+- Updated VS Logo
+
+#### Bugfixes:
+- Fixed assembly offsets (credit: blockninja124)
+- Fixed frogport issue caused by previous PR (credit: zaafonin)
+- Fixed create soundscapes on ships(?) (credit: zaafonin)
+- Fix edgecase where world target and transformed ship target are hash equal (credit: theplasticpotato)
+
 ## VS 2.4.1
 First major patch of 2.4.
 
