@@ -9,6 +9,8 @@ import org.joml.Vector3i
 import org.joml.Vector3ic
 import org.valkyrienskies.core.api.ships.ServerShip
 import org.valkyrienskies.core.api.ships.Ship
+import org.valkyrienskies.mod.api.toJOML
+import org.valkyrienskies.mod.api.toMinecraft
 import org.valkyrienskies.mod.common.BlockStateInfo.onSetBlock
 import org.valkyrienskies.mod.common.dimensionId
 import org.valkyrienskies.mod.common.getLoadedShipManagingPos
@@ -30,7 +32,9 @@ object ShipAssembler {
         return true
     }
 
-
+    /**
+     * This entire function is rather sus, and definitely needs re-doing when we do structure based assembly.
+     */
     fun assembleToShip(level: Level, blocks: List<BlockPos>, removeOriginal: Boolean, scale: Double = 1.0, shouldDisableSplitting: Boolean = false): ServerShip {
         assert(level is ServerLevel) { "Can't create ships clientside!" }
         val sLevel: ServerLevel = level as ServerLevel
@@ -59,16 +63,17 @@ object ShipAssembler {
         }
         if (!hasSolids) throw IllegalArgumentException("No solid blocks found in the structure")
         val contraptionOGPos: Vector3ic = AssemblyUtil.getMiddle(structureCornerMin!!, structureCornerMax!!)
+
         // Create new contraption at center of bounds
         val contraptionWorldPos: Vector3i = if (existingShip != null) {
-            val doubleVer = existingShip.shipToWorld.transformPosition(Vector3d(contraptionOGPos)).floor()
-            Vector3i(doubleVer.x.toInt(), doubleVer.y.toInt(), doubleVer.z.toInt())
+            val doubleVer = BlockPos.containing(existingShip.shipToWorld.transformPosition(Vector3d(contraptionOGPos)).toMinecraft())
+            Vector3i(doubleVer.x, doubleVer.y, doubleVer.z)
         } else {
             Vector3i(contraptionOGPos)
         }
         //val contraptionPosition = ContraptionPosition(Quaterniond(Vec3d(0.0, 1.0, 1.0), 0.0), contraptionWorldPos, null)
 
-        val newShip: Ship = level.server.shipObjectWorld
+        val newShip: ServerShip = level.server.shipObjectWorld
             .createNewShipAtBlock(contraptionWorldPos, false, scale, level.dimensionId)
 
         if (shouldDisableSplitting) {
@@ -76,8 +81,8 @@ object ShipAssembler {
 
         }
 
-        val contraptionShipPos = newShip.worldToShip.transformPosition(Vector3d(contraptionWorldPos.x.toDouble(),contraptionWorldPos.y.toDouble(),contraptionWorldPos.z.toDouble()))
-        val contraptionBlockPos = BlockPos(contraptionShipPos.x.toInt(),contraptionShipPos.y.toInt(),contraptionShipPos.z.toInt())
+        val contraptionShipPos = newShip.worldToShip.transformPosition(BlockPos(contraptionWorldPos.x, contraptionWorldPos.y, contraptionWorldPos.z).center.toJOML())
+        val contraptionBlockPos = BlockPos.containing(contraptionShipPos.x,contraptionShipPos.y,contraptionShipPos.z)
 
 
         // Copy blocks and check if the center block got replaced (is default a stone block)
@@ -112,16 +117,16 @@ object ShipAssembler {
             AssemblyUtil.updateBlock(level,itPos,shipPos,level.getBlockState(shipPos))
         }
 
-        val shipCenterPos = ((newShip as ServerShip).inertiaData.centerOfMassInShip)
-        val shipPos = Vector3d(contraptionOGPos)
+        // This is giga sus, but whatever
+        val shipPos = BlockPos(contraptionOGPos.x(),contraptionOGPos.y(),contraptionOGPos.z()).center.toJOML()
         if (existingShip != null) {
             sLevel.server.shipObjectWorld
                 .teleportShip(
-                    newShip, vsCore.newShipTeleportData(existingShip.shipToWorld.transformPosition(shipPos, Vector3d()), existingShip.transform.shipToWorldRotation, existingShip.velocity, existingShip.omega, existingShip.chunkClaimDimension, newScale = existingShip.transform.shipToWorldScaling.x(), newPosInShip = shipCenterPos))
+                    newShip, vsCore.newShipTeleportData(existingShip.shipToWorld.transformPosition(shipPos, Vector3d()), existingShip.transform.shipToWorldRotation, existingShip.velocity, existingShip.omega, existingShip.chunkClaimDimension, newScale = existingShip.transform.shipToWorldScaling.x()))
 
         } else {
             sLevel.server.shipObjectWorld
-                .teleportShip(newShip, vsCore.newShipTeleportData(newPos = shipPos, newPosInShip = shipCenterPos))
+                .teleportShip(newShip, vsCore.newShipTeleportData(newPos = shipPos))
         }
         if (shouldDisableSplitting) {
             level.shipObjectWorld.loadedShips.getById(newShip.id)?.getAttachment(SplittingDisablerAttachment::class.java)?.enableSplitting()
