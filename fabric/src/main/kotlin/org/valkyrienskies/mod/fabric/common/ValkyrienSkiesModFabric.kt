@@ -213,6 +213,10 @@ class ValkyrienSkiesModFabric : ModInitializer {
             BuiltInRegistries.BLOCK_ENTITY_TYPE, ResourceLocation(ValkyrienSkiesMod.MOD_ID, "test_thruster_block_entity"),
             ValkyrienSkiesMod.TEST_THRUSTER_BLOCK_ENTITY_TYPE
         )
+        Registry.register(
+            BuiltInRegistries.BLOCK_ENTITY_TYPE, ResourceLocation(ValkyrienSkiesMod.MOD_ID, "test_antigrav_block_entity"),
+            ValkyrienSkiesMod.TEST_ANTIGRAV_BLOCK_ENTITY_TYPE
+        )
 
         // Registry.register(
         //     BuiltInRegistries.CREATIVE_MODE_TAB,
