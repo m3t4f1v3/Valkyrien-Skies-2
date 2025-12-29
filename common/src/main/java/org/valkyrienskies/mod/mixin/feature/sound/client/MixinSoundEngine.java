@@ -56,6 +56,9 @@ public abstract class MixinSoundEngine {
         }
 
         final ChannelAccess.ChannelHandle handle = (ChannelAccess.ChannelHandle) instance.get(soundInstance);
+        if (handle == null) {
+            return get.call(instance, obj);
+        }
         final float volume = calculateVolume(soundInstance);
         final float pitch = calculatePitch(soundInstance);
         final Vec3 vec3 = new Vec3(soundInstance.getX(), soundInstance.getY(), soundInstance.getZ());
