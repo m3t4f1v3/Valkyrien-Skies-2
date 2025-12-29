@@ -15,16 +15,22 @@ import org.joml.Vector3d;
 import org.joml.Vector3dc;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
-import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.valkyrienskies.core.api.ships.ClientShip;
 import org.valkyrienskies.mod.client.audio.VelocityTickableSoundInstance;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.util.EntityDraggingInformation;
 import org.valkyrienskies.mod.common.util.IEntityDraggingInformationProvider;
-import org.valkyrienskies.mod.mixinducks.client.player.LocalPlayerDuck;
+import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
 import org.valkyrienskies.mod.mixinducks.com.mojang.blaze3d.audio.HasOpenALVelocity;
 
+/**
+ * Quick explanation for whoever wishes to take on the task of fixing this + the other sound mixins for audio doppler:
+ *
+ * This current implementation works, with a catch- for some reason I cannot discern, audio pitch and volume increases depending on your
+ * positive axis position relative to the ship. If you can fix this, please do, and uncomment the setVelocity methods when you do <3
+ * - Potato
+ */
 @Mixin(SoundEngine.class)
 public abstract class MixinSoundEngine {
 
@@ -55,14 +61,13 @@ public abstract class MixinSoundEngine {
         final Vec3 vec3 = new Vec3(soundInstance.getX(), soundInstance.getY(), soundInstance.getZ());
         final Vector3dc soundVelocity = soundInstance.getVelocity();
         final LocalPlayer player = Minecraft.getInstance().player;
-        final Vector3dc playerVelocity = player == null ? new Vector3d() : ((LocalPlayerDuck) player).vs$getVelocity();
-        final Vector3dc velocity = soundVelocity.sub(playerVelocity, new Vector3d()).mul(20);
+        final Vector3dc velocity = soundInstance.getVelocity();
 
         handle.execute(channel -> {
             channel.setVolume(volume);
             channel.setPitch(pitch);
             channel.setSelfPosition(vec3);
-            ((HasOpenALVelocity) channel).setVelocity(velocity);
+            // UNCOMMENT WHEN FIXED //((HasOpenALVelocity) channel).setVelocity(velocity);
         });
         return null;
     }
@@ -84,12 +89,18 @@ public abstract class MixinSoundEngine {
         if (level != null && player != null) {
             final ClientShip mounted = (ClientShip) VSGameUtilsKt.getShipMountedTo(player);
             if (mounted != null) {
-                ((HasOpenALVelocity) listener).setVelocity(mounted.getVelocity());
+                // UNCOMMENT WHEN FIXED //((HasOpenALVelocity) listener).setVelocity(mounted.getVelocity());
             } else {
                 final EntityDraggingInformation dragInfo = ((IEntityDraggingInformationProvider) player).getDraggingInformation();
-                if (dragInfo.isEntityBeingDraggedByAShip()) {
-                    final Vector3dc playerVel = dragInfo.getAddedMovementLastTick();
-                    ((HasOpenALVelocity) listener).setVelocity(playerVel);
+                if (dragInfo.isEntityBeingDraggedByAShip() && dragInfo.getLastShipStoodOn() != null) {
+                    final ClientShip draggingShip = VSGameUtilsKt.getShipObjectWorld(level).getLoadedShips().getById(
+                        dragInfo.getLastShipStoodOn());
+                    if (draggingShip != null) {
+                        final Vector3dc playerPosInShip = (VectorConversionsMCKt.toJOML(player.position())).sub(draggingShip.getRenderTransform().getPositionInWorld());
+                        final Vector3dc velAtPlayerPos = draggingShip.getAngularVelocity().cross(playerPosInShip, new Vector3d()).add(draggingShip.getVelocity());
+                        // UNCOMMENT WHEN FIXED //((HasOpenALVelocity) listener).setVelocity(velAtPlayerPos);
+                    }
+
                 }
             }
         }
