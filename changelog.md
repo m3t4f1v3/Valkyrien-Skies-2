@@ -1,3 +1,19 @@
+## VS 2.4.3 && VS 2.4.4
+More bugfixing! Yippee!!!
+
+#### Changes: 
+- Added `getJoint` methods to the GameToPhysicsAdapter
+- Ships experiencing invalid forces now freeze rather than crashing
+- Rebalanced weights to be closer to their 2.3 counterparts
+
+#### Bugfixes:
+- Disabled broken doppler effect
+- Fixed a null edgecase crash with sounds
+- Fixed NaN errors with the PhysX backend on
+
+### Important Note:
+When updating from 2.4.2, make sure to **reset your VS configs in your world serverconfig folder**! The default mass has been reverted to 1000, but your config file will not update automatically.
+
 ## VS 2.4.2
 Small patch fixing some issues from 2.4.1
 
