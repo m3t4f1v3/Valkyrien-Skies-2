@@ -25,16 +25,21 @@ class GameToPhysicsAdapter {
     private val worldToModelForces = ConcurrentLinkedQueue<Pair<ShipId, ForceAtPos>>()
     private val worldToBodyForces = ConcurrentLinkedQueue<Pair<ShipId, ForceAtPos>>()
 
-    private val joints = ConcurrentHashMap<Pair<VSJoint, Consumer<VSJointId>>, Int>()
+    private val addedJoints = ConcurrentHashMap<Pair<VSJoint, Consumer<VSJointId>>, Int>()
     private val updatedJoints = ConcurrentLinkedQueue<VSJointAndId>()
     private val deletedJoints = ConcurrentLinkedQueue<VSJointId>()
+
+    private val shipToJointIds = ConcurrentHashMap<Long, Set<Int>>()
+    private val jointById = ConcurrentHashMap<Int, VSJoint>()
 
     private val toBeStatic = ConcurrentLinkedQueue<Pair<ShipId, Boolean>>()
 
     private val enablePairs = ConcurrentLinkedQueue<Pair<ShipId, ShipId>>()
     private val disablePairs = ConcurrentLinkedQueue<Pair<ShipId, ShipId>>()
 
+
     fun physTick(physLevel: PhysLevel, delta: Double) {
+
         worldForces.pollUntilEmpty { pair ->
             val ship = physLevel.getShipById(pair.first)
             if (pair.second.pos != null) {
@@ -100,13 +105,13 @@ class GameToPhysicsAdapter {
             }
         }
 
-        val safeJoints = HashMap(joints)
+        val safeJoints = HashMap(addedJoints)
         safeJoints.forEach { newJoint, timer ->
             if (timer > 0) {
-                joints[newJoint] = timer - 1
+                addedJoints[newJoint] = timer - 1
             } else {
                 newJoint.second.accept((physLevel as VsiPhysLevel).addJoint(newJoint.first))
-                joints.remove(newJoint)
+                addedJoints.remove(newJoint)
             }
         }
         updatedJoints.pollUntilEmpty { jointAndId ->
@@ -120,6 +125,13 @@ class GameToPhysicsAdapter {
 
         enablePairs.pollUntilEmpty { pair -> physLevel.enableCollisionBetween(pair.first, pair.second) }
         disablePairs.pollUntilEmpty { pair -> physLevel.disableCollisionBetween(pair.first, pair.second) }
+
+        shipToJointIds.clear()
+        jointById.clear()
+
+        shipToJointIds.putAll((physLevel as VsiPhysLevel).getJointsByShipIds())
+        jointById.putAll((physLevel as VsiPhysLevel).getAllJoints())
+
     }
 
     /**
@@ -240,13 +252,52 @@ class GameToPhysicsAdapter {
     }
 
     fun addJoint(joint: VSJoint, delay: Int = 0, function: Consumer<VSJointId>) {
-        joints.put(joint to function, delay)
+        addedJoints.put(joint to function, delay)
     }
     fun updateJoint(jointAndId: VSJointAndId) {
         updatedJoints.add(jointAndId)
     }
     fun removeJoint(jointId: VSJointId) {
         deletedJoints.add(jointId)
+    }
+
+    /**
+     * Returns a joint by its ID.
+     *
+     * @param jointId The ID of the joint to retrieve.
+     * @return The joint with the specified ID, or null if it does not exist.
+     */
+    fun getJointById(jointId: VSJointId): VSJoint? {
+        return jointById[jointId]
+    }
+
+    /**
+     * Returns a set containing the IDs of all joints currently attached to the ship with the specified ID.
+     *
+     * All returned Ids should be valid on the frame requested, but it is not advised to store this result, as it may change.
+     *
+     * @see [getJointById]
+     */
+    fun getJointsFromShip(shipId: ShipId): Set<VSJointId>? {
+        return shipToJointIds[shipId]
+    }
+
+    /**
+     * Retuns a map of all joints and their IDs in this PhysLevel.
+     *
+     * @see [getJointById]
+     */
+    fun getAllJoints(): Map<VSJointId, VSJoint> {
+        return jointById.toMap()
+    }
+
+    /**
+     * Returns a map of ShipIds to the IDs of any joints attached to them.
+     *
+     * @see [getJointsFromShip]
+     */
+    fun getJointsByShipIds(): Map<ShipId, Set<VSJointId>> {
+        return shipToJointIds.toMap()
     }
 
     fun enableCollisionBetween(shipA: ShipId, shipB: ShipId) {
