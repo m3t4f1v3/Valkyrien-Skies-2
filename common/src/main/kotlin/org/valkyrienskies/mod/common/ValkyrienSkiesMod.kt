@@ -10,6 +10,7 @@ import net.minecraft.resources.ResourceKey
 import net.minecraft.resources.ResourceLocation
 import net.minecraft.server.MinecraftServer
 import net.minecraft.tags.TagKey
+import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.EntityType
 import net.minecraft.world.item.CreativeModeTab
 import net.minecraft.world.item.Item
@@ -24,6 +25,7 @@ import org.valkyrienskies.core.api.world.properties.DimensionId
 import org.valkyrienskies.core.internal.VsiCore
 import org.valkyrienskies.core.internal.VsiCoreClient
 import org.valkyrienskies.mod.api.BlockEntityPhysicsListener
+import org.valkyrienskies.mod.api.EntityPhysicsListener
 import org.valkyrienskies.mod.api.SeatedControllingPlayer
 import org.valkyrienskies.mod.api.getShipManagingBlock
 import org.valkyrienskies.mod.api_impl.events.VsApiImpl
@@ -99,6 +101,8 @@ object ValkyrienSkiesMod {
 
     val blockEntityPhysListeners: ConcurrentHashMap<DimensionId, ConcurrentHashMap<BlockPos, Pair<ShipId?, BlockEntityPhysicsListener>>> =
         ConcurrentHashMap()
+    val entityPhysListeners: ConcurrentHashMap<DimensionId, ConcurrentHashMap<Int, EntityPhysicsListener>> =
+        ConcurrentHashMap()
 
     @JvmStatic
     lateinit var splitHandler: SplitHandler
@@ -151,6 +155,9 @@ object ValkyrienSkiesMod {
                 }
                 listener.physTick(ship, event.world)
             }
+            entityPhysListeners.getOrPut(event.world.dimension, { ConcurrentHashMap() }).forEach { _, listener ->
+                listener.physTick(event.world)
+            }
         }
         core.shipUnloadEventClient.on { event ->
             val level = Minecraft.getInstance().level
@@ -184,6 +191,25 @@ object ValkyrienSkiesMod {
 
     fun removeBlockEntityPhysTicker(pos: BlockPos, dimensionId: DimensionId) {
         blockEntityPhysListeners.getOrPut(dimensionId, { ConcurrentHashMap() }).remove(pos)
+    }
+
+    fun addEntityPhysTicker(
+        dimensionId: DimensionId, entity: Entity
+    ) {
+        if (entity.level() == null || entity.level().isClientSide) return
+        entityPhysListeners.getOrPut(dimensionId, { ConcurrentHashMap() })[entity.id] = entity as EntityPhysicsListener
+    }
+
+    fun removeEntityPhysTicker(entity: Entity, dimensionId: DimensionId) {
+        entityPhysListeners.getOrPut(dimensionId, { ConcurrentHashMap() }).remove(entity.id)
+    }
+
+    fun getEntityPhysTicker(dimensionId: DimensionId, entityId: Int): EntityPhysicsListener? {
+        return entityPhysListeners.getOrPut(dimensionId, { ConcurrentHashMap() })[entityId]
+    }
+
+    fun getEntityPhysTicker(dimensionId: DimensionId, entity: Entity): EntityPhysicsListener? {
+        return entityPhysListeners.getOrPut(dimensionId, { ConcurrentHashMap() })[entity.id]
     }
 
 }
