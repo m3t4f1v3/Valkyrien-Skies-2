@@ -561,23 +561,28 @@
   },
   {
     "block": "create:pulse_repeater",
-    "mass": 300.0,
-    "friction": 0.5
+    "mass": 200.0,
+    "friction": 0.3
   },
   {
     "block": "create:pulse_extender",
-    "mass": 300.0,
-    "friction": 0.5
+    "mass": 200.0,
+    "friction": 0.3
+  },
+  {
+    "block": "create:pulse_timer",
+    "mass": 200.0,
+    "friction": 0.3
   },
   {
     "block": "create:powered_latch",
-    "mass": 300.0,
-    "friction": 0.5
+    "mass": 200.0,
+    "friction": 0.3
   },
   {
     "block": "create:powered_toggle_latch",
-    "mass": 300.0,
-    "friction": 0.5
+    "mass": 200.0,
+    "friction": 0.3
   },
   {
     "block": "create:lectern_controller",

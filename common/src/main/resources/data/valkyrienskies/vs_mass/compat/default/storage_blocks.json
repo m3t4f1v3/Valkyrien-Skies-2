@@ -1,0 +1,82 @@
+[
+  {
+    "tag": "forge:storage_blocks/aluminum",
+    "mass": 2700.0,
+    "friction": 0.2
+  },
+  {
+    "tag": "forge:storage_blocks/annealed_copper",
+    "mass": 9000.0,
+    "friction": 0.2
+  },
+  {
+    "tag": "forge:storage_blocks/cobalt",
+    "mass": 8340.0,
+    "friction": 0.2
+  },
+  {
+    "tag": "forge:storage_blocks/electrum",
+    "mass": 8650.0,
+    "friction": 0.2
+  },
+  {
+    "tag": "forge:storage_blocks/iridium",
+    "mass": 22560.0,
+    "friction": 0.2
+  },
+  {
+    "tag": "forge:storage_blocks/lead",
+    "mass": 11350.0,
+    "friction": 0.2
+  },
+  {
+    "tag": "forge:storage_blocks/lithium",
+    "mass": 530.0,
+    "friction": 0.2
+  },
+  {
+    "tag": "forge:storage_blocks/magnetic_iron",
+    "mass": 7850.0,
+    "friction": 0.2
+  },
+  {
+    "tag": "forge:storage_blocks/neutronium",
+    "mass": 250000.0,
+    "friction": 0.2
+  },
+  {
+    "tag": "forge:storage_blocks/opal",
+    "mass": 2090.0,
+    "friction": 0.2
+  },
+  {
+    "tag": "forge:storage_blocks/osmium",
+    "mass": 22590.0,
+    "friction": 0.2
+  },
+  {
+    "tag": "forge:storage_blocks/polyethylene",
+    "mass": 920.0,
+    "friction": 1.0
+  },
+  {
+    "tag": "forge:storage_blocks/silver",
+    "mass": 10490.0,
+    "friction": 0.2
+  },
+  {
+    "tag": "forge:storage_blocks/tin",
+    "mass": 7290.0,
+    "friction": 0.2
+  },
+  {
+    "tag": "forge:storage_blocks/uranium",
+    "mass": 19050.0,
+    "friction": 0.2
+  },
+  {
+    "tag": "forge:storage_blocks/vanadium",
+    "mass": 6100.0,
+    "friction": 0.2
+  }
+]
