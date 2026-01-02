@@ -631,7 +631,7 @@
   },
   {
     "block": "create:copycat_panel",
-    "mass": 25.0,
+    "mass": 50.0,
     "friction": 0.5
   },
   {

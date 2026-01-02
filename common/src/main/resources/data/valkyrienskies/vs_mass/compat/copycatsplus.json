@@ -1,98 +1,98 @@
 [
   {
     "block": "copycats:copycat_layer",
-    "mass": 500.0
+    "mass": 50.0
   },
   {
     "block": "copycats:copycat_slab",
-    "mass": 500.0
+    "mass": 50.0
   },
   {
     "block": "copycats:copycat_beam",
-    "mass": 500.0
+    "mass": 50.0
   },
   {
     "block": "copycats:copycat_vertical_step",
-    "mass": 500.0
+    "mass": 50.0
   },
   {
     "block": "copycats:copycat_half_panel",
-    "mass": 500.0
+    "mass": 50.0
   },
   {
     "block": "copycats:copycat_stairs",
-    "mass": 500.0
+    "mass": 50.0
   },
   {
     "block": "copycats:copycat_fence",
-    "mass": 500.0
+    "mass": 50.0
   },
   {
     "block": "copycats:copycat_fence_gate",
-    "mass": 500.0
+    "mass": 50.0
   },
   {
     "block": "copycats:copycat_trapdoor",
-    "mass": 500.0
+    "mass": 50.0
   },
   {
     "block": "copycats:copycat_wall",
-    "mass": 500.0
+    "mass": 50.0
   },
   {
     "block": "copycats:copycat_board",
-    "mass": 500.0
+    "mass": 50.0
   },
   {
     "block": "copycats:copycat_box",
-    "mass": 500.0
+    "mass": 50.0
   },
   {
     "block": "copycats:copycat_catwalk",
-    "mass": 500.0
+    "mass": 50.0
   },
   {
     "block": "copycats:copycat_byte",
-    "mass": 500.0
+    "mass": 50.0
   },
   {
     "block": "copycats:copycat_block",
-    "mass": 500.0
+    "mass": 50.0
   },
   {
     "block": "copycats:copycat_half_layer",
-    "mass": 500.0
+    "mass": 50.0
   },
   {
     "block": "copycats:copycat_slice",
-    "mass": 500.0
+    "mass": 50.0
   },
   {
     "block": "copycats:copycat_vertical_slice",
-    "mass": 500.0
+    "mass": 50.0
   },
   {
     "block": "copycats:copycat_wooden_button",
-    "mass": 500.0
+    "mass": 50.0
   },
   {
     "block": "copycats:copycat_stone_button",
-    "mass": 500.0
+    "mass": 50.0
   },
   {
     "block": "copycats:copycat_wooden_pressure_plate",
-    "mass": 500.0
+    "mass": 50.0
   },
   {
     "block": "copycats:copycat_stone_pressure_plate",
-    "mass": 500.0
+    "mass": 50.0
   },
   {
     "block": "copycats:copycat_heavy_weighted_pressure_plate",
-    "mass": 500.0
+    "mass": 50.0
   },
   {
     "block": "copycats:copycat_light_weighted_pressure_plate",
-    "mass": 500.0
+    "mass": 50.0
   }
 ]
