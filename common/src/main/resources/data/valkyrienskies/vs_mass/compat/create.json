@@ -620,16 +620,6 @@
     "friction": 0.65
   },
   {
-    "block": "create:raw_zinc_block",
-    "mass": 7150.0,
-    "friction": 0.65
-  },
-  {
-    "block": "create:zinc_block",
-    "mass": 7150.0,
-    "friction": 0.4
-  },
-  {
     "block": "create:copycat_step",
     "mass": 50.0,
     "friction": 0.5

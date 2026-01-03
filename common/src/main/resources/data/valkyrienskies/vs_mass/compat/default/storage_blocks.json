@@ -10,13 +10,33 @@
     "friction": 0.2
   },
   {
+    "tag": "forge:storage_blocks/beryllium",
+    "mass": 1850.0,
+    "friction": 0.2
+  },
+  {
+    "tag": "forge:storage_blocks/charcoal",
+    "mass": 1500.0,
+    "friction": 0.7
+  },
+  {
     "tag": "forge:storage_blocks/cobalt",
     "mass": 8340.0,
     "friction": 0.2
   },
   {
+    "tag": "forge:storage_blocks/constantan",
+    "mass": 8890.0,
+    "friction": 0.2
+  },
+  {
     "tag": "forge:storage_blocks/electrum",
     "mass": 8650.0,
+    "friction": 0.2
+  },
+  {
+    "tag": "forge:storage_blocks/gallium",
+    "mass": 5910.0,
     "friction": 0.2
   },
   {
@@ -40,8 +60,18 @@
     "friction": 0.2
   },
   {
+    "tag": "forge:storage_blocks/neodymium",
+    "mass": 7010.0,
+    "friction": 0.2
+  },
+  {
     "tag": "forge:storage_blocks/neutronium",
     "mass": 250000.0,
+    "friction": 0.2
+  },
+  {
+    "tag": "forge:storage_blocks/nickel",
+    "mass": 8910.0,
     "friction": 0.2
   },
   {
@@ -57,7 +87,8 @@
   {
     "tag": "forge:storage_blocks/polyethylene",
     "mass": 920.0,
-    "friction": 1.0
+    "friction": 1.0,
+    "elasticity": 0.5
   },
   {
     "tag": "forge:storage_blocks/silver",
@@ -65,8 +96,18 @@
     "friction": 0.2
   },
   {
+    "tag": "forge:storage_blocks/tantalum",
+    "mass": 16650.0,
+    "friction": 0.2
+  },
+  {
     "tag": "forge:storage_blocks/tin",
     "mass": 7290.0,
+    "friction": 0.2
+  },
+  {
+    "tag": "forge:storage_blocks/titanium",
+    "mass": 4510.0,
     "friction": 0.2
   },
   {
@@ -77,6 +118,11 @@
   {
     "tag": "forge:storage_blocks/vanadium",
     "mass": 6100.0,
+    "friction": 0.2
+  },
+  {
+    "tag": "forge:storage_blocks/zinc",
+    "mass": 7150.0,
     "friction": 0.2
   }
 ]
