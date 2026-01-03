@@ -105,15 +105,21 @@ class GameToPhysicsAdapter {
             }
         }
 
+        // We have to have this weird queue so that we can add all our joints,
+        // then update our jointById maps, then call the callbacks.
+        // Otherwise, people trying to get their joint by id _in_ the callback will get null.
+        val callbackQueue = ArrayList<Pair<Consumer<VSJointId>, VSJointId>>()
+
         val safeJoints = HashMap(addedJoints)
         safeJoints.forEach { newJoint, timer ->
             if (timer > 0) {
                 addedJoints[newJoint] = timer - 1
             } else {
-                newJoint.second.accept((physLevel as VsiPhysLevel).addJoint(newJoint.first))
+                callbackQueue.add(Pair(newJoint.second, (physLevel as VsiPhysLevel).addJoint(newJoint.first)))
                 addedJoints.remove(newJoint)
             }
         }
+
         updatedJoints.pollUntilEmpty { jointAndId ->
             (physLevel as VsiPhysLevel).updateJoint(jointAndId.jointId, jointAndId.joint)
         }
@@ -121,16 +127,20 @@ class GameToPhysicsAdapter {
             (physLevel as VsiPhysLevel).removeJoint(jointId)
         }
 
-        toBeStatic.pollUntilEmpty { pair -> physLevel.getShipById(pair.first)?.isStatic = pair.second }
-
-        enablePairs.pollUntilEmpty { pair -> physLevel.enableCollisionBetween(pair.first, pair.second) }
-        disablePairs.pollUntilEmpty { pair -> physLevel.disableCollisionBetween(pair.first, pair.second) }
-
+        // Update our joint maps - strategically placed between adding the joints, and calling the callbacks
         shipToJointIds.clear()
         jointById.clear()
 
         shipToJointIds.putAll((physLevel as VsiPhysLevel).getJointsByShipIds())
         jointById.putAll((physLevel as VsiPhysLevel).getAllJoints())
+
+        // and finally... call the callbacks
+        callbackQueue.forEach { (consumer, i) -> consumer.accept(i) }
+
+        toBeStatic.pollUntilEmpty { pair -> physLevel.getShipById(pair.first)?.isStatic = pair.second }
+
+        enablePairs.pollUntilEmpty { pair -> physLevel.enableCollisionBetween(pair.first, pair.second) }
+        disablePairs.pollUntilEmpty { pair -> physLevel.disableCollisionBetween(pair.first, pair.second) }
 
     }
 
