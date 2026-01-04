@@ -22,6 +22,9 @@ object VSGameConfig {
         @ConfigCategory(title = "Block Tint")
         val BlockTinting = BLOCKTINT()
 
+        @ConfigCategory(title = "SoundEffect")
+        val SoundEffect = SOUNDEFFECT()
+
         @ConfigEntry(description = "Renders the VS2 debug HUD with TPS")
         var renderDebugText = false
 
@@ -47,6 +50,14 @@ object VSGameConfig {
                 description = "Partly fixes the block tinting issue with blocks on ships"
             )
             var fixBlockTinting = false
+        }
+
+        class SOUNDEFFECT {
+            @ConfigEntry(description = "Enable doppler effect for sounds")
+            var enableDopplerEffect = true
+
+            @ConfigEntry(description = "Doppler effect scaler. 1.0 for realistic; smaller value results in weaker doppler effect")
+            var dopplerEffectScale = 1.0 / 20
         }
 
         @ConfigEntry(
