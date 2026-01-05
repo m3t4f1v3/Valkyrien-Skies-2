@@ -126,7 +126,7 @@ object ShipAssembler {
         template.placeInWorld(level, cornerOfShip, cornerOfShip, structureSettings, level.random, 2)
         VSAssemblyEvents.onPasteAfterBlocksAreLoaded.emit(VSAssemblyEvents.OnPasteAfterBlocksAreLoaded(level, oldShip, newShip, Pair(oldCenter, centerOfShip), eventData))
 
-        val shipPos = oldCenter.get(Vector3d()).add(0.5, 0.5, 0.5, Vector3d())
+        val shipPos = Vector3d(oldCenter)
 
         //teleport fn uses COM as center of ship, so it calculates such offset that centerOfShip will be "center" instead
         val posOffset =
