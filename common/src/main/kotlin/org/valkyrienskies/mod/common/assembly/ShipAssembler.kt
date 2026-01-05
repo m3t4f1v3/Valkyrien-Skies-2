@@ -3,6 +3,7 @@ package org.valkyrienskies.mod.common.assembly
 import net.minecraft.core.BlockPos
 import net.minecraft.nbt.CompoundTag
 import net.minecraft.server.level.ServerLevel
+import net.minecraft.world.Clearable
 import net.minecraft.world.level.LevelReader
 import net.minecraft.world.level.ServerLevelAccessor
 import net.minecraft.world.level.block.Block
@@ -95,11 +96,17 @@ object ShipAssembler {
             minB, maxB
         )
 
-        for (pos in blocks) {level.setBlock(pos, Blocks.BARRIER.defaultBlockState(), Block.UPDATE_CLIENTS)}
+        for (pos in blocks) {
+            level.getBlockEntity(pos)?.let {
+                Clearable.tryClear(it)
+                level.removeBlockEntity(pos)
+            }
+            level.setBlock(pos, Blocks.BARRIER.defaultBlockState(), Block.UPDATE_CLIENTS)
+        }
         for (pos in blocks) {level.removeBlock(pos, true)}
 
         val newShip = level.shipObjectWorld.createNewShipAtBlock(Vector3i(worldOldCenter, RoundingMode.FLOOR), false, scale * oldScale, level.dimensionId)
-        newShip.isStatic = true
+        newShip.isStatic = oldShip == null || oldShip.isStatic
         val centerOfPlot = newShip.chunkClaim.getCenterBlockCoordinates(level.yRange, Vector3i())
 
         //structure template builds from a corner, so offset center of plot so that structure's center and center of
