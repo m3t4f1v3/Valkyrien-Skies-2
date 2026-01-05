@@ -5,6 +5,8 @@ import net.minecraft.nbt.CompoundTag
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.level.LevelReader
 import net.minecraft.world.level.ServerLevelAccessor
+import net.minecraft.world.level.block.Block
+import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlaceSettings
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureProcessor
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureProcessorType
@@ -93,6 +95,7 @@ object ShipAssembler {
             minB, maxB
         )
 
+        for (pos in blocks) {level.setBlock(pos, Blocks.BARRIER.defaultBlockState(), Block.UPDATE_CLIENTS)}
         for (pos in blocks) {level.removeBlock(pos, true)}
 
         val newShip = level.shipObjectWorld.createNewShipAtBlock(Vector3i(worldOldCenter, RoundingMode.FLOOR), false, scale * oldScale, level.dimensionId)
@@ -122,8 +125,7 @@ object ShipAssembler {
         structureSettings.rotationPivot = cornerOfShip
 
         VSAssemblyEvents.onPasteBeforeBlocksAreLoaded.emit(VSAssemblyEvents.OnPasteBeforeBlocksAreLoaded(level, oldShip, newShip, Pair(oldCenter, centerOfShip), eventData))
-        //TODO what is 2?
-        template.placeInWorld(level, cornerOfShip, cornerOfShip, structureSettings, level.random, 2)
+        template.placeInWorld(level, cornerOfShip, cornerOfShip, structureSettings, level.random, Block.UPDATE_CLIENTS)
         VSAssemblyEvents.onPasteAfterBlocksAreLoaded.emit(VSAssemblyEvents.OnPasteAfterBlocksAreLoaded(level, oldShip, newShip, Pair(oldCenter, centerOfShip), eventData))
 
         val shipPos = Vector3d(oldCenter)
