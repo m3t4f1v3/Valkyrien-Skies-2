@@ -12,6 +12,7 @@
   "block.valkyrienskies.test_wing": "调试机翼",
   "block.valkyrienskies.test_sphere": "调试球",
   "block.valkyrienskies.test_thruster": "调试推进器",
+  "block.valkyrienskies.test_antigrav": "调试悬浮块",
   "item.valkyrienskies.ship_creator": "物理结构制造器",
   "item.valkyrienskies.ship_creator_smaller": "小型物理结构制造器",
   "item.valkyrienskies.ship_assembler": "物理结构制造器（7×7区域）",
