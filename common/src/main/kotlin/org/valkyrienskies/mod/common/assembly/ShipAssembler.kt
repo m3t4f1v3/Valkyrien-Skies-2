@@ -169,7 +169,7 @@ object ShipAssembler {
             return newStructureBlockInfo
         }
 
-        //TODO i don't think it does anything, but i'm not sure
+        // getType is used for referencing this processor from a datapack, which we don't need
         override fun getType(): StructureProcessorType<*>? = null
     }
 }
