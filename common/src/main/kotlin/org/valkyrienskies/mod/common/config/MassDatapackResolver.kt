@@ -46,6 +46,7 @@ private data class VSBlockStateInfo(
     val friction: Double,
     val elasticity: Double,
     val type: VsiBlockType?,
+    val noCollisionOverride: Boolean?,
 )
 
 object MassDatapackResolver : BlockStateInfoProvider {
@@ -111,7 +112,7 @@ object MassDatapackResolver : BlockStateInfoProvider {
                             add(
                                 VSBlockStateInfo(
                                     BuiltInRegistries.BLOCK.getKey(it.value()), tagInfo.priority, tagInfo.mass, tagInfo.friction,
-                                    tagInfo.elasticity, tagInfo.type
+                                    tagInfo.elasticity, tagInfo.type, tagInfo.noCollisionOverride
                                 )
                             )
                         }
@@ -145,13 +146,15 @@ object MassDatapackResolver : BlockStateInfoProvider {
 
             val priority = element.asJsonObject["priority"]?.asInt ?: decideDefaultPriority(origin)
 
+            val overrideNoCollision = element.asJsonObject["no_collision"]?.asBoolean
+
             if (tag != null) {
-                addToBeAddedTags(VSBlockStateInfo(ResourceLocation(tag), priority, weight, friction, elasticity, null))
+                addToBeAddedTags(VSBlockStateInfo(ResourceLocation(tag), priority, weight, friction, elasticity, null, overrideNoCollision))
             } else {
                 val block = element.asJsonObject["block"]?.asString
                     ?: throw IllegalArgumentException("No block or tag in file $origin")
 
-                add(VSBlockStateInfo(ResourceLocation(block), priority, weight, friction, elasticity, null))
+                add(VSBlockStateInfo(ResourceLocation(block), priority, weight, friction, elasticity, null, overrideNoCollision))
             }
         }
     }
@@ -368,7 +371,7 @@ object MassDatapackResolver : BlockStateInfoProvider {
                     val vsBlockStateInfo = map[BuiltInRegistries.BLOCK.getKey(blockState.block)]
 
                     // Create new solid block state
-                    val solidState = vsCore.newSolidStateBuilder()
+                    var solidState = vsCore.newSolidStateBuilder()
                         .shape(collisionShape)
                         .elasticity(vsBlockStateInfo?.elasticity ?: VSGameConfig.SERVER.defaultBlockElasticity)
                         .friction(vsBlockStateInfo?.friction ?: VSGameConfig.SERVER.defaultBlockFriction)
@@ -381,7 +384,12 @@ object MassDatapackResolver : BlockStateInfoProvider {
                         null
                     }
 
-                    VsiBlockState(solidState, fluidState)
+                    // If overrideNoCollision is set to true in datapack, force it to use air block state
+                    if ((vsBlockStateInfo?.noCollisionOverride ?: false)) {
+                        vsCore.blockTypes.airState
+                    } else {
+                        VsiBlockState(solidState, fluidState)
+                    }
                 }
             }
             mcBlockStateToVs[blockState] = vsBlockState
