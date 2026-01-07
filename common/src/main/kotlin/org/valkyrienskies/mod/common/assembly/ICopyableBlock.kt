@@ -6,6 +6,7 @@ import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.item.Item
 import net.minecraft.world.level.block.entity.BlockEntity
 import net.minecraft.world.level.block.state.BlockState
+import org.jetbrains.annotations.ApiStatus
 import org.joml.Vector3d
 import org.valkyrienskies.core.api.ships.ServerShip
 import java.util.function.Supplier
@@ -16,6 +17,7 @@ import java.util.function.Supplier
 /**
  * Should be inherited by block, not block entity
  */
+@ApiStatus.Experimental
 interface ICopyableBlock {
     /**
      * Should be called on copy of the blocks.

@@ -1,6 +1,7 @@
 package org.valkyrienskies.mod.common.assembly
 
 import net.minecraft.server.level.ServerLevel
+import org.jetbrains.annotations.ApiStatus
 import org.joml.Vector3d
 import org.valkyrienskies.core.api.ships.LoadedServerShip
 import org.valkyrienskies.core.api.ships.ServerShip
@@ -13,6 +14,7 @@ import java.util.function.Supplier
  * Should be saved before any ship blocks is saved
  * Should be loaded after all ships were created and all blocks were placed and loaded
  */
+@ApiStatus.Experimental
 interface ICopyableAttachment {
     /**
      * Should be called before jackson serialization
