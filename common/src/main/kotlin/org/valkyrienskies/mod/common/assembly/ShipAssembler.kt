@@ -99,7 +99,6 @@ object ShipAssembler {
         for (pos in blocks) {
             level.getBlockEntity(pos)?.let {
                 Clearable.tryClear(it)
-                level.removeBlockEntity(pos)
             }
             level.setBlock(pos, Blocks.BARRIER.defaultBlockState(), Block.UPDATE_CLIENTS)
         }
