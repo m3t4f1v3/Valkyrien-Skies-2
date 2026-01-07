@@ -46,8 +46,8 @@ object ShipAssembler {
 
     @JvmStatic
     fun findMinAndMax(blocks: Iterable<BlockPos>): Pair<BlockPos, BlockPos> {
-        var minCorner = BlockPos.MutableBlockPos(Int.MAX_VALUE, Int.MAX_VALUE, Int.MAX_VALUE)
-        var maxCorner = BlockPos.MutableBlockPos(Int.MIN_VALUE, Int.MIN_VALUE, Int.MIN_VALUE)
+        val minCorner = BlockPos.MutableBlockPos(Int.MAX_VALUE, Int.MAX_VALUE, Int.MAX_VALUE)
+        val maxCorner = BlockPos.MutableBlockPos(Int.MIN_VALUE, Int.MIN_VALUE, Int.MIN_VALUE)
 
         for (pos in blocks) {
             minCorner.x = Math.min(minCorner.x, pos.x)
