@@ -547,6 +547,7 @@
   {
     "block": "create:redstone_link",
     "mass": 100.0,
+    "no_collision": true,
     "friction": 0.4
   },
   {
