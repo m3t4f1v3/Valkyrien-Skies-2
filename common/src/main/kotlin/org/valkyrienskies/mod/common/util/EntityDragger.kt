@@ -37,7 +37,7 @@ object EntityDragger {
      */
     fun dragEntitiesWithShips(entities: Iterable<Entity>, preTick: Boolean = false) {
         for (entity in entities) {
-            val entityDraggingInformation = (entity as IEntityDraggingInformationProvider).draggingInformation
+            val entityDraggingInformation = (entity as? IEntityDraggingInformationProvider)?.draggingInformation ?: continue
 
             var dragTheEntity = false
             var addedMovement: Vector3dc? = null
