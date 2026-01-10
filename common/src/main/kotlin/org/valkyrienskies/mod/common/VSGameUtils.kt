@@ -42,7 +42,7 @@ import org.valkyrienskies.mod.common.ValkyrienSkiesMod.ASSEMBLE_BLACKLIST
 import org.valkyrienskies.mod.common.entity.ShipMountedToData
 import org.valkyrienskies.mod.common.entity.ShipMountedToDataProvider
 import org.valkyrienskies.mod.common.util.DimensionIdProvider
-import org.valkyrienskies.mod.common.util.EntityDragger.serversideEyePosition
+import org.valkyrienskies.mod.common.util.EntityDragger.serversidePosition
 import org.valkyrienskies.mod.common.util.MinecraftPlayer
 import org.valkyrienskies.mod.common.util.set
 import org.valkyrienskies.mod.common.util.toJOML
@@ -126,10 +126,10 @@ val Player.playerWrapper get() = (this as PlayerDuck).vs_getPlayer()
  * Like [Entity.squaredDistanceTo] except the destination is transformed into world coordinates if it is a ship
  */
 fun Entity.squaredDistanceToInclShips(x: Double, y: Double, z: Double): Double {
-    val eyePos = if (getShipMountedTo(this) != null) getShipMountedToData(
+    val pos = if (getShipMountedTo(this) != null) getShipMountedToData(
         this, null
-    )!!.mountPosInShip.toMinecraft() else this.serversideEyePosition()
-    return level().squaredDistanceBetweenInclShips(x, y, z, eyePos.x, eyePos.y - 1.0, eyePos.z)
+    )!!.mountPosInShip.toMinecraft() else this.serversidePosition()
+    return level().squaredDistanceBetweenInclShips(x, y, z, pos.x, pos.y, pos.z)
 }
 
 /**
