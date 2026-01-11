@@ -217,8 +217,7 @@
     "world.level.MixinBlockCollisions",
     "world.level.MixinLevel",
     "world.level.chunk.MixinChunkGenerator",
-    "world.level.levelgen.MixinFlatLevelSource",
-    "world.level.levelgen.MixinNoiseBasedChunkGenerator"
+    "world.level.levelgen.MixinChunkStatus"
   ],
   "client": [
     "accessors.client.multiplayer.ClientLevelAccessor",

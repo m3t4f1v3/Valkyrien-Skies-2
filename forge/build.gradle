@@ -144,9 +144,6 @@ dependencies {
     // Very Many Players
     //modCompileOnly("maven.modrinth:vmp-forge:0.2.0+beta.7.101+1.20.1")
 
-    // TerraFirmaCraft
-    modCompileOnly("curse.maven:terrafirmacraft-302973:${tfc_version}")
-
     // Mekanism
     modCompileOnly ("curse.maven:mekanism-268560:4644795")
 
