@@ -137,7 +137,7 @@ object ValkyrienSkiesMod {
         }
 
         core.shipLoadEvent.on { event ->
-            event.ship.setAttachment(SplittingDisablerAttachment(false))
+            event.ship.setAttachment(SplittingDisablerAttachment(true))
         }
 
         core.physTickEvent.on { event ->
