@@ -11,6 +11,7 @@ import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlac
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate
 import org.joml.Vector3d
 import org.valkyrienskies.core.api.ships.ServerShip
+import org.valkyrienskies.core.internal.ships.VsiServerShip
 import org.valkyrienskies.core.internal.ships.VsiShip
 import org.valkyrienskies.core.util.datastructures.DenseBlockPosSet
 import org.valkyrienskies.mod.api.vsApi
@@ -33,7 +34,7 @@ fun createNewShipWithBlocks(
     //return ShipAssembler.assembleToShip(level, blocks, true, 1.0)
 
 
-    val ship = level.shipObjectWorld.createNewShipAtBlock(centerBlock.toJOML(), false, 1.0, level.dimensionId)
+    val ship = level.shipObjectWorld.createNewShipAtBlock(centerBlock.toJOML(), true, 1.0, level.dimensionId)
     val shipChunkX = ship.chunkClaim.xMiddle
     val shipChunkZ = ship.chunkClaim.zMiddle
     val worldChunkX = centerBlock.x shr 4
@@ -104,7 +105,8 @@ fun createNewShipWithBlocks(
 }
 
 fun createNewShipWithStructure(
-    lowerCorner: BlockPos, higherCorner: BlockPos, blocks: StructureTemplate, level: ServerLevel
+    lowerCorner: BlockPos, higherCorner: BlockPos, blocks: StructureTemplate, level: ServerLevel,
+
 ): ServerShip {
     //if (blocks.size.toJOML().length() < 0.0001) throw IllegalArgumentException()
 
@@ -118,28 +120,16 @@ fun createNewShipWithStructure(
         lowerCorner.y.toDouble(),
         ((shipChunkZ shl 4) + (lowerCorner.z and 15)).toDouble()
     )
-    val higherCornerInShip = Vector3d(
-        ((shipChunkX shl 4) + (higherCorner.x and 15)).toDouble(),
-        higherCorner.y.toDouble(),
-        ((shipChunkZ shl 4) + (higherCorner.z and 15)).toDouble()
-    )
 
     blocks.placeInWorld(level, BlockPos.containing(lowerCornerInShip.toMinecraft()), BlockPos.containing(lowerCornerInShip.toMinecraft()), StructurePlaceSettings(), level.random, Block.UPDATE_ALL)
 
-    val diff = higherCorner.subtract(lowerCorner)
-    val centerPos = lowerCorner.toJOMLD().add(diff.x + 1 / 2.0, diff.y + 1 / 2.0, diff.z + 1 / 2.0)
-
-    // The ship's position has shifted from the center block since we assembled the ship, compensate for that
-    val centerBlockPosInWorld = ship.inertiaData.centerOfMass.sub(centerPos, Vector3d())
-        .add(ship.transform.positionInWorld)
-    // Put the ship into the compensated position, so that all the assembled blocks stay in the same place
-    level.shipObjectWorld
-        .teleportShip(ship, vsCore.newShipTeleportData(
-            newPos = centerBlockPosInWorld.add(0.5, 128.5 - centerBlockPosInWorld.y, 0.5, Vector3d()),
-            newPosInShip = ship.inertiaData.centerOfMass
-        )
-        )
-
+    // Reposition the ship because its world position needs to be relative to its CoM, not to the original lower corner
+    val comOffset = ship.inertiaData.centerOfMass.sub(Vector3d(lowerCornerInShip), Vector3d())
+    val newTransform = vsCore.newBodyTransform(
+        lowerCorner.toJOMLD().add(comOffset, Vector3d()),
+        ship.transform.rotation, ship.transform.scaling, ship.transform.positionInModel
+    )
+    (ship as VsiServerShip).setFromTransform(newTransform)
 
     for (x in lowerCorner.x..higherCorner.x) {
         for (y in lowerCorner.y..higherCorner.y) {
@@ -148,9 +138,7 @@ fun createNewShipWithStructure(
                     val blockEntity: BlockEntity? = level.getBlockEntity(BlockPos(x, y, z))
                     Clearable.tryClear(blockEntity)
                     level.removeBlockEntity(BlockPos(x, y, z))
-                    level.getChunk(x,z).setBlockState(BlockPos(x,y,z), Blocks.AIR.defaultBlockState(), false)
-
-                    //level.getChunk(BlockPos(x, y, z)).setBlockState(BlockPos(x, y, z), Blocks.AIR.defaultBlockState(), false)
+                    level.setBlock(BlockPos(x, y, z), Blocks.AIR.defaultBlockState(), 2)
                 }
             }
         }

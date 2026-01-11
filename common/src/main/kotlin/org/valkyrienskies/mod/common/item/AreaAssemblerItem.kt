@@ -61,7 +61,8 @@ class AreaAssemblerItem(
 
                         ctx.player?.sendSystemMessage(Component.literal("Assembling (${blockPos.x}, ${blockPos.y}, ${blockPos.z}) to ($firstPosX, $firstPosY, $firstPosZ)!"))
                         //ShipAssembler.assembleToShip(level, blocks, true, scale.asDouble, true)
-                        createNewShipWithStructure(lowerCorner, upperCorner, structure, level)
+                        val ship = createNewShipWithStructure(lowerCorner, upperCorner, structure, level)
+                        ctx.player?.sendSystemMessage(Component.translatable("command.valkyrienskies.shipify.success_one", ship.slug))
                     }
                     item.tag!!.remove("firstPosX")
                     item.tag!!.remove("firstPosY")
