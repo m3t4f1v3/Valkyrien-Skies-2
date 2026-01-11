@@ -354,7 +354,7 @@ object MassDatapackResolver : BlockStateInfoProvider {
                         voxelShape = blockState.getCollisionShape(dummyBlockGetter, BlockPos.ZERO)
                     }
 
-                    val collisionShape: SolidBlockShape = if (voxelShapeToCollisionShapeMap.contains(voxelShape)) {
+                    var collisionShape: SolidBlockShape = if (voxelShapeToCollisionShapeMap.contains(voxelShape)) {
                         voxelShapeToCollisionShapeMap[voxelShape]!!
                     } else if (generatedCollisionShapesMap.contains(voxelShape)) {
                         if (generatedCollisionShapesMap[voxelShape] != null) {
@@ -370,6 +370,14 @@ object MassDatapackResolver : BlockStateInfoProvider {
 
                     val vsBlockStateInfo = map[BuiltInRegistries.BLOCK.getKey(blockState.block)]
 
+                    // If overrideNoCollision is set to true in datapack, force it to have no collision shape
+                    collisionShape = if (vsBlockStateInfo?.noCollisionOverride ?: false) {
+                        // Won't ever be null with an empty list
+                        vsCore.solidShapeUtils.generateShapeFromBoxes(mutableListOf())!!
+                    } else {
+                        collisionShape
+                    }
+
                     // Create new solid block state
                     var solidState = vsCore.newSolidStateBuilder()
                         .shape(collisionShape)
@@ -384,12 +392,8 @@ object MassDatapackResolver : BlockStateInfoProvider {
                         null
                     }
 
-                    // If overrideNoCollision is set to true in datapack, force it to use air block state
-                    if ((vsBlockStateInfo?.noCollisionOverride ?: false)) {
-                        vsCore.blockTypes.airState
-                    } else {
-                        VsiBlockState(solidState, fluidState)
-                    }
+                    VsiBlockState(solidState, fluidState)
+
                 }
             }
             mcBlockStateToVs[blockState] = vsBlockState
