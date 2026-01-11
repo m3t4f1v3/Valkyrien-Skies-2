@@ -3,6 +3,7 @@ package org.valkyrienskies.mod.forge.mixin.feature.water_in_ships_entity;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
+import it.unimi.dsi.fastutil.objects.Object2DoubleMap;
 import it.unimi.dsi.fastutil.objects.Object2ObjectArrayMap;
 import it.unimi.dsi.fastutil.objects.Object2ObjectMap;
 import java.util.function.BiConsumer;
@@ -12,7 +13,10 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.material.FluidState;
+import net.minecraft.world.level.material.Fluids;
 import net.minecraft.world.phys.AABB;
+import net.minecraftforge.common.ForgeMod;
+import net.minecraftforge.fluids.FluidType;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -22,6 +26,7 @@ import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
+import org.valkyrienskies.mod.common.util.IEntityDraggingInformationProvider;
 
 @Mixin(Entity.class)
 public abstract class MixinEntity {
@@ -57,6 +62,12 @@ public abstract class MixinEntity {
 
     @Shadow
     public abstract void updateFluidHeightAndDoFluidPushing(Predicate<FluidState> par1);
+
+    @Shadow
+    private FluidType forgeFluidTypeOnEyes;
+
+    @Shadow
+    protected Object2DoubleMap<FluidType> forgeFluidTypeHeight;
 
     @Unique
     private boolean inShipContext() {
@@ -129,6 +140,10 @@ public abstract class MixinEntity {
         final Operation<FluidState> getFluidState) {
         final FluidState[] fluidState = {getFluidState.call(level, blockPos)};
         isShipWater = false;
+        final boolean seal = ((IEntityDraggingInformationProvider) (Object) this).vs$isInSealedArea();
+        if (seal) {
+            return Fluids.EMPTY.defaultFluidState();
+        }
         if (fluidState[0].isEmpty()) {
 
             final double d = this.getEyeY() - 0.1111111119389534;
@@ -146,6 +161,18 @@ public abstract class MixinEntity {
         return fluidState[0];
     }
 
+    @Inject(
+        method = "updateFluidOnEyes",
+        at = @At("TAIL")
+    )
+    private void afterFluidOnEyes(CallbackInfo ci) {
+        final boolean seal = ((IEntityDraggingInformationProvider) (Object) this).vs$isInSealedArea();
+        if (seal) {
+            forgeFluidTypeOnEyes = ForgeMod.EMPTY_TYPE.get();
+            forgeFluidTypeHeight.clear();
+        }
+    }
+
     @WrapOperation(
         at = @At(value = "INVOKE",
             target = "Lnet/minecraft/world/level/material/FluidState;getHeight(Lnet/minecraft/world/level/BlockGetter;Lnet/minecraft/core/BlockPos;)F"),
@@ -154,7 +181,10 @@ public abstract class MixinEntity {
     private float fluidHeightOverride(final FluidState instance, final BlockGetter arg, final BlockPos arg2,
         final Operation<Float> getHeight) {
         if (!instance.isEmpty() && this.level instanceof Level) {
-
+            final boolean seal = ((IEntityDraggingInformationProvider) (Object) this).vs$isInSealedArea();
+            if (seal) {
+                return 0;
+            }
             if (isShipWater) {
                 if (instance.isSource()) {
                     return 1;

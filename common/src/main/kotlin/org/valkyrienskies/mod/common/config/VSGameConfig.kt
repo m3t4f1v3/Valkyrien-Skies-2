@@ -31,6 +31,9 @@ object VSGameConfig {
         @ConfigEntry(description = "Renders the VS2 debug HUD with TPS")
         var renderDebugText = false
 
+        @ConfigEntry(description = "Grace period before a player's camera is no longer considered to be within a sealed area")
+        var sealedAreaCameraGracePeriod = 2
+
         @ConfigEntry(
             description = "Recommend ship slugs in mc commands where player names could be used ex. /tp ship-name wich could pollute user autocomplete"
         )
