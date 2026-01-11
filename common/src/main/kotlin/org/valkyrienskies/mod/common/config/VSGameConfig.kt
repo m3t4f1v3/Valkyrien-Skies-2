@@ -22,6 +22,9 @@ object VSGameConfig {
         @ConfigCategory(title = "Block Tint")
         val BlockTinting = BLOCKTINT()
 
+        @ConfigCategory(title = "SoundEffect")
+        val SoundEffect = SOUNDEFFECT()
+        
         @ConfigCategory(title = "Connectivity")
         val Connectivity = CONNECTIVITY()
 
@@ -52,6 +55,13 @@ object VSGameConfig {
             var fixBlockTinting = false
         }
 
+        class SOUNDEFFECT {
+            @ConfigEntry(description = "Enable doppler effect for sounds")
+            var enableDopplerEffect = true
+
+            @ConfigEntry(description = "Doppler effect scaler. 1.0 for realistic; smaller value results in weaker doppler effect")
+            var dopplerEffectScale = 1.0 / 20
+        }
         class CONNECTIVITY {
             @ConfigEntry(
                 description = "Enable client connectivity; increases client load, but allows for client-sided sealed space visuals, like occluding water in a submarine."
