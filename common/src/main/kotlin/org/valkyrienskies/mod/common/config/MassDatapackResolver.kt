@@ -371,11 +371,9 @@ object MassDatapackResolver : BlockStateInfoProvider {
                     val vsBlockStateInfo = map[BuiltInRegistries.BLOCK.getKey(blockState.block)]
 
                     // If overrideNoCollision is set to true in datapack, force it to have no collision shape
-                    collisionShape = if (vsBlockStateInfo?.noCollisionOverride ?: false) {
+                    if (vsBlockStateInfo?.noCollisionOverride ?: false) {
                         // Won't ever be null with an empty list
-                        vsCore.solidShapeUtils.generateShapeFromBoxes(mutableListOf())!!
-                    } else {
-                        collisionShape
+                        collisionShape = vsCore.solidShapeUtils.generateShapeFromBoxes(mutableListOf())!!
                     }
 
                     // Create new solid block state
