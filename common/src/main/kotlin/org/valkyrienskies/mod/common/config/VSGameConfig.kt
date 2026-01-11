@@ -22,6 +22,9 @@ object VSGameConfig {
         @ConfigCategory(title = "Block Tint")
         val BlockTinting = BLOCKTINT()
 
+        @ConfigCategory(title = "Connectivity")
+        val Connectivity = CONNECTIVITY()
+
         @ConfigEntry(description = "Renders the VS2 debug HUD with TPS")
         var renderDebugText = false
 
@@ -47,6 +50,13 @@ object VSGameConfig {
                 description = "Partly fixes the block tinting issue with blocks on ships"
             )
             var fixBlockTinting = false
+        }
+
+        class CONNECTIVITY {
+            @ConfigEntry(
+                description = "Enable client connectivity; increases client load, but allows for client-sided sealed space visuals, like occluding water in a submarine."
+            )
+            var enableClientConnectivity = true
         }
 
         @ConfigEntry(
