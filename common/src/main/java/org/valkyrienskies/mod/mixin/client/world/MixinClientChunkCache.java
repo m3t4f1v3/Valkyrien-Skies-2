@@ -1,7 +1,11 @@
 package org.valkyrienskies.mod.mixin.client.world;
 
+import static org.valkyrienskies.mod.common.ValkyrienSkiesMod.getApi;
+import static org.valkyrienskies.mod.common.ValkyrienSkiesMod.getVsCore;
+
 import io.netty.util.collection.LongObjectHashMap;
 import io.netty.util.collection.LongObjectMap;
+import java.util.ArrayList;
 import java.util.function.Consumer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientChunkCache;
@@ -12,6 +16,9 @@ import net.minecraft.network.protocol.game.ClientboundLevelChunkPacketData.Block
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.chunk.ChunkStatus;
 import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.LevelChunkSection;
+import org.joml.Vector3i;
+import org.joml.Vector3ic;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -22,7 +29,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.valkyrienskies.core.api.ships.ClientShip;
 import org.valkyrienskies.core.api.ships.properties.ChunkClaim;
+import org.valkyrienskies.core.internal.world.VsiClientShipWorld;
+import org.valkyrienskies.core.internal.world.chunks.VsiTerrainUpdate;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
+import org.valkyrienskies.mod.common.config.VSGameConfig;
 import org.valkyrienskies.mod.compat.SodiumCompat;
 import org.valkyrienskies.mod.compat.VSRenderer;
 import org.valkyrienskies.mod.mixin.ValkyrienCommonMixinConfigPlugin;
@@ -72,6 +82,32 @@ public abstract class MixinClientChunkCache implements ClientChunkCacheDuck {
                 vs$shipChunks.put(chunkPosLong, worldChunk);
             }
 
+            VsiClientShipWorld clientShipWorld = VSGameUtilsKt.getShipObjectWorld(level);
+            if (clientShipWorld != null && VSGameConfig.CLIENT.getConnectivity().getEnableClientConnectivity()) {
+                ArrayList<VsiTerrainUpdate> voxelShapeUpdates = new ArrayList<>();
+
+                final LevelChunkSection[] chunkSections = worldChunk.getSections();
+
+                for (int sectionY = 0; sectionY < chunkSections.length; sectionY++) {
+                    final LevelChunkSection chunkSection = chunkSections[sectionY];
+                    final Vector3ic chunkPos =
+                        new Vector3i(pos.x, worldChunk.getSectionYFromSectionIndex(sectionY), pos.z);
+
+                    if (chunkSection != null && !chunkSection.hasOnlyAir()) {
+                        // Add this chunk to the ground rigid body
+                        final VsiTerrainUpdate voxelShapeUpdate =
+                            VSGameUtilsKt.toDenseVoxelUpdate(chunkSection, chunkPos);
+                        voxelShapeUpdates.add(voxelShapeUpdate);
+                        // endregion
+                    } else {
+                        final VsiTerrainUpdate emptyVoxelShapeUpdate = getVsCore()
+                            .newEmptyVoxelShapeUpdate(chunkPos.x(), chunkPos.y(), chunkPos.z(), true);
+                        voxelShapeUpdates.add(emptyVoxelShapeUpdate);
+                    }
+                }
+                clientShipWorld.addTerrainUpdates(getApi().getDimensionId(level), voxelShapeUpdates);
+            }
+
             this.level.onChunkLoaded(pos);
             if (ValkyrienCommonMixinConfigPlugin.getVSRenderer() == VSRenderer.SODIUM) {
                 // getVSRenderer() only returns SODIUM if the mod is installed.
@@ -97,15 +133,30 @@ public abstract class MixinClientChunkCache implements ClientChunkCacheDuck {
     @Inject(method = "drop", at = @At("HEAD"), cancellable = true)
     public void preUnload(final int chunkX, final int chunkZ, final CallbackInfo ci) {
         if (VSGameUtilsKt.isChunkInShipyard(level, chunkX, chunkZ)) {
-            vs$shipChunks.remove(ChunkPos.asLong(chunkX, chunkZ));
+            LevelChunk worldChunk = vs$shipChunks.remove(ChunkPos.asLong(chunkX, chunkZ));
             if (ValkyrienCommonMixinConfigPlugin.getVSRenderer() != VSRenderer.SODIUM) {
                 ((IVSViewAreaMethods) ((LevelRendererAccessor) ((ClientLevelAccessor) level).getLevelRenderer()).getViewArea())
                     .unloadChunk(chunkX, chunkZ);
             } else {
                 SodiumCompat.onChunkRemoved(this.level, chunkX, chunkZ);
             }
-            ci.cancel();
+            VsiClientShipWorld clientShipWorld = VSGameUtilsKt.getShipObjectWorld(level);
+            if (clientShipWorld != null && VSGameConfig.CLIENT.getConnectivity().getEnableClientConnectivity()) {
+
+                ArrayList<VsiTerrainUpdate> voxelShapeUpdates = new ArrayList<>();
+                final LevelChunkSection[] chunkSections = worldChunk.getSections();
+
+                for (int sectionY = 0; sectionY < chunkSections.length; sectionY++) {
+                    final LevelChunkSection chunkSection = chunkSections[sectionY];
+                    final Vector3ic chunkPos =
+                        new Vector3i(chunkX, worldChunk.getSectionYFromSectionIndex(sectionY), chunkZ);
+
+                    voxelShapeUpdates.add(getVsCore().newDeleteTerrainUpdate(chunkPos.x(), chunkPos.y(), chunkPos.z()));
+                }
+                clientShipWorld.addTerrainUpdates(getApi().getDimensionId(level), voxelShapeUpdates);
+            }
         }
+        ci.cancel();
     }
 
     @Unique

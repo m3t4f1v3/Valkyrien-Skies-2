@@ -12,12 +12,9 @@ import net.minecraft.commands.Commands.argument
 import net.minecraft.commands.Commands.literal
 import net.minecraft.commands.SharedSuggestionProvider
 import net.minecraft.commands.arguments.coordinates.Vec3Argument
-import net.minecraft.core.BlockPos
 import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.Component.translatable
-import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.entity.Entity
-import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.phys.BlockHitResult
 import net.minecraftforge.common.ForgeConfigSpec
 import org.valkyrienskies.core.api.ships.ServerShip
@@ -27,6 +24,7 @@ import org.valkyrienskies.core.impl.api_impl.config.ConfigPhysicsBackendType
 import org.valkyrienskies.core.impl.config.VSCoreConfig
 import org.valkyrienskies.core.internal.ShipTeleportData
 import org.valkyrienskies.mod.common.BlockStateInfo
+import org.valkyrienskies.mod.common.assembly.ShipAssembler
 import org.valkyrienskies.mod.common.config.VSConfigUpdater
 import org.valkyrienskies.mod.common.config.VSGameConfig
 import org.valkyrienskies.mod.common.dimensionId
@@ -44,6 +42,12 @@ object VSCommands {
     private const val REMASSED_SHIP_FAIL_MESSAGE = "command.valkyrienskies.remass.fail"
     private const val SET_SHIP_STATIC_SUCCESS_MESSAGE = "command.valkyrienskies.set_static.success"
     private const val TELEPORT_SHIP_SUCCESS_MESSAGE = "command.valkyrienskies.teleport.success"
+    private const val DELETED_ONE_SHIP_MESSAGE = "command.valkyrienskies.delete.success_one"
+    private const val REMASSED_ONE_SHIP_MESSAGE = "command.valkyrienskies.remass.success_one"
+    private const val SET_ONE_SHIP_STATIC_SUCCESS_MESSAGE = "command.valkyrienskies.set_static.success_one"
+    private const val TELEPORT_ONE_SHIP_SUCCESS_MESSAGE = "command.valkyrienskies.teleport.success_one"
+
+
     private const val GET_SHIP_SUCCESS_MESSAGE = "command.valkyrienskies.get_ship.success"
     private const val GET_SHIP_FAIL_MESSAGE = "command.valkyrienskies.get_ship.fail"
     const val VECTOR_ARG_FAIL_MESSAGE = "command.valkyrienskies.vector_arg.fail"
@@ -431,26 +435,17 @@ object VSCommands {
     fun deleteShip(context: CommandContext<CommandSourceStack>, deleteBlocks: Boolean = false): Int {
         val r = ShipArgument.getShips(context, "ships").toList() as List<ServerShip>
 
-        if (deleteBlocks) {
-            for (ship in r) {
-                var level = context.source.level
-                if (level is ServerLevel) {
-                    val aabb = ship.shipAABB ?: continue
-                    // There has to be a better way to do this...
-                    for (x in aabb.minX()..aabb.maxX()) {
-                        for (y in aabb.minY()..aabb.maxY()) {
-                            for (z in aabb.minZ()..aabb.maxZ()) {
-                                // Not sure if 2 is what we want, but its what /fill uses
-                                level.setBlock(BlockPos(x, y, z), Blocks.AIR.defaultBlockState(), 2)
-                            }
-                        }
-                    }
-                }
-            }
+        val deletedShips = r.map {
+            ship -> ShipAssembler.deleteShip(context.source.level, ship, deleteBlocks = true, dropBlocks = false)
         }
 
-        vsCore.deleteShips(context.source.shipWorld as ServerShipWorld, r)
-        context.source.sendVSMessage(translatable(DELETED_SHIPS_MESSAGE, r.size))
+        context.source.sendVSMessage(
+            when (deletedShips.sum()) {
+                0 -> { Component.translatable(GET_SHIP_FAIL_MESSAGE)}
+                1 -> { Component.translatable(DELETED_ONE_SHIP_MESSAGE, r[0].slug)}
+                else -> { Component.translatable(DELETED_SHIPS_MESSAGE, r.size) }
+            }
+        )
         return r.size
     }
 

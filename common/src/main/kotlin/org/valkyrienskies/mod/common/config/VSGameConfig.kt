@@ -24,6 +24,9 @@ object VSGameConfig {
 
         @ConfigCategory(title = "SoundEffect")
         val SoundEffect = SOUNDEFFECT()
+        
+        @ConfigCategory(title = "Connectivity")
+        val Connectivity = CONNECTIVITY()
 
         @ConfigEntry(description = "Renders the VS2 debug HUD with TPS")
         var renderDebugText = false
@@ -58,6 +61,12 @@ object VSGameConfig {
 
             @ConfigEntry(description = "Doppler effect scaler. 1.0 for realistic; smaller value results in weaker doppler effect")
             var dopplerEffectScale = 1.0 / 20
+        }
+        class CONNECTIVITY {
+            @ConfigEntry(
+                description = "Enable client connectivity; increases client load, but allows for client-sided sealed space visuals, like occluding water in a submarine."
+            )
+            var enableClientConnectivity = true
         }
 
         @ConfigEntry(

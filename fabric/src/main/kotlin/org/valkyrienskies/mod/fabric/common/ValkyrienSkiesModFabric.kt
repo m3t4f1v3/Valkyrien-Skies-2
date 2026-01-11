@@ -43,6 +43,7 @@ import org.valkyrienskies.mod.common.ValkyrienSkiesMod.PHYSICS_ENTITY_CREATOR_IT
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod.SHIP_ASSEMBLER_ITEM
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod.SHIP_CREATOR_ITEM
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod.SHIP_CREATOR_ITEM_SMALLER
+import org.valkyrienskies.mod.common.ValkyrienSkiesMod.SHIP_REMOVER_ITEM
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod.TEST_ANTIGRAV
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod.TEST_CHAIR
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod.TEST_FLAP
@@ -74,6 +75,7 @@ import org.valkyrienskies.mod.common.item.ConnectionCheckerItem
 import org.valkyrienskies.mod.common.item.PhysicsEntityCreatorItem
 import org.valkyrienskies.mod.common.item.ShipAssemblerItem
 import org.valkyrienskies.mod.common.item.ShipCreatorItem
+import org.valkyrienskies.mod.common.item.ShipRemoverItem
 import org.valkyrienskies.mod.compat.LoadedMods
 import org.valkyrienskies.mod.compat.flywheel.FlywheelCompat
 import org.valkyrienskies.mod.compat.flywheel.ShipEmbeddingManager
@@ -118,6 +120,9 @@ class ValkyrienSkiesModFabric : ModInitializer {
             Properties(),
             { 1.0 },
             { VSGameConfig.SERVER.minScaling }
+        )
+        ValkyrienSkiesMod.SHIP_REMOVER_ITEM = ShipRemoverItem(
+            Properties()
         )
         ValkyrienSkiesMod.SHIP_ASSEMBLER_ITEM = ShipAssemblerItem(Properties())
         ValkyrienSkiesMod.AREA_ASSEMBLER_ITEM = AreaAssemblerItem(
@@ -190,6 +195,10 @@ class ValkyrienSkiesModFabric : ModInitializer {
             ValkyrienSkiesMod.SHIP_CREATOR_ITEM_SMALLER
         )
         Registry.register(
+            BuiltInRegistries.ITEM, ResourceLocation(ValkyrienSkiesMod.MOD_ID, "ship_remover"),
+            ValkyrienSkiesMod.SHIP_REMOVER_ITEM
+        )
+        Registry.register(
             BuiltInRegistries.ITEM, ResourceLocation(ValkyrienSkiesMod.MOD_ID, "physics_entity_creator"),
             ValkyrienSkiesMod.PHYSICS_ENTITY_CREATOR_ITEM
         )
@@ -233,6 +242,7 @@ class ValkyrienSkiesModFabric : ModInitializer {
             event.accept(TEST_ANTIGRAV.asItem())
             event.accept(CONNECTION_CHECKER_ITEM)
             event.accept(SHIP_CREATOR_ITEM)
+            event.accept(SHIP_REMOVER_ITEM)
             event.accept(SHIP_ASSEMBLER_ITEM)
             event.accept(SHIP_CREATOR_ITEM_SMALLER)
             event.accept(AREA_ASSEMBLER_ITEM)

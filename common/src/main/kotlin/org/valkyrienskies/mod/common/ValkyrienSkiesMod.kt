@@ -59,6 +59,7 @@ object ValkyrienSkiesMod {
     lateinit var TEST_ANTIGRAV: Block
     lateinit var CONNECTION_CHECKER_ITEM: Item
     lateinit var SHIP_CREATOR_ITEM: Item
+    lateinit var SHIP_REMOVER_ITEM: Item
     lateinit var SHIP_ASSEMBLER_ITEM: Item
     lateinit var SHIP_CREATOR_ITEM_SMALLER: Item
     lateinit var AREA_ASSEMBLER_ITEM: Item
@@ -136,7 +137,7 @@ object ValkyrienSkiesMod {
         }
 
         core.shipLoadEvent.on { event ->
-            event.ship.setAttachment(SplittingDisablerAttachment(false))
+            event.ship.setAttachment(SplittingDisablerAttachment(true))
         }
 
         core.physTickEvent.on { event ->

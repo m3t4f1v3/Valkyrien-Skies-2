@@ -37,7 +37,7 @@ object EntityDragger {
      */
     fun dragEntitiesWithShips(entities: Iterable<Entity>, preTick: Boolean = false) {
         for (entity in entities) {
-            val entityDraggingInformation = (entity as IEntityDraggingInformationProvider).draggingInformation
+            val entityDraggingInformation = (entity as? IEntityDraggingInformationProvider)?.draggingInformation ?: continue
 
             var dragTheEntity = false
             var addedMovement: Vector3dc? = null
@@ -172,6 +172,18 @@ object EntityDragger {
             entityDraggingInformation.ticksSinceStoodOnShip++
             entityDraggingInformation.mountedToEntity = entity.vehicle != null
         }
+    }
+
+    /**
+     * Checks if the entity is a ServerPlayer and has a [serverRelativePlayerPosition] set. If it does, returns that, which is in ship space; otherwise, returns worldspace entity position.
+     */
+    fun Entity.serversidePosition(): Vec3 {
+        if (this is ServerPlayer && this is IEntityDraggingInformationProvider && this.draggingInformation.isEntityBeingDraggedByAShip()) {
+            if (this.draggingInformation.serverRelativePlayerPosition != null) {
+                return this.draggingInformation.serverRelativePlayerPosition!!.toMinecraft()
+            }
+        }
+        return this.position()
     }
 
     /**
