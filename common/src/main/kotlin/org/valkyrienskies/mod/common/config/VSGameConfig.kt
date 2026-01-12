@@ -22,8 +22,17 @@ object VSGameConfig {
         @ConfigCategory(title = "Block Tint")
         val BlockTinting = BLOCKTINT()
 
+        @ConfigCategory(title = "SoundEffect")
+        val SoundEffect = SOUNDEFFECT()
+        
+        @ConfigCategory(title = "Connectivity")
+        val Connectivity = CONNECTIVITY()
+
         @ConfigEntry(description = "Renders the VS2 debug HUD with TPS")
         var renderDebugText = false
+
+        @ConfigEntry(description = "Grace period before a player's camera is no longer considered to be within a sealed area")
+        var sealedAreaCameraGracePeriod = 2
 
         @ConfigEntry(
             description = "Recommend ship slugs in mc commands where player names could be used ex. /tp ship-name wich could pollute user autocomplete"
@@ -47,6 +56,20 @@ object VSGameConfig {
                 description = "Partly fixes the block tinting issue with blocks on ships"
             )
             var fixBlockTinting = false
+        }
+
+        class SOUNDEFFECT {
+            @ConfigEntry(description = "Enable doppler effect for sounds")
+            var enableDopplerEffect = true
+
+            @ConfigEntry(description = "Doppler effect scaler. 1.0 for realistic; smaller value results in weaker doppler effect")
+            var dopplerEffectScale = 1.0 / 20
+        }
+        class CONNECTIVITY {
+            @ConfigEntry(
+                description = "Enable client connectivity; increases client load, but allows for client-sided sealed space visuals, like occluding water in a submarine."
+            )
+            var enableClientConnectivity = true
         }
 
         @ConfigEntry(
@@ -145,6 +168,12 @@ object VSGameConfig {
                 "than the interact distance check allows."
         )
         var enableInteractDistanceChecks = true
+
+        @ConfigEntry(description = "If true, enables buoyancy from serverside air pockets.")
+        var enablePocketBuoyancy = true
+
+        @ConfigEntry(description = "Buoyancy factor added per cubic meter of air pocket inside a ship")
+        var buoyancyFactorPerPocketVolume = 0.05 // per cubic meter
 
         @ConfigEntry(
             description = "If true, teleportation into the shipyard is redirected to " +

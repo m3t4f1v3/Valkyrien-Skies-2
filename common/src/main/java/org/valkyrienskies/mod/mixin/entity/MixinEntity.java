@@ -2,10 +2,14 @@ package org.valkyrienskies.mod.mixin.entity;
 
 import static org.valkyrienskies.mod.common.util.VectorConversionsMCKt.toJOML;
 
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import java.util.Set;
 import net.minecraft.CrashReport;
 import net.minecraft.CrashReportCategory;
 import net.minecraft.ReportedException;
 import net.minecraft.core.BlockPos;
+import net.minecraft.tags.TagKey;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
@@ -13,6 +17,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
@@ -20,6 +25,7 @@ import org.jetbrains.annotations.NotNull;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
 import org.joml.primitives.AABBd;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -32,6 +38,7 @@ import org.valkyrienskies.core.api.ships.ClientShip;
 import org.valkyrienskies.core.api.ships.LoadedShip;
 import org.valkyrienskies.core.api.ships.Ship;
 import org.valkyrienskies.core.api.ships.properties.ShipTransform;
+import org.valkyrienskies.core.api.world.ShipWorld;
 import org.valkyrienskies.mod.common.entity.ShipMountedToData;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.util.EntityDragger;
@@ -46,6 +53,11 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider 
     @Unique
     private final EntityDraggingInformation draggingInformation = new EntityDraggingInformation();
 
+    @Unique
+    private boolean vs$isInSealedArea = false;
+    @Unique
+    private BlockPos vs$lastCheckedSealedPos = BlockPos.ZERO;
+
     @Redirect(
         method = "pick",
         at = @At(
@@ -55,6 +67,91 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider 
     )
     public BlockHitResult addShipsToRaycast(final Level receiver, final ClipContext ctx) {
         return RaycastUtilsKt.clipIncludeShips(receiver, ctx);
+    }
+
+    //todo: still interact with water on a ship when in a sealed pocket
+    @Inject(
+        method = "baseTick", at = @At("HEAD")
+    )
+    private void onBaseTick(CallbackInfo ci) {
+        if (this.level != null) {
+            if (!this.isRemoved()) {
+                Entity entity = (Entity) (Object) this;
+                Vec3 relativePosition = Vec3.ZERO;
+                if (this.getDraggingInformation().isEntityBeingDraggedByAShip()) {
+                    relativePosition = EntityDragger.INSTANCE.serversidePosition(entity);
+                } else if (VSGameUtilsKt.getShipMountedTo(entity) != null) {
+                    relativePosition = VectorConversionsMCKt.toMinecraft(VSGameUtilsKt.getShipMountedToData(entity, null).getMountPosInShip().add(0.0, (double) entity.getEyeHeight(entity.getPose()), 0.0, new Vector3d()));
+                }
+                boolean isInSealedArea = false;
+
+                if (!isInSealedArea) {
+                    if (relativePosition != Vec3.ZERO && VSGameUtilsKt.isBlockInShipyard(level, BlockPos.containing(relativePosition))) {
+                        if (BlockPos.containing(relativePosition).equals(vs$lastCheckedSealedPos)) {
+                            isInSealedArea = vs$isInSealedArea();
+                        } else {
+                            isInSealedArea = VSGameUtilsKt.isPositionSealed(level,
+                                BlockPos.containing(relativePosition));
+                            vs$lastCheckedSealedPos = BlockPos.containing(relativePosition);
+                        }
+                    } else {
+                        if (!VSGameUtilsKt.isBlockInShipyard(level, BlockPos.containing(relativePosition))) {
+                            // find overlapping ships
+                            ShipWorld shipWorld = VSGameUtilsKt.getShipObjectWorld(level);
+                            for (Ship ship : shipWorld.getAllShips().getIntersecting(VectorConversionsMCKt.toJOML(entity.getBoundingBox().inflate(1.0)), VSGameUtilsKt.getDimensionId(level))) {
+                                relativePosition = VectorConversionsMCKt.toMinecraft(ship.getWorldToShip().transformPosition(VectorConversionsMCKt.toJOML(entity.position()), new Vector3d()));
+                                if (VSGameUtilsKt.isPositionSealed(level, BlockPos.containing(relativePosition))) {
+                                    vs$lastCheckedSealedPos = BlockPos.containing(relativePosition);
+                                    isInSealedArea = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                vs$setInSealedArea(isInSealedArea);
+            }
+        }
+    }
+
+    @WrapMethod(
+        method = "updateFluidOnEyes"
+    )
+    private void onFluidOnEyes(Operation<Void> original) {
+        if (vs$isInSealedArea()) {
+            this.wasEyeInWater = false;
+            this.fluidOnEyes.clear();
+        }
+        original.call();
+    }
+
+    @WrapMethod(method = "updateSwimming")
+    private void onUpdateSwimming(Operation<Void> original) {
+        if (vs$isInSealedArea) {
+            this.wasTouchingWater = false;
+            this.setSwimming(false);
+            return;
+        }
+        original.call();
+    }
+
+    @Inject(
+        method = "updateInWaterStateAndDoWaterCurrentPushing",
+        at = @At("HEAD"),
+        cancellable = true
+    )
+    private void onUpdateInWaterStateAndDoWaterCurrentPushing(CallbackInfo ci) {
+        if (vs$isInSealedArea) {
+            this.wasTouchingWater = false;
+            ci.cancel();
+        }
+    }
+
+    @WrapMethod(method = "isInBubbleColumn")
+    private boolean onIsInBubbleColumn(Operation<Boolean> original) {
+        if (vs$isInSealedArea) return false;
+        return original.call();
     }
 
     @Inject(
@@ -295,6 +392,22 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider 
     @Shadow
     public abstract void push(double d, double e, double f);
 
+    @Shadow
+    public abstract boolean isRemoved();
+
+    @Shadow
+    protected boolean wasTouchingWater;
+
+    @Shadow
+    protected boolean wasEyeInWater;
+
+    @Shadow
+    @Final
+    private Set<TagKey<Fluid>> fluidOnEyes;
+
+    @Shadow
+    public abstract void setSwimming(boolean bl);
+
     @Override
     @NotNull
     public EntityDraggingInformation getDraggingInformation() {
@@ -304,6 +417,16 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider 
     @Override
     public boolean vs$shouldDrag() {
         return true;
+    }
+
+    @Override
+    public boolean vs$isInSealedArea() {
+        return vs$isInSealedArea;
+    }
+
+    @Override
+    public void vs$setInSealedArea(final boolean inSealedArea) {
+        this.vs$isInSealedArea = inSealedArea;
     }
 
     @Override

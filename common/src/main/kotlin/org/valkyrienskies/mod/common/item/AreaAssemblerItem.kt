@@ -54,6 +54,7 @@ class AreaAssemblerItem(
                         val lowerCorner = BlockPos(blockAABB.minX, blockAABB.minY, blockAABB.minZ)
                         val upperCorner = BlockPos(blockAABB.maxX, blockAABB.maxY, blockAABB.maxZ)
 
+                        ctx.player?.sendSystemMessage(Component.translatable("command.valkyrienskies.shipify.success_one", ship.slug))
                         ShipAssembler.assembleToShip(level, BlockPos.betweenClosed(lowerCorner, upperCorner).map{ it.mutable() }.toSet(), 1.0)
                     }
                     item.tag!!.remove("firstPosX")

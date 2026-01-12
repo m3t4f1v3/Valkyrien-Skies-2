@@ -432,7 +432,8 @@
   {
     "block": "create:track",
     "mass": 1500.0,
-    "friction": 0.5
+    "friction": 0.5,
+    "no_collision": true
   },
   {
     "block": "create:fake_track",
@@ -547,6 +548,7 @@
   {
     "block": "create:redstone_link",
     "mass": 100.0,
+    "no_collision": true,
     "friction": 0.4
   },
   {

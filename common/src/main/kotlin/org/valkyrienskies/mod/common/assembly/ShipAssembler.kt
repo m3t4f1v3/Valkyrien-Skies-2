@@ -6,6 +6,7 @@ import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.Clearable
 import net.minecraft.world.level.LevelReader
 import net.minecraft.world.level.ServerLevelAccessor
+import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlaceSettings
@@ -19,6 +20,9 @@ import org.joml.Vector3i
 import org.valkyrienskies.core.api.ships.ServerShip
 import org.valkyrienskies.core.api.ships.properties.ShipId
 import org.valkyrienskies.core.api.util.GameTickOnly
+import org.valkyrienskies.mod.api.toJOML
+import org.valkyrienskies.mod.api.toMinecraft
+import org.valkyrienskies.mod.common.BlockStateInfo.onSetBlock
 import org.valkyrienskies.mod.common.dimensionId
 import org.valkyrienskies.mod.common.getShipManagingPos
 import org.valkyrienskies.mod.common.shipObjectWorld
@@ -152,6 +156,27 @@ object ShipAssembler {
         newShip.isStatic = false
 
         return newShip
+    }
+
+    fun deleteShip(level: ServerLevel, ship: ServerShip, deleteBlocks: Boolean, dropBlocks: Boolean): Int {
+        if (deleteBlocks) {
+            val aabb = ship.shipAABB ?: return 0
+            // There has to be a better way to do this...
+            for (x in aabb.minX()..aabb.maxX()) {
+                for (y in aabb.minY()..aabb.maxY()) {
+                    for (z in aabb.minZ()..aabb.maxZ()) {
+                        // Not sure if 2 is what we want, but its what /fill uses
+                        if (dropBlocks)
+                            level.destroyBlock(BlockPos(x, y, z), true)
+                        else
+                            level.setBlock(BlockPos(x, y, z), Blocks.AIR.defaultBlockState(), 2)
+                    }
+                }
+            }
+        }
+
+        vsCore.deleteShips(level.shipObjectWorld, listOf<ServerShip>(ship))
+        return 1
     }
 
     class ICopyableProcessor(

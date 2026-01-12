@@ -53,7 +53,7 @@ class ShipCreatorItem(
                 // Move the block from the world to a ship
                 level.relocateBlock(blockPos, centerPos, true, serverShip, NONE)
 
-                ctx.player?.sendSystemMessage(Component.literal("SHIPIFIED!"))
+                ctx.player?.sendSystemMessage(Component.translatable("command.valkyrienskies.shipify.success_one", serverShip.slug))
                 if (parentShip != null) {
                     // Compute the ship transform
                     val newShipPosInWorld =

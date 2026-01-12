@@ -32,6 +32,7 @@ import org.valkyrienskies.core.api.ships.ServerShip
 import org.valkyrienskies.core.api.ships.Ship
 import org.valkyrienskies.core.api.util.functions.DoubleTernaryConsumer
 import org.valkyrienskies.core.api.world.LevelYRange
+import org.valkyrienskies.core.api.world.connectivity.ConnectionStatus
 import org.valkyrienskies.core.api.world.properties.DimensionId
 import org.valkyrienskies.core.internal.world.VsiPlayer
 import org.valkyrienskies.core.internal.world.VsiServerShipWorld
@@ -42,7 +43,7 @@ import org.valkyrienskies.mod.common.ValkyrienSkiesMod.ASSEMBLE_BLACKLIST
 import org.valkyrienskies.mod.common.entity.ShipMountedToData
 import org.valkyrienskies.mod.common.entity.ShipMountedToDataProvider
 import org.valkyrienskies.mod.common.util.DimensionIdProvider
-import org.valkyrienskies.mod.common.util.EntityDragger.serversideEyePosition
+import org.valkyrienskies.mod.common.util.EntityDragger.serversidePosition
 import org.valkyrienskies.mod.common.util.MinecraftPlayer
 import org.valkyrienskies.mod.common.util.set
 import org.valkyrienskies.mod.common.util.toJOML
@@ -126,10 +127,10 @@ val Player.playerWrapper get() = (this as PlayerDuck).vs_getPlayer()
  * Like [Entity.squaredDistanceTo] except the destination is transformed into world coordinates if it is a ship
  */
 fun Entity.squaredDistanceToInclShips(x: Double, y: Double, z: Double): Double {
-    val eyePos = if (getShipMountedTo(this) != null) getShipMountedToData(
+    val pos = if (getShipMountedTo(this) != null) getShipMountedToData(
         this, null
-    )!!.mountPosInShip.toMinecraft() else this.serversideEyePosition()
-    return level().squaredDistanceBetweenInclShips(x, y, z, eyePos.x, eyePos.y - 1.0, eyePos.z)
+    )!!.mountPosInShip.toMinecraft() else this.serversidePosition()
+    return level().squaredDistanceBetweenInclShips(x, y, z, pos.x, pos.y, pos.z)
 }
 
 /**
@@ -523,6 +524,16 @@ fun getShipMountedToData(passenger: Entity, partialTicks: Float? = null): ShipMo
 
 fun getShipMountedTo(entity: Entity): LoadedShip? {
     return getShipMountedToData(entity)?.shipMountedTo
+}
+
+fun Level.isPositionSealed(pos: BlockPos): Boolean {
+    val result = this.shipObjectWorld.isIsolatedAir(pos.x, pos.y, pos.z, this.dimensionId)
+    return result == ConnectionStatus.DISCONNECTED
+}
+
+fun Level.isPositionMaybeSealed(pos: BlockPos): Boolean {
+    val result = this.shipObjectWorld.isIsolatedAir(pos.x, pos.y, pos.z, this.dimensionId)
+    return result == ConnectionStatus.DISCONNECTED || result == ConnectionStatus.UNKNOWN
 }
 
 /**

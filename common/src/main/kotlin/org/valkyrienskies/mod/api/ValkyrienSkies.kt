@@ -101,6 +101,9 @@ fun Level?.getShipById(id: ShipId): Ship? =
 fun Level?.isBlockInShipyard(blockX: Int, blockY: Int, blockZ: Int): Boolean =
     isChunkInShipyard(blockX shr 4, blockZ shr 4)
 
+fun Level?.isBlockInShipyard(pos: BlockPos): Boolean =
+    isBlockInShipyard(pos.x, pos.y, pos.z)
+
 fun Level?.isChunkInShipyard(chunkX: Int, chunkZ: Int): Boolean =
     vsApi.isChunkInShipyard(this, chunkX, chunkZ)
 
