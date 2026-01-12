@@ -53,6 +53,7 @@
   "command.valkyrienskies.air_values.temperature": "At y: %s, temperature is %s",
   "command.valkyrienskies.air_values.pressure": "At y: %s, pressure is %s",
   "command.valkyrienskies.get_gravity": "The gravity in %s is %s",
+  "command.valkyrienskies.set_splitting": "Set splitting to %s on %s ships",
 
   "misc.valkyrienskies.create.deployer_working_mode": "Ship Behaviour",
   "misc.valkyrienskies.create.deployer_working_mode.original": "Place on current ship",

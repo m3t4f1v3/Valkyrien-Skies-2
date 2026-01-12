@@ -21,6 +21,7 @@ import org.joml.Quaterniond
 import org.joml.Quaterniondc
 import org.joml.Vector3d
 import org.joml.Vector3dc
+import org.valkyrienskies.core.api.ships.LoadedServerShip
 import org.valkyrienskies.core.api.ships.ServerShip
 import org.valkyrienskies.core.api.world.ServerShipWorld
 import org.valkyrienskies.core.api.world.ShipWorld
@@ -35,6 +36,7 @@ import org.valkyrienskies.mod.common.config.VSGameConfig
 import org.valkyrienskies.mod.common.dimensionId
 import org.valkyrienskies.mod.common.getShipManagingPos
 import org.valkyrienskies.mod.common.shipObjectWorld
+import org.valkyrienskies.mod.common.util.SplittingDisablerAttachment
 import org.valkyrienskies.mod.common.util.toJOML
 import org.valkyrienskies.mod.common.vsCore
 import org.valkyrienskies.mod.mixin.feature.commands.ClientSuggestionProviderAccessor
@@ -64,6 +66,7 @@ object VSCommands {
     private const val AIR_VALUES_TEMPERATURE_MESSAGE = "command.valkyrienskies.air_values.temperature"
     private const val AIR_VALUES_PRESSURE_MESSAGE = "command.valkyrienskies.air_values.pressure"
     private const val GET_GRAVITY_MESSAGE = "command.valkyrienskies.get_gravity"
+    private const val SET_SPLITTING_MESSAGE = "command.valkyrienskies.set_splitting"
 
     private const val GET_SHIP_SUCCESS_MESSAGE = "command.valkyrienskies.get_ship.success"
     private const val GET_SHIP_FAIL_MESSAGE = "command.valkyrienskies.get_ship.fail"
@@ -123,7 +126,29 @@ object VSCommands {
                             }
                         )
                     )
-                ).then(literal("get-air").requires { it.hasPermission(VSGameConfig.SERVER.Commands.getAirValuesPerms)}
+                ).then(literal("set-splitting")
+                    .requires{ it.hasPermission(VSGameConfig.SERVER.Commands.deleteShipCommandPerms)}
+                    .then(argument("ships", ShipArgument.ships())
+                        .then(argument("enable", BoolArgumentType.bool())
+                            .executes {
+                                val ships = ShipArgument.getShips(it, "ships")
+                                val enable = BoolArgumentType.getBool(it, "enable")
+                                ships.forEach { ship ->
+                                    if (ship is LoadedServerShip) {
+                                        ship.setAttachment(SplittingDisablerAttachment(enable))
+                                    }
+                                }
+
+                                if (ships.isEmpty()) return@executes 0
+
+                                it.source.sendVSMessage(translatable(SET_SPLITTING_MESSAGE, enable, ships.size))
+
+                                1
+                            }
+                        )
+                    )
+                )
+                .then(literal("get-air").requires { it.hasPermission(VSGameConfig.SERVER.Commands.getAirValuesPerms)}
                     .executes {
                         val aero = it.source.level.shipObjectWorld.aerodynamicUtils
                         val height = it.source.position.y
