@@ -5,6 +5,7 @@ import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import java.util.Collections;
 import java.util.List;
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Explosion;
@@ -62,6 +63,9 @@ public abstract class MixinExplosion {
 
     @Unique
     private void doExplodeForce() {
+        if (this.level.isClientSide) {
+            return;
+        }
         // Custom forces
         final Vector3d originPos = new Vector3d(this.x, this.y, this.z);
         final BlockPos explodePos = BlockPos.containing(originPos.x(), originPos.y(), originPos.z());
@@ -76,7 +80,7 @@ public abstract class MixinExplosion {
                             ClipContext.Fluid.NONE, null));
                     if (result.getType() == Type.BLOCK) {
                         final BlockPos blockPos = result.getBlockPos();
-                        final LoadedServerShip ship = VSGameUtilsKt.getLoadedShipManagingPos(this.level, blockPos);
+                        final LoadedServerShip ship = VSGameUtilsKt.getLoadedShipManagingPos((ServerLevel) this.level, blockPos);
                         if (ship != null) {
                             final Vector3d forceVector =
                                 VectorConversionsMCKt.toJOML(
@@ -99,7 +103,7 @@ public abstract class MixinExplosion {
                                 //custom split logic for TNT specifically
                                 ValkyrienSkiesMod.splitHandler.split(level, blockPos.getX(), blockPos.getY(),
                                     blockPos.getZ(), level.getBlockState(blockPos), (ServerShip ship1) -> ValkyrienSkiesMod.getOrCreateGTPA(ship.getChunkClaimDimension()).applyWorldForceToModelPos(
-                                        ship1.getId(), forceVector, ship1.getTransform().getWorldToShip().transformPosition(ship.getTransform().getShipToWorld().transformPosition(modelPos)
+                                        ship1.getId(), forceVector, ship1.getTransform().getWorldToShip().transformPosition(ship.getTransform().getShipToWorld().transformPosition(modelPos, new Vector3d())
                                     )));
                             }
 
