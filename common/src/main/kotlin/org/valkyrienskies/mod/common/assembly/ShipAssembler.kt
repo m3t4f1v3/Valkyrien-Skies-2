@@ -132,8 +132,8 @@ object ShipAssembler {
         val shipChunkX = newShip.chunkClaim.xMiddle
         val shipChunkZ = newShip.chunkClaim.zMiddle
 
-        val worldChunkX = oldMin.x shr 4
-        val worldChunkZ = oldMin.z shr 4
+        val worldChunkX = oldMin.x.toInt() shr 4
+        val worldChunkZ = oldMin.z.toInt() shr 4
 
         val deltaX = worldChunkX - shipChunkX
         val deltaZ = worldChunkZ - shipChunkZ
