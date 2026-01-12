@@ -165,7 +165,7 @@ class SplitHandler(private val doEdges: Boolean, private val doCorners: Boolean)
 
                         for (component in toAssemble) {
                             val newShip = ShipAssembler.assembleToShip(level, component.map { it.toBlockPos() }.toSet(), 1.0)
-                            if (after != null) after(newShip)
+                            if (after != null) after.accept(newShip)
                         }
 
                         loadedShip?.getAttachment(SplittingDisablerAttachment::class.java)?.enableSplitting()
