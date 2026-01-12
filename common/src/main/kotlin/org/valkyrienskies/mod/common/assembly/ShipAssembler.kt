@@ -127,6 +127,32 @@ object ShipAssembler {
             SingleItemMap(oldId, oldCenter, Vector3d()),
             minB, maxB
         )
+        val newShip = level.shipObjectWorld.createNewShipAtBlock(Vector3i(worldOldCenter, RoundingMode.FLOOR), false, scale * oldScale, level.dimensionId)
+
+        val shipChunkX = newShip.chunkClaim.xMiddle
+        val shipChunkZ = newShip.chunkClaim.zMiddle
+
+        val worldChunkX = oldMin.x shr 4
+        val worldChunkZ = oldMin.z shr 4
+
+        val deltaX = worldChunkX - shipChunkX
+        val deltaZ = worldChunkZ - shipChunkZ
+
+        val chunksToBeUpdated = mutableMapOf<ChunkPos, Pair<ChunkPos, ChunkPos>>()
+        getDistinctChunksFromBlockPosSet(blocks).forEach { pos ->
+            val sourcePos = pos
+            val destPos = ChunkPos(sourcePos.x - deltaX, sourcePos.z - deltaZ)
+            chunksToBeUpdated[sourcePos] = Pair(sourcePos, destPos)
+        }
+        val chunkPairs = chunksToBeUpdated.values.toList()
+        val chunkPoses = chunkPairs.flatMap { it.toList() }
+        val chunkPosesJOML = chunkPoses.map { it.toJOML() }
+
+        level.players().forEach { player ->
+            with(vsCore.simplePacketNetworking) {
+                PacketStopChunkUpdates(chunkPosesJOML).sendToClient(player.playerWrapper)
+            }
+        }
 
         for (pos in blocks) {
             level.getBlockEntity(pos)?.let {
@@ -135,31 +161,6 @@ object ShipAssembler {
             level.setBlock(pos, Blocks.BARRIER.defaultBlockState(), Block.UPDATE_CLIENTS)
         }
         for (pos in blocks) {level.removeBlock(pos, true)}
-
-        val newShip = level.shipObjectWorld.createNewShipAtBlock(Vector3i(worldOldCenter, RoundingMode.FLOOR), false, scale * oldScale, level.dimensionId)
-
-        val shipChunkX = newShip.chunkClaim.xMiddle
-        val shipChunkZ = newShip.chunkClaim.zMiddle
-
-        val worldChunkX = centerBlock.x shr 4
-        val worldChunkZ = centerBlock.z shr 4
-
-        val deltaX = worldChunkX - shipChunkX
-        val deltaZ = worldChunkZ - shipChunkZ
-
-        val chunksToBeUpdated = mutableMapOf<ChunkPos, Pair<ChunkPos, ChunkPos>>()
-        getDistinctChunksFromBlockPosSet(blocks).forEach { pos ->
-            val sourcePos = pos
-            val destPos = ChunkPos(x - deltaX, z - deltaZ)
-            chunksToBeUpdated[sourcePos] = Pair(sourcePos, destPos)
-        }
-        val chunkPairs = chunksToBeUpdated.values.toList()
-        val chunkPoses = chunkPairs.flatMap { it.toList() }
-        val chunkPosesJOML = chunkPoses.map { it.toJOML() }
-
-        level.players().forEach { player ->
-            PacketStopChunkUpdates(chunkPosesJOML).sendToClient(player.playerWrapper)
-        }
 
         newShip.isStatic = oldShip == null || oldShip.isStatic
         val centerOfPlot = newShip.chunkClaim.getCenterBlockCoordinates(level.yRange, Vector3i())
@@ -202,7 +203,9 @@ object ShipAssembler {
             oldShip?.angularVelocity ?: Vector3d(),
             vsCore.newBodyTransform(
                 (oldShip?.shipToWorld?.transformPosition(shipPos) ?: shipPos).add(posOffset),
-                oldShip?.transform?.shipToWorldRotation ?: Quaterniond()
+                oldShip?.transform?.shipToWorldRotation ?: Quaterniond(),
+                Vector3d(scale, scale, scale),
+                centerOfShip
             )
         ))
         // level.shipObjectWorld.teleportShip(newShip, vsCore.newShipTeleportData(
@@ -221,13 +224,16 @@ object ShipAssembler {
         ) {
             // Once all the chunk updates are sent to players, we can tell them to restart chunk updates
             level.players().forEach { player ->
-                PacketRestartChunkUpdates(chunkPosesJOML).sendToClient(player.playerWrapper)
+                with (vsCore.simplePacketNetworking) {
+                    PacketRestartChunkUpdates(chunkPosesJOML).sendToClient(player.playerWrapper)
+                }
             }
             VSAssemblyEvents.onPasteAfterBlocksAreLoaded.emit(VSAssemblyEvents.OnPasteAfterBlocksAreLoaded(level, oldShip, newShip, Pair(oldCenter, centerOfShip), eventData))
             //force update connectivity because this new assemblyslop doesn't update it :(
             for (pos in chunkPoses) {
-                val chunkSections = level.getChunk(pos.x, pos.z)?.sections ?: continue
-                for (sectionY in 0 until level.getChunk(pos.x, pos.z).sectionsCount) {
+                val worldChunk = level.getChunk(pos.x, pos.z) ?: continue
+                val chunkSections = worldChunk.sections ?: continue
+                for (sectionY in 0 until worldChunk.sectionsCount) {
                     val sectionPos = Vector3i(pos.x, worldChunk.getSectionYFromSectionIndex(sectionY), pos.z)
                     val section = chunkSections[sectionY] ?: continue
                     if (section.hasOnlyAir()) continue
