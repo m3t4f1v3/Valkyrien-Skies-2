@@ -36,8 +36,11 @@ class ShipAssemblerItem(properties: Properties) : Item(properties) {
                     }
                 }
 
-                ctx.player?.sendSystemMessage(Component.translatable("command.valkyrienskies.shipify.success_one", shipData.slug))
-                ShipAssembler.assembleToShip(level, set.map { it.toBlockPos() }.toSet(), 1.0) }
+                val shipData = ShipAssembler.assembleToShip(level, set.map { it.toBlockPos() }.toSet(), 1.0)
+                ctx.player?.sendSystemMessage(
+                    Component.translatable("command.valkyrienskies.shipify.success_one", shipData.slug)
+                )
+            }
         }
 
         return super.useOn(ctx)

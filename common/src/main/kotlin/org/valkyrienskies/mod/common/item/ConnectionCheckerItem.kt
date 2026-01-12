@@ -1,7 +1,6 @@
 package org.valkyrienskies.mod.common.item
 
 import net.minecraft.ChatFormatting
-import net.minecraft.client.particle.DustParticle
 import net.minecraft.core.particles.DustParticleOptions
 import net.minecraft.network.chat.Component
 import net.minecraft.world.InteractionResult
