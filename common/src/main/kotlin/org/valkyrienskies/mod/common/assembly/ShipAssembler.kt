@@ -22,6 +22,7 @@ import org.valkyrienskies.core.api.ships.LoadedServerShip
 import org.valkyrienskies.core.api.ships.ServerShip
 import org.valkyrienskies.core.api.ships.properties.ShipId
 import org.valkyrienskies.core.api.util.GameTickOnly
+import org.valkyrienskies.core.internal.ships.VsiServerShip
 import org.valkyrienskies.mod.common.config.VSGameConfig
 import org.valkyrienskies.mod.common.dimensionId
 import org.valkyrienskies.mod.common.executeIf
@@ -77,21 +78,21 @@ object ShipAssembler {
     }
 
     @JvmStatic
+    private fun getDistinctChunksFromBlockPosSet(blocks: Set<BlockPos>): Set<ChunkPos> {
+        val chunkSet = hashSetOf<ChunkPos>()
+        for (blockPos in blocks) {
+            val chunkPos = ChunkPos(blockPos)
+            chunkSet.add(chunkPos)
+        }
+        return chunkSet
+    }
+
+    @JvmStatic
     @OptIn(GameTickOnly::class)
     fun assembleToShip(level: ServerLevel, blocks: Set<BlockPos>, scale: Double = 1.0): ServerShip {
         if (blocks.isEmpty()) throw RuntimeException("Empty set of blocks")
 
         val eventData = mutableMapOf<String, CompoundTag>()
-
-        val chunksToBeUpdated = mutableMapOf<ChunkPos, Pair<ChunkPos, ChunkPos>>()
-        blocks.forEachChunk { x, _, z, _ ->
-            val sourcePos = ChunkPos(x, z)
-            val destPos = ChunkPos(x - deltaX, z - deltaZ)
-            chunksToBeUpdated[sourcePos] = Pair(sourcePos, destPos)
-        }
-        val chunkPairs = chunksToBeUpdated.values.toList()
-        val chunkPoses = chunkPairs.flatMap { it.toList() }
-        val chunkPosesJOML = chunkPoses.map { it.toJOML() }
 
         val (minB, maxB) = findMinAndMax(blocks)
         val oldMin = minB.toJOMLD()
@@ -116,10 +117,6 @@ object ShipAssembler {
 
         val worldOldCenter = oldShip?.shipToWorld?.transformPosition(oldCenter.get(Vector3d())) ?: oldCenter.get(Vector3d())
 
-        level.players().forEach { player ->
-            PacketStopChunkUpdates(chunkPosesJOML).sendToClient(player.playerWrapper)
-        }
-
         VSAssemblyEvents.beforeCopy.emit(VSAssemblyEvents.BeforeCopy(level, oldMin, oldMax, oldCenter, oldShip, blocks, eventData))
 
         val template = StructureTemplate()
@@ -140,6 +137,30 @@ object ShipAssembler {
         for (pos in blocks) {level.removeBlock(pos, true)}
 
         val newShip = level.shipObjectWorld.createNewShipAtBlock(Vector3i(worldOldCenter, RoundingMode.FLOOR), false, scale * oldScale, level.dimensionId)
+
+        val shipChunkX = newShip.chunkClaim.xMiddle
+        val shipChunkZ = newShip.chunkClaim.zMiddle
+
+        val worldChunkX = centerBlock.x shr 4
+        val worldChunkZ = centerBlock.z shr 4
+
+        val deltaX = worldChunkX - shipChunkX
+        val deltaZ = worldChunkZ - shipChunkZ
+
+        val chunksToBeUpdated = mutableMapOf<ChunkPos, Pair<ChunkPos, ChunkPos>>()
+        getDistinctChunksFromBlockPosSet(blocks).forEach { pos ->
+            val sourcePos = pos
+            val destPos = ChunkPos(x - deltaX, z - deltaZ)
+            chunksToBeUpdated[sourcePos] = Pair(sourcePos, destPos)
+        }
+        val chunkPairs = chunksToBeUpdated.values.toList()
+        val chunkPoses = chunkPairs.flatMap { it.toList() }
+        val chunkPosesJOML = chunkPoses.map { it.toJOML() }
+
+        level.players().forEach { player ->
+            PacketStopChunkUpdates(chunkPosesJOML).sendToClient(player.playerWrapper)
+        }
+
         newShip.isStatic = oldShip == null || oldShip.isStatic
         val centerOfPlot = newShip.chunkClaim.getCenterBlockCoordinates(level.yRange, Vector3i())
 
@@ -176,12 +197,20 @@ object ShipAssembler {
             .sub(Vector3d(centerOfShip))
             .let { oldShip?.shipToWorld?.transformDirection(it) ?: it }
 
-        level.shipObjectWorld.teleportShip(newShip, vsCore.newShipTeleportData(
-            (oldShip?.shipToWorld?.transformPosition(shipPos) ?: shipPos).add(posOffset),
-            oldShip?.transform?.shipToWorldRotation ?: Quaterniond(),
+        (newShip as VsiServerShip).unsafeSetKinematics(vsCore.newBodyKinematics(
             oldShip?.velocity ?: Vector3d(),
             oldShip?.angularVelocity ?: Vector3d(),
+            vsCore.newBodyTransform(
+                (oldShip?.shipToWorld?.transformPosition(shipPos) ?: shipPos).add(posOffset),
+                oldShip?.transform?.shipToWorldRotation ?: Quaterniond()
+            )
         ))
+        // level.shipObjectWorld.teleportShip(newShip, vsCore.newShipTeleportData(
+        //     (oldShip?.shipToWorld?.transformPosition(shipPos) ?: shipPos).add(posOffset),
+        //     oldShip?.transform?.shipToWorldRotation ?: Quaterniond(),
+        //     oldShip?.velocity ?: Vector3d(),
+        //     oldShip?.angularVelocity ?: Vector3d(),
+        // ))
 
         newShip.isStatic = false
 
@@ -201,6 +230,7 @@ object ShipAssembler {
                 for (sectionY in 0 until level.getChunk(pos.x, pos.z).sectionsCount) {
                     val sectionPos = Vector3i(pos.x, worldChunk.getSectionYFromSectionIndex(sectionY), pos.z)
                     val section = chunkSections[sectionY] ?: continue
+                    if (section.hasOnlyAir()) continue
                     val update = section.toDenseVoxelUpdate(sectionPos)
                     level.shipObjectWorld.forceUpdateConnectivityChunk(
                         level.dimensionId,
