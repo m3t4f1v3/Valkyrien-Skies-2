@@ -22,6 +22,7 @@ import org.valkyrienskies.core.api.ships.LoadedServerShip
 import org.valkyrienskies.core.api.ships.ServerShip
 import org.valkyrienskies.core.api.ships.properties.ShipId
 import org.valkyrienskies.core.api.util.GameTickOnly
+import org.valkyrienskies.mod.common.config.VSGameConfig
 import org.valkyrienskies.mod.common.dimensionId
 import org.valkyrienskies.mod.common.executeIf
 import org.valkyrienskies.mod.common.getLoadedShipManagingPos
@@ -221,6 +222,10 @@ object ShipAssembler {
 
 
         return newShip
+    }
+    //legacy method to not break shit
+    fun assembleToShip(level: ServerLevel, blocks: List<BlockPos>, shouldSplit: Boolean = true): ServerShip {
+        return assembleToShip(level, blocks.toSet(), 1.0)
     }
 
     fun isValidShipBlock(state: BlockState?) : Boolean {
