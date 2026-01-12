@@ -8,6 +8,7 @@ import net.minecraft.world.level.LevelReader
 import net.minecraft.world.level.ServerLevelAccessor
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.block.Block
+import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlaceSettings
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureProcessor
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureProcessorType
@@ -19,8 +20,10 @@ import org.joml.Vector3i
 import org.valkyrienskies.core.api.ships.ServerShip
 import org.valkyrienskies.core.api.ships.properties.ShipId
 import org.valkyrienskies.core.api.util.GameTickOnly
+import org.valkyrienskies.mod.common.config.VSGameConfig
 import org.valkyrienskies.mod.common.dimensionId
 import org.valkyrienskies.mod.common.getShipManagingPos
+import org.valkyrienskies.mod.common.inAssemblyBlacklist
 import org.valkyrienskies.mod.common.shipObjectWorld
 import org.valkyrienskies.mod.common.util.toJOMLD
 import org.valkyrienskies.mod.common.vsCore
@@ -64,7 +67,7 @@ object ShipAssembler {
 
     @JvmStatic
     @OptIn(GameTickOnly::class)
-    fun assembleToShip(level: ServerLevel, blocks: Set<BlockPos>, scale: Double): ServerShip {
+    fun assembleToShip(level: ServerLevel, blocks: Set<BlockPos>, scale: Double = 1.0): ServerShip {
         if (blocks.isEmpty()) throw RuntimeException("Empty set of blocks")
 
         val eventData = mutableMapOf<String, CompoundTag>()
@@ -152,6 +155,14 @@ object ShipAssembler {
         newShip.isStatic = false
 
         return newShip
+    }
+
+    fun isValidShipBlock(state: BlockState?) : Boolean {
+        if (state == null) return false
+        if (state.isAir) return false
+        val block: Block = state.block
+        //assembly blacklist check
+        return !state.inAssemblyBlacklist()
     }
 
     fun deleteShip(level: ServerLevel, ship: ServerShip, deleteBlocks: Boolean, dropBlocks: Boolean): Int {
