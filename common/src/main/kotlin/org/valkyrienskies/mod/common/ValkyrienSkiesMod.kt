@@ -39,6 +39,7 @@ import org.valkyrienskies.mod.common.jackson.BlockPosKeyDeserializer
 import org.valkyrienskies.mod.common.jackson.BlockPosKeySerializer
 import org.valkyrienskies.mod.common.jackson.BlockPosSerializer
 import org.valkyrienskies.mod.common.networking.VSGamePackets
+import org.valkyrienskies.mod.common.util.BuoyancyHandlerAttachment
 import org.valkyrienskies.mod.common.util.GameToPhysicsAdapter
 import org.valkyrienskies.mod.common.util.ShipSettings
 import org.valkyrienskies.mod.common.util.SplitHandler
@@ -135,9 +136,11 @@ object ValkyrienSkiesMod {
         core.registerAttachment(SplittingDisablerAttachment::class.java) {
             useLegacySerializer()
         }
+        core.registerAttachment(BuoyancyHandlerAttachment::class.java)
 
         core.shipLoadEvent.on { event ->
             event.ship.setAttachment(SplittingDisablerAttachment(true))
+            event.ship.setAttachment(BuoyancyHandlerAttachment())
         }
 
         core.physTickEvent.on { event ->

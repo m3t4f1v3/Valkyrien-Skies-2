@@ -15,11 +15,14 @@ import net.minecraft.world.level.block.state.BlockState
 import org.valkyrienskies.core.api.ships.LoadedServerShip
 import org.valkyrienskies.core.api.ships.Ship
 import org.valkyrienskies.core.api.ships.Wing
+import org.valkyrienskies.core.api.world.connectivity.ConnectionStatus
 import org.valkyrienskies.core.internal.world.chunks.VsiBlockType
 import org.valkyrienskies.mod.common.block.WingBlock
 import org.valkyrienskies.mod.common.config.ConfigType
 import org.valkyrienskies.mod.common.config.MassDatapackResolver
+import org.valkyrienskies.mod.common.config.VSGameConfig
 import org.valkyrienskies.mod.common.hooks.VSGameEvents
+import org.valkyrienskies.mod.common.util.BuoyancyHandlerAttachment
 import java.util.function.IntFunction
 
 // Other mods can then provide weights and types based on their added content
@@ -141,6 +144,31 @@ object BlockStateInfo {
                 } else if (wasOldBlockWing) {
                     // Delete the old wing
                     wingManager.setWing(wingManager.getFirstWingGroupId(), x, y, z, null)
+                }
+
+                if (VSGameConfig.SERVER.enablePocketBuoyancy) {
+                    val buoyancyHandler = loadedShip.getAttachment(BuoyancyHandlerAttachment::class.java)
+                    val dimension = loadedShip.chunkClaimDimension
+                    var newTotal = 0.0
+                    val checked = mutableSetOf<BlockPos>()
+                    for (xa in -1..1) {
+                        for (ya in -1..1) {
+                            for (za in -1..1) {
+                                val checkPos = BlockPos(x + xa, y + ya, z + za)
+                                val status = level.shipObjectWorld.isIsolatedAir(checkPos.x, checkPos.y, checkPos.z, dimension)
+                                val alreadyChecked = checked.any { pos -> (pos == checkPos) || (level.shipObjectWorld.isConnectedByAir(
+                                    pos.x, pos.y, pos.z, checkPos.x, checkPos.y, checkPos.z, dimension
+                                ) == ConnectionStatus.CONNECTED) }
+                                if (status == ConnectionStatus.DISCONNECTED && !alreadyChecked) {
+                                    newTotal += level.shipObjectWorld.getAirComponentSize(
+                                        checkPos.x, checkPos.y, checkPos.z, dimension
+                                    )
+                                }
+                                checked.add(checkPos)
+                            }
+                        }
+                    }
+                    buoyancyHandler?.buoyancyData?.pocketVolumeTotal = newTotal.toDouble()
                 }
             }
         }

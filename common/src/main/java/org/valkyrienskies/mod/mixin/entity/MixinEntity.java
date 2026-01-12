@@ -79,14 +79,14 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider 
                 Entity entity = (Entity) (Object) this;
                 Vec3 relativePosition = Vec3.ZERO;
                 if (this.getDraggingInformation().isEntityBeingDraggedByAShip()) {
-                    relativePosition = EntityDragger.INSTANCE.serversideEyePosition(entity);
+                    relativePosition = EntityDragger.INSTANCE.serversidePosition(entity);
                 } else if (VSGameUtilsKt.getShipMountedTo(entity) != null) {
                     relativePosition = VectorConversionsMCKt.toMinecraft(VSGameUtilsKt.getShipMountedToData(entity, null).getMountPosInShip().add(0.0, (double) entity.getEyeHeight(entity.getPose()), 0.0, new Vector3d()));
                 }
                 boolean isInSealedArea = false;
 
                 if (!isInSealedArea) {
-                    if (relativePosition != Vec3.ZERO) {
+                    if (relativePosition != Vec3.ZERO && VSGameUtilsKt.isBlockInShipyard(level, BlockPos.containing(relativePosition))) {
                         if (BlockPos.containing(relativePosition).equals(vs$lastCheckedSealedPos)) {
                             isInSealedArea = vs$isInSealedArea();
                         } else {

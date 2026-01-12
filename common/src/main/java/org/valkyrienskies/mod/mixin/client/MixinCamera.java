@@ -106,7 +106,7 @@ public abstract class MixinCamera implements IVSCamera {
             boolean isInSealedArea = false;
 
             if (!isInSealedArea) {
-                if (relativePosition != Vec3.ZERO) {
+                if (relativePosition != Vec3.ZERO && VSGameUtilsKt.isBlockInShipyard(player.level(), BlockPos.containing(relativePosition))) {
                     if (BlockPos.containing(relativePosition).equals(vs$lastSealedCheckPos)) {
                         isInSealedArea = provider.vs$isInSealedArea();
                     } else {
