@@ -15,6 +15,7 @@ import net.minecraft.world.level.block.state.BlockState
 import org.valkyrienskies.core.api.ships.LoadedServerShip
 import org.valkyrienskies.core.api.ships.Ship
 import org.valkyrienskies.core.api.ships.Wing
+import org.valkyrienskies.core.api.world.connectivity.ConnectionStatus
 import org.valkyrienskies.core.internal.world.chunks.VsiBlockType
 import org.valkyrienskies.mod.common.block.WingBlock
 import org.valkyrienskies.mod.common.config.ConfigType
@@ -163,6 +164,10 @@ object BlockStateInfo {
                     var newTotal = 0.0
                     if (allComponentsInClaim.isNotEmpty()) {
                         for (component in allComponentsInClaim) {
+                            if (level.shipObjectWorld.isIsolatedAir(
+                                    component.x(), component.y(), component.z(), dimension
+                                ) != ConnectionStatus.DISCONNECTED
+                            ) continue
                             val componentSize = level.shipObjectWorld.getAirComponentSize(
                                 component.x(), component.y(), component.z(), dimension
                             )

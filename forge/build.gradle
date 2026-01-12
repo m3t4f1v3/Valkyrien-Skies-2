@@ -95,7 +95,7 @@ dependencies {
     // CC Tweaked
     modRuntimeOnly("cc.tweaked:cc-tweaked-${minecraft_version}-forge:${cc_tweaked_version}")
 
-    modImplementation("curse.maven:vmp-forge-892037:4657678")
+    //modImplementation("curse.maven:vmp-forge-892037:4657678")
 
     // OpenComputers 2: Reimagined
     modCompileOnly("maven.modrinth:oc2r:${oc2r_version}")

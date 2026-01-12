@@ -40,7 +40,10 @@ import org.valkyrienskies.mod.common.util.toJOML
 import org.valkyrienskies.mod.common.util.toJOMLD
 import org.valkyrienskies.mod.common.vsCore
 import org.valkyrienskies.mod.common.yRange
+import org.valkyrienskies.mod.util.AIR
 import org.valkyrienskies.mod.util.StructureTemplateFillFromVoxelSet
+import org.valkyrienskies.mod.util.relocateBlock
+import org.valkyrienskies.mod.util.updateBlock
 
 object ShipAssembler {
     class SingleItemMap<K, V>(val mkey: K, val mvalue: V, val default: V, val defaultFn: ((K) -> V)? = null): Map<K, V> {
@@ -160,7 +163,25 @@ object ShipAssembler {
             }
             level.setBlock(pos, Blocks.BARRIER.defaultBlockState(), Block.UPDATE_CLIENTS)
         }
-        for (pos in blocks) {level.removeBlock(pos, true)}
+        for (pos in blocks) {
+            val block = level.getBlockState(pos)
+            level.removeBlock(pos, false)
+            // 75 = flag 1 (block update) & flag 2 (send to clients) + flag 8 (force rerenders)
+            val flags = 11 or Block.UPDATE_MOVE_BY_PISTON or Block.UPDATE_SUPPRESS_DROPS
+
+            //updateNeighbourShapes recurses through nearby blocks, recursionLeft is the limit
+            val recursionLeft = 511
+
+            level.setBlocksDirty(pos, block, AIR)
+            level.sendBlockUpdated(pos, block, AIR, flags)
+            level.blockUpdated(pos, AIR.block)
+            // This handles the update for neighboring blocks in worldspace
+            AIR.updateIndirectNeighbourShapes(level, pos, flags, recursionLeft - 1)
+            AIR.updateNeighbourShapes(level, pos, flags, recursionLeft)
+            AIR.updateIndirectNeighbourShapes(level, pos, flags, recursionLeft)
+            //This updates lighting for blocks in worldspace
+            level.chunkSource.lightEngine.checkBlock(pos)
+        }
 
         newShip.isStatic = oldShip == null || oldShip.isStatic
         val centerOfPlot = newShip.chunkClaim.getCenterBlockCoordinates(level.yRange, Vector3i())
@@ -217,10 +238,12 @@ object ShipAssembler {
 
         newShip.isStatic = false
 
+        val timeAtExecution = level.server.tickCount
+
         level.server.executeIf(
             // This condition will return true if all modified chunks have been both loaded AND
             // chunk update packets were sent to players
-            { chunkPoses.all(level::isTickingChunk) }
+            { chunkPoses.all(level::isTickingChunk) || level.server.tickCount - timeAtExecution > 400 }
         ) {
             // Once all the chunk updates are sent to players, we can tell them to restart chunk updates
             level.players().forEach { player ->

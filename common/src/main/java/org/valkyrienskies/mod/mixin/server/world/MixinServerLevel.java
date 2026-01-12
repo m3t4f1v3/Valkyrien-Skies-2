@@ -48,6 +48,7 @@ import org.valkyrienskies.core.api.ships.Ship;
 import org.valkyrienskies.core.api.ships.Wing;
 import org.valkyrienskies.core.api.ships.WingManager;
 import org.valkyrienskies.core.api.util.AerodynamicUtils;
+import org.valkyrienskies.core.impl.config.VSCoreConfig;
 import org.valkyrienskies.core.internal.world.VsiServerShipWorld;
 import org.valkyrienskies.core.internal.world.chunks.VsiTerrainUpdate;
 import org.valkyrienskies.mod.common.IShipObjectWorldServerProvider;
@@ -289,7 +290,7 @@ public abstract class MixinServerLevel implements IShipObjectWorldServerProvider
             voxelShapeUpdates
         );
 
-        if (ValkyrienSkiesMod.getVsCore().getHooks().getEnableSplitting()) {
+        if (VSCoreConfig.SERVER.getSp().getEnableSplitting()) {
             ValkyrienSkiesMod.splitHandler.tick(ServerLevel.class.cast(this));
         }
 

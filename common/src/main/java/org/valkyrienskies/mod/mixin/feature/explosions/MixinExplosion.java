@@ -26,6 +26,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.valkyrienskies.core.api.ships.LoadedServerShip;
 import org.valkyrienskies.core.api.ships.ServerShip;
+import org.valkyrienskies.core.impl.config.VSCoreConfig;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod;
 import org.valkyrienskies.mod.common.config.VSGameConfig;
@@ -99,7 +100,7 @@ public abstract class MixinExplosion {
 
                             Vector3dc modelPos = VectorConversionsMCKt.toJOML(Vec3.atCenterOf(blockPos));
 
-                            if (ValkyrienSkiesMod.getVsCore().getHooks().getEnableSplitting()) {
+                            if (VSCoreConfig.SERVER.getSp().getEnableSplitting()) {
                                 //custom split logic for TNT specifically
                                 ValkyrienSkiesMod.splitHandler.split(level, blockPos.getX(), blockPos.getY(),
                                     blockPos.getZ(), level.getBlockState(blockPos), (ServerShip ship1) -> ValkyrienSkiesMod.getOrCreateGTPA(ship.getChunkClaimDimension()).applyWorldForceToModelPos(
