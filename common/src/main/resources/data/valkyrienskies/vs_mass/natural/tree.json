@@ -26,6 +26,7 @@
   {
     "tag": "minecraft:leaves",
     "mass": 200.0,
+    "no_collision": true,
     "elasticity": 0.15
   }
 ]
