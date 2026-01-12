@@ -132,8 +132,8 @@ object ShipAssembler {
         val shipChunkX = newShip.chunkClaim.xMiddle
         val shipChunkZ = newShip.chunkClaim.zMiddle
 
-        val worldChunkX = oldMin.x.toInt() shr 4
-        val worldChunkZ = oldMin.z.toInt() shr 4
+        val worldChunkX = ((minB.x + maxB.x) / 2) shr 4
+        val worldChunkZ = ((minB.z + maxB.z) / 2) shr 4
 
         val deltaX = worldChunkX - shipChunkX
         val deltaZ = worldChunkZ - shipChunkZ
@@ -204,7 +204,7 @@ object ShipAssembler {
             vsCore.newBodyTransform(
                 (oldShip?.shipToWorld?.transformPosition(shipPos) ?: shipPos).add(posOffset),
                 oldShip?.transform?.shipToWorldRotation ?: Quaterniond(),
-                Vector3d(scale, scale, scale),
+                Vector3d(scale * oldScale, scale * oldScale, scale * oldScale),
                 centerOfShip
             )
         ))

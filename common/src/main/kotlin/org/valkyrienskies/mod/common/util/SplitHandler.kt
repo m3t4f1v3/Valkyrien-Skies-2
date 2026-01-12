@@ -7,6 +7,7 @@ import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.state.BlockState
 import org.valkyrienskies.core.api.attachment.getAttachment
 import org.valkyrienskies.core.api.ships.LoadedServerShip
+import org.valkyrienskies.core.api.ships.ServerShip
 import org.valkyrienskies.core.api.world.connectivity.ConnectionStatus.CONNECTED
 import org.valkyrienskies.core.api.world.connectivity.ConnectionStatus.DISCONNECTED
 import org.valkyrienskies.core.api.world.properties.DimensionId
@@ -17,6 +18,7 @@ import org.valkyrienskies.mod.common.dimensionId
 import org.valkyrienskies.mod.common.getLoadedShipManagingPos
 import org.valkyrienskies.mod.common.shipObjectWorld
 import org.valkyrienskies.mod.util.logger
+import java.util.function.Consumer
 
 class SplitHandler(private val doEdges: Boolean, private val doCorners: Boolean) {
 
@@ -45,7 +47,7 @@ class SplitHandler(private val doEdges: Boolean, private val doCorners: Boolean)
         }
     }
 
-    fun split(level: Level, x: Int, y: Int, z: Int, newBlockState: BlockState) {
+    fun split(level: Level, x: Int, y: Int, z: Int, newBlockState: BlockState, after: Consumer<ServerShip>? = null) {
         if (level is ServerLevel) {
             val loadedShip : LoadedServerShip? = level.getLoadedShipManagingPos(x shr 4, z shr 4)
             if ((loadedShip != null && loadedShip.getAttachment<SplittingDisablerAttachment>()?.canSplit() != false) || (loadedShip == null && VSGameConfig.SERVER.enableWorldSplitting)) {
@@ -162,7 +164,8 @@ class SplitHandler(private val doEdges: Boolean, private val doCorners: Boolean)
                         }
 
                         for (component in toAssemble) {
-                            ShipAssembler.assembleToShip(level, component.map { it.toBlockPos() }.toSet(), 1.0)
+                            val newShip = ShipAssembler.assembleToShip(level, component.map { it.toBlockPos() }.toSet(), 1.0)
+                            if (after != null) after(newShip)
                         }
 
                         loadedShip?.getAttachment(SplittingDisablerAttachment::class.java)?.enableSplitting()

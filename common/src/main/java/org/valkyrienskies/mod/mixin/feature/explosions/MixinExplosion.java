@@ -14,6 +14,7 @@ import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult.Type;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Vector3d;
+import org.joml.Vector3dc;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Mutable;
@@ -22,6 +23,7 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.valkyrienskies.core.api.ships.LoadedServerShip;
 import org.valkyrienskies.core.api.ships.ServerShip;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod;
@@ -74,8 +76,7 @@ public abstract class MixinExplosion {
                             ClipContext.Fluid.NONE, null));
                     if (result.getType() == Type.BLOCK) {
                         final BlockPos blockPos = result.getBlockPos();
-                        final ServerShip ship =
-                            (ServerShip) VSGameUtilsKt.getLoadedShipManagingPos(this.level, blockPos);
+                        final LoadedServerShip ship = VSGameUtilsKt.getLoadedShipManagingPos(this.level, blockPos);
                         if (ship != null) {
                             final Vector3d forceVector =
                                 VectorConversionsMCKt.toJOML(
@@ -91,6 +92,16 @@ public abstract class MixinExplosion {
                                 VSGameConfig.SERVER.getExplosionBlastForce()); //Multiply by blast force at center position. Negative because of how we got the direction.
                             forceVector.mul(distanceMult); //Multiply by distance falloff
                             forceVector.mul(powerMult); //Multiply by radius, roughly equivalent to power
+
+                            Vector3dc modelPos = VectorConversionsMCKt.toJOML(Vec3.atCenterOf(blockPos));
+
+                            if (ValkyrienSkiesMod.getVsCore().getHooks().getEnableSplitting()) {
+                                //custom split logic for TNT specifically
+                                ValkyrienSkiesMod.splitHandler.split(level, blockPos.getX(), blockPos.getY(),
+                                    blockPos.getZ(), level.getBlockState(blockPos), (ServerShip ship1) -> ValkyrienSkiesMod.getOrCreateGTPA(ship.getChunkClaimDimension()).applyWorldForceToModelPos(
+                                        ship1.getId(), forceVector, ship1.getTransform().getWorldToShip().transformPosition(ship.getTransform().getShipToWorld().transformPosition(modelPos)
+                                    )));
+                            }
 
                             final GameToPhysicsAdapter forceApplier = ValkyrienSkiesMod.getOrCreateGTPA(ship.getChunkClaimDimension());
                             if (forceVector.isFinite()) {
