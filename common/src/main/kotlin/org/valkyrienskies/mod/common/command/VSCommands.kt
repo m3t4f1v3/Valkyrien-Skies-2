@@ -17,9 +17,15 @@ import net.minecraft.network.chat.Component.translatable
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.phys.BlockHitResult
 import net.minecraftforge.common.ForgeConfigSpec
+import org.joml.Quaterniond
+import org.joml.Quaterniondc
+import org.joml.Vector3d
+import org.joml.Vector3dc
+import org.valkyrienskies.core.api.ships.LoadedServerShip
 import org.valkyrienskies.core.api.ships.ServerShip
 import org.valkyrienskies.core.api.world.ServerShipWorld
 import org.valkyrienskies.core.api.world.ShipWorld
+import org.valkyrienskies.core.api.world.properties.DimensionId
 import org.valkyrienskies.core.impl.api_impl.config.ConfigPhysicsBackendType
 import org.valkyrienskies.core.impl.config.VSCoreConfig
 import org.valkyrienskies.core.internal.ShipTeleportData
@@ -30,10 +36,14 @@ import org.valkyrienskies.mod.common.config.VSGameConfig
 import org.valkyrienskies.mod.common.dimensionId
 import org.valkyrienskies.mod.common.getShipManagingPos
 import org.valkyrienskies.mod.common.shipObjectWorld
+import org.valkyrienskies.mod.common.util.SplittingDisablerAttachment
 import org.valkyrienskies.mod.common.util.toJOML
 import org.valkyrienskies.mod.common.vsCore
 import org.valkyrienskies.mod.mixin.feature.commands.ClientSuggestionProviderAccessor
 import org.valkyrienskies.mod.util.logger
+import java.text.NumberFormat
+import kotlin.math.round
+import kotlin.math.roundToInt
 
 object VSCommands {
     private val LOGGER by logger()
@@ -46,7 +56,17 @@ object VSCommands {
     private const val REMASSED_ONE_SHIP_MESSAGE = "command.valkyrienskies.remass.success_one"
     private const val SET_ONE_SHIP_STATIC_SUCCESS_MESSAGE = "command.valkyrienskies.set_static.success_one"
     private const val TELEPORT_ONE_SHIP_SUCCESS_MESSAGE = "command.valkyrienskies.teleport.success_one"
-
+    private const val LOD_CURRENT_MESSAGE = "command.valkyrienskies.lod.current"
+    private const val LOD_SET_MESSAGE = "command.valkyrienskies.lod.set"
+    private const val BACKEND_CURRENT_MESSAGE = "command.valkyrienskies.backend.current"
+    private const val BACKEND_SET_MESSAGE = "command.valkyrienskies.backend.set"
+    private const val LOD_DISABLED_MESSAGE = "command.valkyrienskies.lod.disabled"
+    private const val AIR_VALUES_MESSAGE = "command.valkyrienskies.air_values"
+    private const val AIR_VALUES_DENSITY_MESSAGE = "command.valkyrienskies.air_values.density"
+    private const val AIR_VALUES_TEMPERATURE_MESSAGE = "command.valkyrienskies.air_values.temperature"
+    private const val AIR_VALUES_PRESSURE_MESSAGE = "command.valkyrienskies.air_values.pressure"
+    private const val GET_GRAVITY_MESSAGE = "command.valkyrienskies.get_gravity"
+    private const val SET_SPLITTING_MESSAGE = "command.valkyrienskies.set_splitting"
 
     private const val GET_SHIP_SUCCESS_MESSAGE = "command.valkyrienskies.get_ship.success"
     private const val GET_SHIP_FAIL_MESSAGE = "command.valkyrienskies.get_ship.fail"
@@ -106,41 +126,160 @@ object VSCommands {
                             }
                         )
                     )
-                ).then(literal("backend")
+                ).then(literal("set-splitting")
+                    .requires{ it.hasPermission(VSGameConfig.SERVER.Commands.deleteShipCommandPerms)}
+                    .then(argument("ships", ShipArgument.ships())
+                        .then(argument("enable", BoolArgumentType.bool())
+                            .executes {
+                                val ships = ShipArgument.getShips(it, "ships")
+                                val enable = BoolArgumentType.getBool(it, "enable")
+                                ships.forEach { ship ->
+                                    if (ship is LoadedServerShip) {
+                                        ship.setAttachment(SplittingDisablerAttachment(enable))
+                                    }
+                                }
+
+                                if (ships.isEmpty()) return@executes 0
+
+                                it.source.sendVSMessage(translatable(SET_SPLITTING_MESSAGE, enable, ships.size))
+
+                                1
+                            }
+                        )
+                    )
+                )
+                .then(literal("get-air").requires { it.hasPermission(VSGameConfig.SERVER.Commands.getAirValuesPerms)}
+                    .executes {
+                        val aero = it.source.level.shipObjectWorld.aerodynamicUtils
+                        val height = it.source.position.y
+                        val dimId = it.source.level.dimensionId
+
+                        val density = aero.getAirDensityForY(height, dimId)
+                        val temperature = aero.getAirTemperatureForY(height, dimId)
+                        val pressure = aero.getAirPressureForY(height, dimId)
+
+                        it.source.sendVSMessage(translatable(AIR_VALUES_MESSAGE, round(height*10.0)/10, density, temperature, pressure))
+
+                        1
+                    }
+                    .then(literal("density")
+                        .executes {
+                            val aero = it.source.level.shipObjectWorld.aerodynamicUtils
+                            val height = it.source.position.y
+                            val dimId = it.source.level.dimensionId
+
+                            val density = aero.getAirDensityForY(height, dimId)
+
+                            it.source.sendVSMessage(translatable(AIR_VALUES_DENSITY_MESSAGE, round(height*10.0)/10, density))
+
+                            density.roundToInt()
+                        }
+                    )
+                    .then(literal("temperature")
+                        .executes {
+                            val aero = it.source.level.shipObjectWorld.aerodynamicUtils
+                            val height = it.source.position.y
+                            val dimId = it.source.level.dimensionId
+
+                            val temperature = aero.getAirTemperatureForY(height, dimId)
+
+                            it.source.sendVSMessage(translatable(AIR_VALUES_TEMPERATURE_MESSAGE, round(height*10.0)/10, temperature))
+
+                            temperature.roundToInt()
+                        }
+                    )
+                    .then(literal("pressure")
+                        .executes {
+                            val aero = it.source.level.shipObjectWorld.aerodynamicUtils
+                            val height = it.source.position.y
+                            val dimId = it.source.level.dimensionId
+
+                            val pressure = aero.getAirPressureForY(height, dimId)
+
+                            it.source.sendVSMessage(translatable(AIR_VALUES_PRESSURE_MESSAGE, round(height*10.0)/10, pressure))
+
+                            pressure.roundToInt()
+                        }
+                    )
+                )
+                .then(literal("get-gravity").requires { it.hasPermission(VSGameConfig.SERVER.Commands.getAirValuesPerms)}
+                    .executes {
+                        val level = it.source.level
+                        val gravity = level.shipObjectWorld.aerodynamicUtils.getAtmosphereForDimension(level.dimensionId).third
+
+                        it.source.sendVSMessage(translatable(GET_GRAVITY_MESSAGE, level.dimensionId.toNiceString(), gravity))
+
+                        gravity.roundToInt()
+                    }
+                )
+                .then(literal("backend")
                 .requires{ it.hasPermission(VSGameConfig.SERVER.Commands.changeBackendCommandPerms)}
                     .then(literal("engine")
                         .then(literal("krunch")
                             .executes {
                                 VSCoreConfig.SERVER.physics.physicsBackend = ConfigPhysicsBackendType.KRUNCH_CLASSIC
                                 (VSConfigUpdater.forgeConfigValuesMap.get("physicsBackend") as ForgeConfigSpec.ConfigValue<String>).set(ConfigPhysicsBackendType.KRUNCH_CLASSIC.name)
+
+                                it.source.sendVSMessage(translatable(BACKEND_SET_MESSAGE, VSCoreConfig.SERVER.physics.physicsBackend.name))
+
                                 1
                             }
                         ).then(literal("DEFAULT")
                             .executes {
                                 VSCoreConfig.SERVER.physics.physicsBackend = ConfigPhysicsBackendType.KRUNCH_CLASSIC
                                 (VSConfigUpdater.forgeConfigValuesMap.get("physicsBackend") as ForgeConfigSpec.ConfigValue<String>).set(ConfigPhysicsBackendType.KRUNCH_CLASSIC.name)
+
+                                it.source.sendVSMessage(translatable(BACKEND_SET_MESSAGE, VSCoreConfig.SERVER.physics.physicsBackend.name))
+
                                 1
                             }
                         ).then(literal("physx")
                             .executes {
                                 VSCoreConfig.SERVER.physics.physicsBackend = ConfigPhysicsBackendType.KRUNCH_PHYSX
                                 (VSConfigUpdater.forgeConfigValuesMap.get("physicsBackend") as ForgeConfigSpec.ConfigValue<String>).set(ConfigPhysicsBackendType.KRUNCH_PHYSX.name)
+
+                                it.source.sendVSMessage(translatable(BACKEND_SET_MESSAGE, VSCoreConfig.SERVER.physics.physicsBackend.name))
+
                                 1
                             }
-                        )
+                        ).executes {
+                            it.source.sendVSMessage(translatable(BACKEND_CURRENT_MESSAGE, VSCoreConfig.SERVER.physics.physicsBackend.name))
+
+                            1
+                        }
                     )
                     .then(literal("lodDetail")
-                        .then(argument("amount", IntegerArgumentType.integer(0))
+                        .then(argument("amount", IntegerArgumentType.integer(-1))
                             .executes {
                                 var amount = IntegerArgumentType.getInteger(it, "amount")
                                 VSCoreConfig.SERVER.physics.lodDetail = amount
                                 (VSConfigUpdater.forgeConfigValuesMap.get("lodDetail") as ForgeConfigSpec.ConfigValue<Int>).set(amount)
+
+                                val msg = if (amount == -1) {
+                                    Component.translatable(LOD_DISABLED_MESSAGE)
+                                } else {
+                                    amount.toString()
+                                }
+
+                                it.source.sendVSMessage(translatable(LOD_SET_MESSAGE, msg))
+
                                 1
                             }
                         )
+                        .executes {
+                            val lod = VSCoreConfig.SERVER.physics.lodDetail
+                            val msg = if (lod == -1) {
+                                Component.translatable(LOD_DISABLED_MESSAGE)
+                            } else {
+                                lod.toString()
+                            }
+
+                            it.source.sendVSMessage(translatable(LOD_CURRENT_MESSAGE, msg))
+
+                            1
+                        }
                     )
                 )
-
                 .then(literal("rename")
                 .requires{ it.hasPermission(VSGameConfig.SERVER.Commands.renameShipCommandPerms)}
                     .then(argument("ship", ShipArgument.ships())
@@ -239,7 +378,7 @@ object VSCommands {
                                     )
                                 }
                                 it.source.sendVSMessage(
-                                    translatable(TELEPORT_SHIP_SUCCESS_MESSAGE, r.size, shipTeleportData.toString())
+                                    translatable(TELEPORT_SHIP_SUCCESS_MESSAGE, r.size, shipTeleportData.getMessage())
                                 )
                                 r.size
 
@@ -272,7 +411,7 @@ object VSCommands {
                                         )
                                     }
                                     it.source.sendVSMessage(
-                                        translatable(TELEPORT_SHIP_SUCCESS_MESSAGE, r.size, shipTeleportData.toString())
+                                        translatable(TELEPORT_SHIP_SUCCESS_MESSAGE, r.size, shipTeleportData.getMessage())
                                     )
                                     r.size
 
@@ -311,7 +450,7 @@ object VSCommands {
                                             )
                                         }
                                         it.source.sendVSMessage(
-                                            translatable(TELEPORT_SHIP_SUCCESS_MESSAGE, r.size, shipTeleportData.toString())
+                                            translatable(TELEPORT_SHIP_SUCCESS_MESSAGE, r.size, shipTeleportData.getMessage())
                                         )
                                         r.size
 
@@ -356,7 +495,7 @@ object VSCommands {
                                                 )
                                             }
                                             it.source.sendVSMessage(
-                                                translatable(TELEPORT_SHIP_SUCCESS_MESSAGE, r.size, shipTeleportData.toString())
+                                                translatable(TELEPORT_SHIP_SUCCESS_MESSAGE, r.size, shipTeleportData.getMessage())
                                             )
                                             r.size
 
@@ -456,6 +595,30 @@ object VSCommands {
 
 /*val CommandSourceStack.shipWorld: ShipWorld
     get() = (this.level.shipObjectWorld)*/
+
+private fun ShipTeleportData.getMessage(): String {
+    // "(${this.newDimension}) ${this.newPos}, rotation ${this.newRot}, velocity ${this.newVel}"
+    return translatable(
+        "command.valkyrienskies.teleport.teleport_data",
+        this.newDimension?.toNiceString() ?: "",
+        this.newPos.toNiceString(),
+        this.newRot.toNiceString(),
+        this.newVel.toNiceString()
+    ).string
+}
+
+private fun Vector3dc.toNiceString(): String {
+    return (this as Vector3d).toString(NumberFormat.getInstance())
+}
+
+private fun Quaterniondc.toNiceString(): String {
+    return (this as Quaterniond).toString(NumberFormat.getInstance())
+}
+
+private fun DimensionId.toNiceString(): String {
+    val split = this.split(":")
+    return split[2] + split[3]
+}
 
 val SharedSuggestionProvider.shipWorld: ShipWorld
     get() {

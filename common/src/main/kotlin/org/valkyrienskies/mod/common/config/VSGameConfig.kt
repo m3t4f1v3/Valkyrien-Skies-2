@@ -278,6 +278,11 @@ object VSGameConfig {
             var getShipCommandPerms = 0
 
             @ConfigEntry(
+                description = "The permission level required to use the /vs get-air and /vs get-gravity command. Must be 0 <= x <= 4"
+            )
+            var getAirValuesPerms = 0
+
+            @ConfigEntry(
                 description = "The permission level required to use the /vs rename command. Must be 0 <= x <= 4"
             )
             var renameShipCommandPerms = 2
