@@ -4,6 +4,7 @@ import net.minecraft.core.BlockPos
 import net.minecraft.nbt.CompoundTag
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.Clearable
+import net.minecraft.world.level.ChunkPos
 import net.minecraft.world.level.LevelReader
 import net.minecraft.world.level.ServerLevelAccessor
 import net.minecraft.world.level.block.Blocks
@@ -17,14 +18,23 @@ import org.joml.Quaterniond
 import org.joml.RoundingMode
 import org.joml.Vector3d
 import org.joml.Vector3i
+import org.valkyrienskies.core.api.ships.LoadedServerShip
 import org.valkyrienskies.core.api.ships.ServerShip
 import org.valkyrienskies.core.api.ships.properties.ShipId
 import org.valkyrienskies.core.api.util.GameTickOnly
-import org.valkyrienskies.mod.common.config.VSGameConfig
 import org.valkyrienskies.mod.common.dimensionId
+import org.valkyrienskies.mod.common.executeIf
+import org.valkyrienskies.mod.common.getLoadedShipManagingPos
 import org.valkyrienskies.mod.common.getShipManagingPos
 import org.valkyrienskies.mod.common.inAssemblyBlacklist
+import org.valkyrienskies.mod.common.isTickingChunk
+import org.valkyrienskies.mod.common.networking.PacketRestartChunkUpdates
+import org.valkyrienskies.mod.common.networking.PacketStopChunkUpdates
+import org.valkyrienskies.mod.common.playerWrapper
 import org.valkyrienskies.mod.common.shipObjectWorld
+import org.valkyrienskies.mod.common.toDenseVoxelUpdate
+import org.valkyrienskies.mod.common.util.SplittingDisablerAttachment
+import org.valkyrienskies.mod.common.util.toJOML
 import org.valkyrienskies.mod.common.util.toJOMLD
 import org.valkyrienskies.mod.common.vsCore
 import org.valkyrienskies.mod.common.yRange
@@ -72,6 +82,16 @@ object ShipAssembler {
 
         val eventData = mutableMapOf<String, CompoundTag>()
 
+        val chunksToBeUpdated = mutableMapOf<ChunkPos, Pair<ChunkPos, ChunkPos>>()
+        blocks.forEachChunk { x, _, z, _ ->
+            val sourcePos = ChunkPos(x, z)
+            val destPos = ChunkPos(x - deltaX, z - deltaZ)
+            chunksToBeUpdated[sourcePos] = Pair(sourcePos, destPos)
+        }
+        val chunkPairs = chunksToBeUpdated.values.toList()
+        val chunkPoses = chunkPairs.flatMap { it.toList() }
+        val chunkPosesJOML = chunkPoses.map { it.toJOML() }
+
         val (minB, maxB) = findMinAndMax(blocks)
         val oldMin = minB.toJOMLD()
         val oldMax = maxB.toJOMLD()
@@ -82,11 +102,22 @@ object ShipAssembler {
             .div(2.0)
         val oldCenter = offset.get(Vector3d()).add(oldMin)
 
-        val oldShip = level.getShipManagingPos(oldCenter)
+        val oldShip = level.getLoadedShipManagingPos(oldCenter) ?: level.getShipManagingPos(oldCenter)
         val oldId = oldShip?.id ?: -1L
         val oldScale = oldShip?.transform?.scaling?.x() ?: 1.0
 
+        var wasSplittingEnabled = true
+        if (oldShip is LoadedServerShip) {
+            val splittingDisabler = oldShip.getAttachment(SplittingDisablerAttachment::class.java)
+            wasSplittingEnabled = splittingDisabler?.canSplit() != false
+            splittingDisabler?.disableSplitting()
+        }
+
         val worldOldCenter = oldShip?.shipToWorld?.transformPosition(oldCenter.get(Vector3d())) ?: oldCenter.get(Vector3d())
+
+        level.players().forEach { player ->
+            PacketStopChunkUpdates(chunkPosesJOML).sendToClient(player.playerWrapper)
+        }
 
         VSAssemblyEvents.beforeCopy.emit(VSAssemblyEvents.BeforeCopy(level, oldMin, oldMax, oldCenter, oldShip, blocks, eventData))
 
@@ -134,9 +165,8 @@ object ShipAssembler {
         structureSettings.rotationPivot = cornerOfShip
 
         VSAssemblyEvents.onPasteBeforeBlocksAreLoaded.emit(VSAssemblyEvents.OnPasteBeforeBlocksAreLoaded(level, oldShip, newShip, Pair(oldCenter, centerOfShip), eventData))
-        template.placeInWorld(level, cornerOfShip, cornerOfShip, structureSettings, level.random, Block.UPDATE_CLIENTS)
-        VSAssemblyEvents.onPasteAfterBlocksAreLoaded.emit(VSAssemblyEvents.OnPasteAfterBlocksAreLoaded(level, oldShip, newShip, Pair(oldCenter, centerOfShip), eventData))
 
+        template.placeInWorld(level, cornerOfShip, cornerOfShip, structureSettings, level.random, Block.UPDATE_CLIENTS)
         val shipPos = Vector3d(oldCenter)
 
         //teleport fn uses COM as center of ship, so it calculates such offset that centerOfShip will be "center" instead
@@ -154,6 +184,42 @@ object ShipAssembler {
 
         newShip.isStatic = false
 
+        level.server.executeIf(
+            // This condition will return true if all modified chunks have been both loaded AND
+            // chunk update packets were sent to players
+            { chunkPoses.all(level::isTickingChunk) }
+        ) {
+            // Once all the chunk updates are sent to players, we can tell them to restart chunk updates
+            level.players().forEach { player ->
+                PacketRestartChunkUpdates(chunkPosesJOML).sendToClient(player.playerWrapper)
+            }
+            VSAssemblyEvents.onPasteAfterBlocksAreLoaded.emit(VSAssemblyEvents.OnPasteAfterBlocksAreLoaded(level, oldShip, newShip, Pair(oldCenter, centerOfShip), eventData))
+            //force update connectivity because this new assemblyslop doesn't update it :(
+            for (pos in chunkPoses) {
+                val chunkSections = level.getChunk(pos.x, pos.z)?.sections ?: continue
+                for (sectionY in 0 until level.getChunk(pos.x, pos.z).sectionsCount) {
+                    val sectionPos = Vector3i(pos.x, worldChunk.getSectionYFromSectionIndex(sectionY), pos.z)
+                    val section = chunkSections[sectionY] ?: continue
+                    val update = section.toDenseVoxelUpdate(sectionPos)
+                    level.shipObjectWorld.forceUpdateConnectivityChunk(
+                        level.dimensionId,
+                        sectionPos.x,
+                        sectionPos.y,
+                        sectionPos.z,
+                        update
+                    )
+                }
+            }
+            if (oldShip is LoadedServerShip) {
+                val splittingDisabler = oldShip.getAttachment(SplittingDisablerAttachment::class.java)
+                if (wasSplittingEnabled) {
+                    splittingDisabler?.enableSplitting()
+                }
+            }
+        }
+
+
+
         return newShip
     }
 
@@ -166,6 +232,10 @@ object ShipAssembler {
     }
 
     fun deleteShip(level: ServerLevel, ship: ServerShip, deleteBlocks: Boolean, dropBlocks: Boolean): Int {
+        if (ship is LoadedServerShip) {
+            val splittingDisabler = ship.getAttachment(SplittingDisablerAttachment::class.java)
+            splittingDisabler?.disableSplitting()
+        }
         if (deleteBlocks) {
             val aabb = ship.shipAABB ?: return 0
             // There has to be a better way to do this...

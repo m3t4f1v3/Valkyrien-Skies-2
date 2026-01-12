@@ -15,7 +15,6 @@ import net.minecraft.world.level.block.state.BlockState
 import org.valkyrienskies.core.api.ships.LoadedServerShip
 import org.valkyrienskies.core.api.ships.Ship
 import org.valkyrienskies.core.api.ships.Wing
-import org.valkyrienskies.core.api.world.connectivity.ConnectionStatus
 import org.valkyrienskies.core.internal.world.chunks.VsiBlockType
 import org.valkyrienskies.mod.common.block.WingBlock
 import org.valkyrienskies.mod.common.config.ConfigType
@@ -145,31 +144,6 @@ object BlockStateInfo {
                     // Delete the old wing
                     wingManager.setWing(wingManager.getFirstWingGroupId(), x, y, z, null)
                 }
-
-                if (VSGameConfig.SERVER.enablePocketBuoyancy) {
-                    val buoyancyHandler = loadedShip.getAttachment(BuoyancyHandlerAttachment::class.java)
-                    val dimension = loadedShip.chunkClaimDimension
-                    var newTotal = 0.0
-                    val checked = mutableSetOf<BlockPos>()
-                    for (xa in -1..1) {
-                        for (ya in -1..1) {
-                            for (za in -1..1) {
-                                val checkPos = BlockPos(x + xa, y + ya, z + za)
-                                val status = level.shipObjectWorld.isIsolatedAir(checkPos.x, checkPos.y, checkPos.z, dimension)
-                                val alreadyChecked = checked.any { pos -> (pos == checkPos) || (level.shipObjectWorld.isConnectedByAir(
-                                    pos.x, pos.y, pos.z, checkPos.x, checkPos.y, checkPos.z, dimension
-                                ) == ConnectionStatus.CONNECTED) }
-                                if (status == ConnectionStatus.DISCONNECTED && !alreadyChecked) {
-                                    newTotal += level.shipObjectWorld.getAirComponentSize(
-                                        checkPos.x, checkPos.y, checkPos.z, dimension
-                                    )
-                                }
-                                checked.add(checkPos)
-                            }
-                        }
-                    }
-                    buoyancyHandler?.buoyancyData?.pocketVolumeTotal = newTotal.toDouble()
-                }
             }
         }
         // endregion
@@ -179,9 +153,31 @@ object BlockStateInfo {
             newBlockMass
         )
 
-        if (ValkyrienSkiesMod.vsCore.hooks.enableConnectivity) {
-            ValkyrienSkiesMod.splitHandler.split(level, x, y, z, newBlockState)
+        if (level is ServerLevel) {
+            val loadedShip = level.getLoadedShipManagingPos(x shr 4, z shr 4)
+            if (loadedShip != null) {
+                if (VSGameConfig.SERVER.enablePocketBuoyancy) {
+                    val buoyancyHandler = loadedShip.getAttachment(BuoyancyHandlerAttachment::class.java)
+                    val dimension = loadedShip.chunkClaimDimension
+                    val allComponentsInClaim = level.shipObjectWorld.getAllAirComponentsFromClaim(dimension, loadedShip.chunkClaim)
+                    var newTotal = 0.0
+                    if (allComponentsInClaim.isNotEmpty()) {
+                        for (component in allComponentsInClaim) {
+                            val componentSize = level.shipObjectWorld.getAirComponentSize(
+                                component.x(), component.y(), component.z(), dimension
+                            )
+                            newTotal += componentSize
+                        }
+                    }
+                    buoyancyHandler?.buoyancyData?.pocketVolumeTotal = newTotal.toDouble()
+                }
+            }
+            if (ValkyrienSkiesMod.vsCore.hooks.enableConnectivity) {
+                ValkyrienSkiesMod.splitHandler.queueSplit(level, x, y, z)
+            }
         }
+
+
     }
 
     /**
