@@ -45,6 +45,7 @@ import org.valkyrienskies.mod.common.util.ShipSettings
 import org.valkyrienskies.mod.common.util.SplitHandler
 import org.valkyrienskies.mod.common.util.SplittingDisablerAttachment
 import org.valkyrienskies.mod.mixinducks.client.world.ClientChunkCacheDuck
+import org.valkyrienskies.mod.mixinducks.feature.tickets.PlayerKnownShipsDuck
 import java.util.ServiceLoader
 import java.util.concurrent.ConcurrentHashMap
 
@@ -167,6 +168,10 @@ object ValkyrienSkiesMod {
             val level = Minecraft.getInstance().level
             if (level != null) {
                 (level.getChunkSource() as ClientChunkCacheDuck).`vs$removeShip`(event.ship)
+            }
+            val player = Minecraft.getInstance().player
+            if (player is PlayerKnownShipsDuck) {
+                player.vs_removeKnownShip(event.ship.id)
             }
         }
     }
