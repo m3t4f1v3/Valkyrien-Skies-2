@@ -32,7 +32,7 @@
   "command.valkyrienskies.shipify.success_one": "已将 %s 转换为物理结构！",
   "command.valkyrienskies.shipify.success": "已将 %d 个物理结构转换为物理结构！",
   "command.valkyrienskies.set_static.success_one": "已将 %s 的静态状态参数设为 %s！",
-  "command.valkyrienskies.set_static.success": "已将%d个物理结构的静态状态参数设为 %s！",
+  "command.valkyrienskies.set_static.success": "已将 %d 个物理结构的静态状态参数设为 %s！",
   "command.valkyrienskies.teleport.success_one": "已将物理结构 %s 传送至 %s！",
   "command.valkyrienskies.teleport.success": "已将 %d 个物理结构传送至 %s！",
   "command.valkyrienskies.teleport.multiple_ship_success": "传送了 %d 个物理结构！",
