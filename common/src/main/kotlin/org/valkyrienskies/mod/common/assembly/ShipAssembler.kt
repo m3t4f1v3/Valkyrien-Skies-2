@@ -264,7 +264,6 @@ object ShipAssembler {
 
         VSAssemblyEvents.onPasteBeforeBlocksAreLoaded.emit(VSAssemblyEvents.OnPasteBeforeBlocksAreLoaded(level, fromShip, toShip, Pair(fromCenter, centerOfShip), eventData))
         template.placeInWorld(level, cornerOfShip, cornerOfShip, structureSettings, level.random, Block.UPDATE_CLIENTS)
-        VSAssemblyEvents.onPasteAfterBlocksAreLoaded.emit(VSAssemblyEvents.OnPasteAfterBlocksAreLoaded(level, fromShip, toShip, Pair(fromCenter, centerOfShip), eventData))
 
         // ========== Resume Chunk Updates
         val timeAtExecution = level.server.tickCount
@@ -279,6 +278,7 @@ object ShipAssembler {
                     PacketRestartChunkUpdates(chunkPosesJOML).sendToClient(player.playerWrapper)
                 }
             }
+            VSAssemblyEvents.onPasteAfterBlocksAreLoaded.emit(VSAssemblyEvents.OnPasteAfterBlocksAreLoaded(level, fromShip, toShip, Pair(fromCenter, centerOfShip), eventData))
             //force update connectivity because this new assemblyslop doesn't update it :(
             for (pos in chunkPoses) {
                 val worldChunk = level.getChunk(pos.x, pos.z) ?: continue
