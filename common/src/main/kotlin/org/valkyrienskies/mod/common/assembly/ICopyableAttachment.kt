@@ -2,7 +2,7 @@ package org.valkyrienskies.mod.common.assembly
 
 import net.minecraft.server.level.ServerLevel
 import org.jetbrains.annotations.ApiStatus
-import org.joml.Vector3d
+import org.joml.Vector3dc
 import org.valkyrienskies.core.api.ships.LoadedServerShip
 import org.valkyrienskies.core.api.ships.ServerShip
 import org.valkyrienskies.core.api.ships.properties.ShipId
@@ -23,14 +23,14 @@ interface ICopyableAttachment {
         level: Supplier<ServerLevel>,
         shipOn: LoadedServerShip,
         shipsToBeSaved: List<ServerShip>,
-        centerPositions: Map<ShipId, Vector3d>
+        centerPositions: Map<ShipId, Vector3dc>
     )
 
     fun onAfterCopy(
         level: Supplier<ServerLevel>,
         shipOn: LoadedServerShip,
         shipsToBeSaved: List<ServerShip>,
-        centerPositions: Map<ShipId, Vector3d>
+        centerPositions: Map<ShipId, Vector3dc>
     ) {}
 
     /**
@@ -40,6 +40,6 @@ interface ICopyableAttachment {
         level: Supplier<ServerLevel>,
         shipOn: LoadedServerShip,
         loadedShips: Map<Long, ServerShip>,
-        centerPositions: Map<ShipId, Pair<Vector3d, Vector3d>>
+        centerPositions: Map<ShipId, Pair<Vector3dc, Vector3dc>>
     )
 }
