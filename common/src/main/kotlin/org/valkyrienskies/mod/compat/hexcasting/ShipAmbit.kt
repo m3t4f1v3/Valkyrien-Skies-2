@@ -5,7 +5,6 @@ import at.petrak.hexcasting.api.casting.eval.CastingEnvironmentComponent.HasEdit
 import at.petrak.hexcasting.api.casting.eval.CastingEnvironmentComponent.IsVecInRange
 import at.petrak.hexcasting.api.casting.eval.CastingEnvironmentComponent.Key
 import at.petrak.hexcasting.api.casting.eval.env.CircleCastEnv
-import net.beholderface.ephemera.api.toVec3i
 import net.minecraft.core.BlockPos
 import net.minecraft.world.phys.Vec3
 import org.valkyrienskies.core.api.util.GameTickOnly
@@ -13,6 +12,7 @@ import org.valkyrienskies.mod.api.positionToShip
 import org.valkyrienskies.mod.api.positionToWorld
 import org.valkyrienskies.mod.common.getLoadedShipManagingPos
 import org.valkyrienskies.mod.common.util.toJOML
+import org.valkyrienskies.mod.compat.hexcasting.hextweaks.HexTweaksCompat
 import java.util.UUID
 
 open class AmbitRemapping(val env: CastingEnvironment) : IsVecInRange, HasEditPermissionsAt {
@@ -51,12 +51,18 @@ open class AmbitRemapping(val env: CastingEnvironment) : IsVecInRange, HasEditPe
     }
 
     open fun getCasterPosition(): Vec3? {
-        env.castingEntity?.position()?.let { return it }
+        try { // Since there is no X-Plat way to test if a mod is loaded
+            return HexTweaksCompat.getComputerPosition(env)
+        } catch (_: ClassNotFoundException) {}
 
-        if (env is CircleCastEnv)
-            return env.impetus?.blockPos?.center
-
-        return null
+        return when (env) {
+            is CircleCastEnv -> {
+                env.impetus?.blockPos?.center
+            }
+            else -> {
+                env.caster?.position() ?: env.castingEntity?.position()
+            }
+        }
     }
 }
 
