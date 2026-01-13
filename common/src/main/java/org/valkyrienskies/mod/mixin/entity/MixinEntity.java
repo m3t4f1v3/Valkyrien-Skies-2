@@ -122,6 +122,7 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider 
         if (vs$isInSealedArea()) {
             this.wasEyeInWater = false;
             this.fluidOnEyes.clear();
+            return;
         }
         original.call();
     }
