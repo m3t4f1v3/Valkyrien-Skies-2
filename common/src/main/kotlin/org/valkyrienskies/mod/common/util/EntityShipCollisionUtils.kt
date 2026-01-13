@@ -19,6 +19,7 @@ import org.valkyrienskies.mod.common.getLoadedShipManagingPos
 import org.valkyrienskies.mod.common.getShipsIntersecting
 import org.valkyrienskies.mod.common.shipObjectWorld
 import org.valkyrienskies.mod.common.vsCore
+import org.valkyrienskies.mod.mixinducks.feature.tickets.PlayerKnownShipsDuck
 import org.valkyrienskies.mod.util.BugFixUtil
 
 object EntityShipCollisionUtils {
@@ -37,6 +38,9 @@ object EntityShipCollisionUtils {
             val aabb = entity.boundingBox.toJOML()
             return level.getShipsIntersecting(aabb)
                 .all { ship ->
+                    if (entity is PlayerKnownShipsDuck && !entity.vs_isKnownShip(ship.id)) {
+                        return true
+                    }
                     val aabbInShip = AABBd(aabb).transform(ship.worldToShip)
                     areAllChunksLoaded(ship, aabbInShip, level)
                 }

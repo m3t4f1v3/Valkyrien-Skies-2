@@ -89,6 +89,7 @@
     "feature.thrown_velocity.MixinPlayer",
     "feature.thrown_velocity.MixinProjectile",
     "feature.tick_ship_chunks.MixinChunkMap",
+    "feature.spawn_player_on_ship.MixinPlayer",
     "feature.wave_spawning.MixinRaid",
     "feature.wave_spawning.MixinRaids",
     "feature.wave_spawning.MixinVillageSiege",
