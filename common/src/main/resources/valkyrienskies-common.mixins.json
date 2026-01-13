@@ -197,6 +197,8 @@
     "mod_compat.ftb_chunks.MixinClaimedChunkManagerImpl",
     "mod_compat.hexcasting.MixinHexAdditionalRenderers",
     "mod_compat.hexcasting.MixinOpEntityRaycast",
+    "mod_compat.hexcasting.MixinOpTeleport",
+    "mod_compat.hexcasting.MixinOpTeleport$Spell",
     "mod_compat.hexcasting.ephemera.MixinOpNetworkTeleport",
     "mod_compat.hexcasting.hexal.MixinOpLink",
     "mod_compat.hexcasting.hexal.MixinOpLinkOthers",
