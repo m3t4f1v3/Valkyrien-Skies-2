@@ -1,21 +1,24 @@
-## VS 2.4.7
-Air pocket buoyancy, improved assembly, drag fixes, no-collide blocks, and connectivity!
+## VS 2.4.8
+Assembly fixes, seamless assembly, improved buoyancy updating, lift improvements, etc.
 
 #### Changes:
-- Splitting has been un-hard disabled
-- Air pockets now occlude water in ships
-- Air pockets now provide buoyancy based on their volume
-- Vastly improved assembly methods (courtesy of G_Mungus and SpaceEye)
-- New assembly API features (copyable blocks / attachments) for modders
-- Drag calculations improved
-- `no-collide` blocks added to VS Blockstates, default Leaves, Redstone Links, and other empty blocks
-- Improved Debug items (Better functionality, textures, better feedback) by Zaafonin
+- Air pockets now update all pockets on ship and don't update a tick late
+- Re-added removed assembly methods as redirects to prevent addon breaking
+- Visually seamless assembly
+- Lift improved and now configurable
+- More commands
+- Improved split detection
+- `/vs set-splitting` command added to enable/disable splitting per ship
 - Removed Herobrine
 
 #### Bugfixes:
-- Fixed broken distance check causing things like controller lecterns to not work on ships
-- Use safe cast for IEntityDraggingProvider
-- Connectivity... like all of it
-- Client connectivity not syncing
-- Fixed echo chest compat
-- Fixed doppler effect and added config
+- Splitting config now works
+- Contraptions should no longer split on assembly
+- Drag uses the correct face direction
+- Explosions split ships properly
+- Fabric breathing in sealed pockets fixed
+- Hexcasting compat fixes
+- ICopyableBlock/ICopyableAttachment now use immutable vectors
+- Deployers can place blocks in ships again
+- Hypertube compat fixed
+- Connectible Chains compat fixed
