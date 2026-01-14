@@ -35,7 +35,7 @@ object VSAssemblyEvents {
     data class OnPasteBeforeBlocksAreLoaded(
         val level: ServerLevel,
         val oldShip: ServerShip?,
-        val newShip: ServerShip,
+        val newShip: ServerShip?,
         val centerPosition: Pair<Vector3dc, Vector3dc>,
         val tempData: Map<String, CompoundTag>
     )
@@ -47,7 +47,7 @@ object VSAssemblyEvents {
     data class OnPasteAfterBlocksAreLoaded(
         val level: ServerLevel,
         val oldShip: ServerShip?,
-        val newShip: ServerShip,
+        val newShip: ServerShip?,
         val centerPosition: Pair<Vector3dc, Vector3dc>,
         val tempData: Map<String, CompoundTag>
     )

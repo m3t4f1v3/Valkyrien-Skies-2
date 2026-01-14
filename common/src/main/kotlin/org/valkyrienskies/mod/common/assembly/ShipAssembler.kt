@@ -23,7 +23,6 @@ import org.valkyrienskies.core.api.ships.ServerShip
 import org.valkyrienskies.core.api.ships.properties.ShipId
 import org.valkyrienskies.core.api.util.GameTickOnly
 import org.valkyrienskies.core.internal.ships.VsiServerShip
-import org.valkyrienskies.mod.common.config.VSGameConfig
 import org.valkyrienskies.mod.common.dimensionId
 import org.valkyrienskies.mod.common.executeIf
 import org.valkyrienskies.mod.common.getLoadedShipManagingPos
@@ -42,8 +41,6 @@ import org.valkyrienskies.mod.common.vsCore
 import org.valkyrienskies.mod.common.yRange
 import org.valkyrienskies.mod.util.AIR
 import org.valkyrienskies.mod.util.StructureTemplateFillFromVoxelSet
-import org.valkyrienskies.mod.util.relocateBlock
-import org.valkyrienskies.mod.util.updateBlock
 
 object ShipAssembler {
     class SingleItemMap<K, V>(val mkey: K, val mvalue: V, val default: V, val defaultFn: ((K) -> V)? = null): Map<K, V> {
@@ -90,12 +87,12 @@ object ShipAssembler {
         return chunkSet
     }
 
+    data class AssembleContext(val ship: ServerShip, val fromCenter: Vector3d, val toCenter: Vector3d)
+
     @JvmStatic
     @OptIn(GameTickOnly::class)
-    fun assembleToShip(level: ServerLevel, blocks: Set<BlockPos>, scale: Double = 1.0): ServerShip {
+    fun assembleToShipFull(level: ServerLevel, blocks: Set<BlockPos>, scale: Double = 1.0): AssembleContext {
         if (blocks.isEmpty()) throw RuntimeException("Empty set of blocks")
-
-        val eventData = mutableMapOf<String, CompoundTag>()
 
         val (minB, maxB) = findMinAndMax(blocks)
         val oldMin = minB.toJOMLD()
@@ -105,45 +102,101 @@ object ShipAssembler {
             .sub(oldMin)
             .add(1.0, 1.0, 1.0)
             .div(2.0)
-        val oldCenter = offset.get(Vector3d()).add(oldMin)
+        val fromCenter = offset.get(Vector3d()).add(oldMin)
 
-        val oldShip = level.getLoadedShipManagingPos(oldCenter) ?: level.getShipManagingPos(oldCenter)
-        val oldId = oldShip?.id ?: -1L
-        val oldScale = oldShip?.transform?.scaling?.x() ?: 1.0
+        val fromShip = level.getLoadedShipManagingPos(fromCenter) ?: level.getShipManagingPos(fromCenter)
+        val oldScale = fromShip?.transform?.scaling?.x() ?: 1.0
+        val worldOldCenter = fromShip?.shipToWorld?.transformPosition(fromCenter.get(Vector3d())) ?: fromCenter.get(Vector3d())
+
+        val toShip = level.shipObjectWorld.createNewShipAtBlock(Vector3i(worldOldCenter, RoundingMode.FLOOR), false, scale * oldScale, level.dimensionId)
+        toShip.isStatic = fromShip == null || fromShip.isStatic
+
+        val (wasSuccessful, _, toCenter) = moveBlocksFromTo(level, blocks, fromShip, toShip, minB, maxB, toShip.chunkClaim.getCenterBlockCoordinates(level.yRange, Vector3i()))
+
+        if (!wasSuccessful) {
+            level.shipObjectWorld.deleteShip(toShip)
+            throw AssertionError("Couldn't move blocks")
+        }
+
+        //teleport fn uses COM as center of ship, so it calculates such offset that centerOfShip will be "center" instead
+        val posOffset =
+            Vector3d(toShip.inertiaData.centerOfMass)
+                .sub(Vector3d(toCenter))
+                .let { fromShip?.shipToWorld?.transformDirection(it) ?: it }
+
+        (toShip as VsiServerShip).unsafeSetKinematics(vsCore.newBodyKinematics(
+            fromShip?.velocity ?: Vector3d(),
+            fromShip?.angularVelocity ?: Vector3d(),
+            vsCore.newBodyTransform(
+                (fromShip?.shipToWorld?.transformPosition(Vector3d(fromCenter)) ?: fromCenter).add(posOffset),
+                fromShip?.transform?.shipToWorldRotation ?: Quaterniond(),
+                Vector3d(scale * oldScale, scale * oldScale, scale * oldScale),
+                toCenter
+            )
+        ))
+        toShip.isStatic = false
+        return AssembleContext(toShip, fromCenter, toCenter)
+    }
+
+    data class MoveContext(val wasSuccessful: Boolean, val fromCenter: Vector3d, val toCenter: Vector3d)
+    private val failedMove = MoveContext(false, Vector3d(), Vector3d())
+
+    @JvmStatic
+    @OptIn(GameTickOnly::class)
+    fun moveBlocksFromTo(
+        level: ServerLevel,
+        blocks: Set<BlockPos>,
+        fromShip: ServerShip?, toShip: ServerShip?,
+        minStructurePos: BlockPos, maxStructurePos: BlockPos,
+        toCenter: Vector3i,
+        removeOriginal: Boolean = true)
+    : MoveContext {
+        val blocks = blocks.filter { level.getBlockState(it).let{!it.isAir && !it.inAssemblyBlacklist()} }.toSet()
+        if (blocks.isEmpty()) return failedMove
+
+        val fromId = fromShip?.id ?: -1L
+        val eventData = mutableMapOf<String, CompoundTag>()
+
+        val oldMin = minStructurePos.toJOMLD()
+        val oldMax = maxStructurePos.toJOMLD()
+        //offset to center from corner of structure
+        val offset = oldMax.get(Vector3d())
+            .sub(oldMin)
+            .add(1.0, 1.0, 1.0)
+            .div(2.0)
+        val fromCenter = offset.get(Vector3d()).add(oldMin)
 
         var wasSplittingEnabled = true
-        if (oldShip is LoadedServerShip) {
-            val splittingDisabler = oldShip.getAttachment(SplittingDisablerAttachment::class.java)
+        if (fromShip is LoadedServerShip) {
+            val splittingDisabler = fromShip.getAttachment(SplittingDisablerAttachment::class.java)
             wasSplittingEnabled = splittingDisabler?.canSplit() != false
             splittingDisabler?.disableSplitting()
         }
 
-        val worldOldCenter = oldShip?.shipToWorld?.transformPosition(oldCenter.get(Vector3d())) ?: oldCenter.get(Vector3d())
-
-        VSAssemblyEvents.beforeCopy.emit(VSAssemblyEvents.BeforeCopy(level, oldMin, oldMax, oldCenter, oldShip, blocks, eventData))
+        // ========== Copy Blocks
+        VSAssemblyEvents.beforeCopy.emit(VSAssemblyEvents.BeforeCopy(level, oldMin, oldMax, fromCenter, fromShip, blocks, eventData))
 
         val template = StructureTemplate()
         template as StructureTemplateFillFromVoxelSet
         template.`vs$fillFromVoxelSet`(
             level, blocks,
-            oldShip?.let { listOf(it) } ?: emptyList(),
-            SingleItemMap(oldId, oldCenter, Vector3d()),
-            minB, maxB
+            fromShip?.let { listOf(it) } ?: emptyList(),
+            SingleItemMap(fromId, fromCenter, Vector3d()),
+            minStructurePos, maxStructurePos
         )
-        val newShip = level.shipObjectWorld.createNewShipAtBlock(Vector3i(worldOldCenter, RoundingMode.FLOOR), false, scale * oldScale, level.dimensionId)
 
-        val shipChunkX = newShip.chunkClaim.xMiddle
-        val shipChunkZ = newShip.chunkClaim.zMiddle
+        // ========== Pause Chunk Updates
 
-        val worldChunkX = ((minB.x + maxB.x) / 2) shr 4
-        val worldChunkZ = ((minB.z + maxB.z) / 2) shr 4
+        val toChunkCenter = ChunkPos(toCenter.x.toInt() shr 4, toCenter.z.toInt() shr 4)
 
-        val deltaX = worldChunkX - shipChunkX
-        val deltaZ = worldChunkZ - shipChunkZ
+        val fromChunkX = ((minStructurePos.x + maxStructurePos.x) / 2) shr 4
+        val fromChunkZ = ((minStructurePos.z + maxStructurePos.z) / 2) shr 4
+
+        val deltaX = fromChunkX - toChunkCenter.x
+        val deltaZ = fromChunkZ - toChunkCenter.z
 
         val chunksToBeUpdated = mutableMapOf<ChunkPos, Pair<ChunkPos, ChunkPos>>()
-        getDistinctChunksFromBlockPosSet(blocks).forEach { pos ->
-            val sourcePos = pos
+        getDistinctChunksFromBlockPosSet(blocks).forEach { sourcePos ->
             val destPos = ChunkPos(sourcePos.x - deltaX, sourcePos.z - deltaZ)
             chunksToBeUpdated[sourcePos] = Pair(sourcePos, destPos)
         }
@@ -157,38 +210,39 @@ object ShipAssembler {
             }
         }
 
-        for (pos in blocks) {
-            level.getBlockEntity(pos)?.let {
-                Clearable.tryClear(it)
+        // ========== Removing Old Blocks
+        if (removeOriginal) {
+            for (pos in blocks) {
+                level.getBlockEntity(pos)?.let {
+                    Clearable.tryClear(it)
+                }
+                level.setBlock(pos, Blocks.BARRIER.defaultBlockState(), Block.UPDATE_CLIENTS)
             }
-            level.setBlock(pos, Blocks.BARRIER.defaultBlockState(), Block.UPDATE_CLIENTS)
+            for (pos in blocks) {
+                val block = level.getBlockState(pos)
+                level.removeBlock(pos, false)
+                // 75 = flag 1 (block update) & flag 2 (send to clients) + flag 8 (force rerenders)
+                val flags = 11 or Block.UPDATE_MOVE_BY_PISTON or Block.UPDATE_SUPPRESS_DROPS
+
+                //updateNeighbourShapes recurses through nearby blocks, recursionLeft is the limit
+                val recursionLeft = 511
+
+                level.setBlocksDirty(pos, block, AIR)
+                level.sendBlockUpdated(pos, block, AIR, flags)
+                level.blockUpdated(pos, AIR.block)
+                // This handles the update for neighboring blocks in worldspace
+                AIR.updateIndirectNeighbourShapes(level, pos, flags, recursionLeft - 1)
+                AIR.updateNeighbourShapes(level, pos, flags, recursionLeft)
+                AIR.updateIndirectNeighbourShapes(level, pos, flags, recursionLeft)
+                //This updates lighting for blocks in worldspace
+                level.chunkSource.lightEngine.checkBlock(pos)
+            }
         }
-        for (pos in blocks) {
-            val block = level.getBlockState(pos)
-            level.removeBlock(pos, false)
-            // 75 = flag 1 (block update) & flag 2 (send to clients) + flag 8 (force rerenders)
-            val flags = 11 or Block.UPDATE_MOVE_BY_PISTON or Block.UPDATE_SUPPRESS_DROPS
-
-            //updateNeighbourShapes recurses through nearby blocks, recursionLeft is the limit
-            val recursionLeft = 511
-
-            level.setBlocksDirty(pos, block, AIR)
-            level.sendBlockUpdated(pos, block, AIR, flags)
-            level.blockUpdated(pos, AIR.block)
-            // This handles the update for neighboring blocks in worldspace
-            AIR.updateIndirectNeighbourShapes(level, pos, flags, recursionLeft - 1)
-            AIR.updateNeighbourShapes(level, pos, flags, recursionLeft)
-            AIR.updateIndirectNeighbourShapes(level, pos, flags, recursionLeft)
-            //This updates lighting for blocks in worldspace
-            level.chunkSource.lightEngine.checkBlock(pos)
-        }
-
-        newShip.isStatic = oldShip == null || oldShip.isStatic
-        val centerOfPlot = newShip.chunkClaim.getCenterBlockCoordinates(level.yRange, Vector3i())
+        // ========== Placing New Blocks
 
         //structure template builds from a corner, so offset center of plot so that structure's center and center of
         //plot roughly align
-        val cornerOfShip = Vector3d(centerOfPlot)
+        val cornerOfShip = Vector3d(toCenter)
             .sub(offset)
             .ceil()
             .let { BlockPos(
@@ -201,45 +255,18 @@ object ShipAssembler {
 
         val structureSettings = StructurePlaceSettings().addProcessor(
             ICopyableProcessor(
-                SingleItemMap(oldId, newShip.id, -1) {it},
-                SingleItemMap(oldId, Pair(oldCenter, Vector3d(centerOfShip)), Pair(Vector3d(), Vector3d()))
+                SingleItemMap(fromId, toShip?.id ?: -1L, -1L) {it},
+                SingleItemMap(fromId, Pair(fromCenter, Vector3d(centerOfShip)), Pair(Vector3d(), Vector3d()))
             )
         )
 
         structureSettings.rotationPivot = cornerOfShip
 
-        VSAssemblyEvents.onPasteBeforeBlocksAreLoaded.emit(VSAssemblyEvents.OnPasteBeforeBlocksAreLoaded(level, oldShip, newShip, Pair(oldCenter, centerOfShip), eventData))
-
+        VSAssemblyEvents.onPasteBeforeBlocksAreLoaded.emit(VSAssemblyEvents.OnPasteBeforeBlocksAreLoaded(level, fromShip, toShip, Pair(fromCenter, centerOfShip), eventData))
         template.placeInWorld(level, cornerOfShip, cornerOfShip, structureSettings, level.random, Block.UPDATE_CLIENTS)
-        val shipPos = Vector3d(oldCenter)
 
-        //teleport fn uses COM as center of ship, so it calculates such offset that centerOfShip will be "center" instead
-        val posOffset =
-            Vector3d(newShip.inertiaData.centerOfMass)
-            .sub(Vector3d(centerOfShip))
-            .let { oldShip?.shipToWorld?.transformDirection(it) ?: it }
-
-        (newShip as VsiServerShip).unsafeSetKinematics(vsCore.newBodyKinematics(
-            oldShip?.velocity ?: Vector3d(),
-            oldShip?.angularVelocity ?: Vector3d(),
-            vsCore.newBodyTransform(
-                (oldShip?.shipToWorld?.transformPosition(shipPos) ?: shipPos).add(posOffset),
-                oldShip?.transform?.shipToWorldRotation ?: Quaterniond(),
-                Vector3d(scale * oldScale, scale * oldScale, scale * oldScale),
-                centerOfShip
-            )
-        ))
-        // level.shipObjectWorld.teleportShip(newShip, vsCore.newShipTeleportData(
-        //     (oldShip?.shipToWorld?.transformPosition(shipPos) ?: shipPos).add(posOffset),
-        //     oldShip?.transform?.shipToWorldRotation ?: Quaterniond(),
-        //     oldShip?.velocity ?: Vector3d(),
-        //     oldShip?.angularVelocity ?: Vector3d(),
-        // ))
-
-        newShip.isStatic = false
-
+        // ========== Resume Chunk Updates
         val timeAtExecution = level.server.tickCount
-
         level.server.executeIf(
             // This condition will return true if all modified chunks have been both loaded AND
             // chunk update packets were sent to players
@@ -251,7 +278,7 @@ object ShipAssembler {
                     PacketRestartChunkUpdates(chunkPosesJOML).sendToClient(player.playerWrapper)
                 }
             }
-            VSAssemblyEvents.onPasteAfterBlocksAreLoaded.emit(VSAssemblyEvents.OnPasteAfterBlocksAreLoaded(level, oldShip, newShip, Pair(oldCenter, centerOfShip), eventData))
+            VSAssemblyEvents.onPasteAfterBlocksAreLoaded.emit(VSAssemblyEvents.OnPasteAfterBlocksAreLoaded(level, fromShip, toShip, Pair(fromCenter, centerOfShip), eventData))
             //force update connectivity because this new assemblyslop doesn't update it :(
             for (pos in chunkPoses) {
                 val worldChunk = level.getChunk(pos.x, pos.z) ?: continue
@@ -270,19 +297,24 @@ object ShipAssembler {
                     )
                 }
             }
-            if (oldShip is LoadedServerShip) {
-                val splittingDisabler = oldShip.getAttachment(SplittingDisablerAttachment::class.java)
+            if (fromShip is LoadedServerShip) {
+                val splittingDisabler = fromShip.getAttachment(SplittingDisablerAttachment::class.java)
                 if (wasSplittingEnabled) {
                     splittingDisabler?.enableSplitting()
                 }
             }
         }
 
+        return MoveContext(true, fromCenter, centerOfShip)
+    }
 
-
-        return newShip
+    @JvmStatic
+    @OptIn(GameTickOnly::class)
+    fun assembleToShip(level: ServerLevel, blocks: Set<BlockPos>, scale: Double = 1.0): ServerShip {
+        return assembleToShipFull(level, blocks, scale).ship
     }
     //legacy method to not break shit
+    @Deprecated("Old")
     fun assembleToShip(level: ServerLevel, blocks: List<BlockPos>, shouldSplit: Boolean = true): ServerShip {
         return assembleToShip(level, blocks.toSet(), 1.0)
     }

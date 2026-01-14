@@ -210,14 +210,14 @@ object TestHingeBlock :
         state: BlockState,
         be: BlockEntity?,
         shipsBeingCopied: List<ServerShip>,
-        centerPositions: Map<Long, Vector3d>
+        centerPositions: Map<Long, Vector3dc>
     ): CompoundTag? = null
 
     override fun onPaste(
         level: ServerLevel, pos: BlockPos,
         state: BlockState,
         oldShipIdToNewId: Map<Long, Long>,
-        centerPositions: Map<Long, Pair<Vector3d, Vector3d>>,
+        centerPositions: Map<Long, Pair<Vector3dc, Vector3dc>>,
         tag: CompoundTag?
     ): CompoundTag? {
         val tag = tag ?: return null
