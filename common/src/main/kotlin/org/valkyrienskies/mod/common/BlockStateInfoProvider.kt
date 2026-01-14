@@ -178,7 +178,7 @@ object BlockStateInfo {
                 }
             }
             if (ValkyrienSkiesMod.vsCore.hooks.enableConnectivity) {
-                ValkyrienSkiesMod.splitHandler.queueSplit(level, x, y, z)
+                ValkyrienSkiesMod.splitHandler.queueSplit(level, level.getShipManagingPos(x.toDouble(), y.toDouble(), z.toDouble())?.id)
             }
         }
 

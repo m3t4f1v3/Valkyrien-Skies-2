@@ -102,8 +102,7 @@ public abstract class MixinExplosion {
 
                             if (VSCoreConfig.SERVER.getSp().getEnableSplitting()) {
                                 //custom split logic for TNT specifically
-                                ValkyrienSkiesMod.splitHandler.split(level, blockPos.getX(), blockPos.getY(),
-                                    blockPos.getZ(), level.getBlockState(blockPos), (ServerShip ship1) -> ValkyrienSkiesMod.getOrCreateGTPA(ship.getChunkClaimDimension()).applyWorldForceToModelPos(
+                                ValkyrienSkiesMod.splitHandler.split(level, ship.getId(), (ServerShip ship1) -> ValkyrienSkiesMod.getOrCreateGTPA(ship.getChunkClaimDimension()).applyWorldForceToModelPos(
                                         ship1.getId(), forceVector, ship1.getTransform().getWorldToShip().transformPosition(ship.getTransform().getShipToWorld().transformPosition(modelPos, new Vector3d())
                                     )));
                             }

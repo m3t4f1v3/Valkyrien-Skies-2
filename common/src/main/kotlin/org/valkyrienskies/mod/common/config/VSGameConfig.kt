@@ -261,7 +261,7 @@ object VSGameConfig {
         @ConfigEntry(
             description = "The default grace timer for splitting. A split won't occur after a block break at a position until this many ticks have passed. Note that setting this too high may prevent things like explosions from properly launching split ships. (in ticks)"
         )
-        var defaultSplitGraceTimer = 1
+        var defaultSplitGraceTimer = 2
 
         @ConfigCategory(title = "Commands")
         val Commands = COMMANDS()
