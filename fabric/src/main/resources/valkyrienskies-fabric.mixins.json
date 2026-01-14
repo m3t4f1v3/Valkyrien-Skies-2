@@ -7,7 +7,6 @@
     "compat.connectiblechains.MixinChainable",
     "compat.create.MixinBlockBreakingKineticTileEntity",
     "compat.create.MixinControlledContraptionEntity",
-    "compat.terra.MixinMinecraftChunkGeneratorWrapper",
     "entity.MixinContainerEntity",
     "feature.explosions.ClipContextMixin",
     "feature.fix_tp_ships_cross_dimension.MixinLevelChunk",

@@ -19,7 +19,6 @@
     "compat.mffs.MixinClientPacketHandler",
     "compat.mffs.MixinFrequencyGrid",
     "compat.modular_routers.MixinRouterMenu",
-    "compat.terrafirmacraft.MixinTFCChunkGenerator",
     "compat.thermalexpansion.MixinTileCoFH",
     "compat.twilightforest.ChunkGeneratorTwilightMixin",
     "entity.MixinContainerEntity",
