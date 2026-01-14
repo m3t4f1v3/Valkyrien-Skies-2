@@ -5,6 +5,7 @@ import net.minecraft.nbt.CompoundTag
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.Clearable
 import net.minecraft.world.level.ChunkPos
+import net.minecraft.world.level.Level
 import net.minecraft.world.level.LevelReader
 import net.minecraft.world.level.ServerLevelAccessor
 import net.minecraft.world.level.block.Blocks
@@ -332,8 +333,8 @@ object ShipAssembler {
     }
     //legacy method to not break shit
     @Deprecated("Old")
-    fun assembleToShip(level: ServerLevel, blocks: List<BlockPos>, shouldSplit: Boolean = true): ServerShip {
-        return assembleToShip(level, blocks.toSet(), 1.0)
+    fun assembleToShip(level: Level, blocks: List<BlockPos>, removeOriginal: Boolean, scale: Double = 1.0, shouldDisableSplitting: Boolean = false): ServerShip {
+        return assembleToShip(level as ServerLevel, blocks.toSet(), scale)
     }
 
     fun isValidShipBlock(state: BlockState?) : Boolean {
