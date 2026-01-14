@@ -41,8 +41,12 @@ import org.valkyrienskies.mod.common.vsCore
 import org.valkyrienskies.mod.common.yRange
 import org.valkyrienskies.mod.util.AIR
 import org.valkyrienskies.mod.util.StructureTemplateFillFromVoxelSet
+import org.valkyrienskies.mod.util.logger
 
 object ShipAssembler {
+
+    val ASSEMBLY_LOGGER = logger("Sandwich Factory").logger
+
     class SingleItemMap<K, V>(val mkey: K, val mvalue: V, val default: V, val defaultFn: ((K) -> V)? = null): Map<K, V> {
         override val size: Int = 1
         override val keys: Set<K> = setOf(mkey)
@@ -92,7 +96,11 @@ object ShipAssembler {
     @JvmStatic
     @OptIn(GameTickOnly::class)
     fun assembleToShipFull(level: ServerLevel, blocks: Set<BlockPos>, scale: Double = 1.0): AssembleContext {
-        if (blocks.isEmpty()) throw RuntimeException("Empty set of blocks")
+        if (blocks.isEmpty()) {
+            val error = RuntimeException("Assembly function received an empty set of blocks")
+            ASSEMBLY_LOGGER.error(error)
+            throw error
+        }
 
         val (minB, maxB) = findMinAndMax(blocks)
         val oldMin = minB.toJOMLD()
@@ -115,7 +123,9 @@ object ShipAssembler {
 
         if (!wasSuccessful) {
             level.shipObjectWorld.deleteShip(toShip)
-            throw AssertionError("Couldn't move blocks")
+            val error = AssertionError("Couldn't move blocks")
+            ASSEMBLY_LOGGER.error(error)
+            throw error
         }
 
         //teleport fn uses COM as center of ship, so it calculates such offset that centerOfShip will be "center" instead
@@ -205,6 +215,7 @@ object ShipAssembler {
         val chunkPosesJOML = chunkPoses.map { it.toJOML() }
 
         level.players().forEach { player ->
+            ASSEMBLY_LOGGER.debug("Pausing chunk updates for ${player.name}")
             with(vsCore.simplePacketNetworking) {
                 PacketStopChunkUpdates(chunkPosesJOML).sendToClient(player.playerWrapper)
             }
@@ -270,10 +281,16 @@ object ShipAssembler {
         level.server.executeIf(
             // This condition will return true if all modified chunks have been both loaded AND
             // chunk update packets were sent to players
-            { chunkPoses.all(level::isTickingChunk) || level.server.tickCount - timeAtExecution > 400 }
+            { chunkPoses.all(level::isTickingChunk) || level.server.tickCount - timeAtExecution > 60 }
         ) {
+            if (level.server.tickCount - timeAtExecution > 60) {
+                ASSEMBLY_LOGGER.warn("Timed out waiting for chunks to start ticking after assembly! Forcibly resuming...")
+                ASSEMBLY_LOGGER.warn("All chunks involved in assembly: $chunkPoses")
+                ASSEMBLY_LOGGER.warn("Chunks that were supposed to be ticking: ${chunkPoses.filterNot { level.isTickingChunk(it) }}")
+            }
             // Once all the chunk updates are sent to players, we can tell them to restart chunk updates
             level.players().forEach { player ->
+                ASSEMBLY_LOGGER.debug("Resuming chunk updates for ${player.name}")
                 with (vsCore.simplePacketNetworking) {
                     PacketRestartChunkUpdates(chunkPosesJOML).sendToClient(player.playerWrapper)
                 }
