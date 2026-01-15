@@ -1,5 +1,6 @@
 package org.valkyrienskies.mod.forge.mixin.feature.water_in_ships_entity;
 
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
@@ -161,16 +162,13 @@ public abstract class MixinEntity {
         return fluidState[0];
     }
 
-    @Inject(
-        method = "updateFluidOnEyes",
-        at = @At("TAIL")
-    )
-    private void afterFluidOnEyes(CallbackInfo ci) {
+    @WrapMethod(method = "updateFluidOnEyes")
+    private void afterFluidOnEyes(Operation<Void> original) {
         final boolean seal = ((IEntityDraggingInformationProvider) (Object) this).vs$isInSealedArea();
         if (seal) {
             forgeFluidTypeOnEyes = ForgeMod.EMPTY_TYPE.get();
             forgeFluidTypeHeight.clear();
-        }
+        } else original.call();
     }
 
     @WrapOperation(
