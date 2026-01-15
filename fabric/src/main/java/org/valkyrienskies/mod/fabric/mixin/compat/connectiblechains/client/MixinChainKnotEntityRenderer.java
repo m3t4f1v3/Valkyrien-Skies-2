@@ -50,7 +50,8 @@ public abstract class MixinChainKnotEntityRenderer {
         at = @At(
             value = "INVOKE",
             target = "Lnet/minecraft/client/renderer/culling/Frustum;isVisible(Lnet/minecraft/world/phys/AABB;)Z"
-        )
+        ),
+        require = 0 // Present in older versions of the mod, seems to be removed in a bugfix update
     )
     private boolean adjustHolderAABB(Frustum frustum, AABB aabb, Operation<Boolean> original, @Local Entity chainHolder) {
         return frustum.isVisible(VSGameUtilsKt.transformRenderAABBToWorld(((ClientLevel) chainHolder.level()), chainHolder.position(), aabb));

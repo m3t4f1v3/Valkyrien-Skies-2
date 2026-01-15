@@ -4,7 +4,9 @@
   "compatibilityLevel": "JAVA_17",
   "plugin": "org.valkyrienskies.mod.forge.mixin.ValkyrienForgeMixinConfigPlugin",
   "mixins": [
+    "compat.connectiblechains.MixinChainCollisionEntity",
     "compat.connectiblechains.MixinChainKnotEntity",
+    "compat.connectiblechains.MixinChainLink",
     "compat.create.MixinBlockBreakingKineticTileEntity",
     "compat.create.MixinControlledContraptionEntity",
     "compat.create.client.MixinBlockEntityRenderHelper66",
@@ -34,11 +36,11 @@
     "compat.connectiblechains.client.MixinChainKnotEntityRenderer",
     "compat.create.client.MixinChainConveyorBlockEntity",
     "compat.create.client.MixinContraptionHandlerClient",
+    "compat.emf.MixinEMFAnimationEntityContext",
     "compat.oc2r.MixinComputerRenderer",
     "compat.oc2r.MixinMonitorRenderer",
     "compat.oc2r.MixinProjectorDepthRenderer",
-    "compat.sodium.MixinSodiumWorldRenderer",
-    "compat.emf.MixinEMFAnimationEntityContext"
+    "compat.sodium.MixinSodiumWorldRenderer"
   ],
   "injectors": {
     "defaultRequire": 1

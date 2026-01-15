@@ -5,6 +5,7 @@
   "plugin": "org.valkyrienskies.mod.fabric.mixin.ValkyrienSkiesFabricMixinPlugin",
   "mixins": [
     "compat.connectiblechains.MixinChainable",
+    "compat.connectiblechains.MixinChainCollisionEntity",
     "compat.create.MixinBlockBreakingKineticTileEntity",
     "compat.create.MixinControlledContraptionEntity",
     "entity.MixinContainerEntity",
@@ -24,8 +25,8 @@
     "compat.create.client.MixinContraptionHandlerClient",
     "compat.create.client.MixinCullingBlockEntityIterator",
     "compat.create.client.MixinSuperGlueSelectionHandler",
-    "compat.sodium.MixinSodiumWorldRenderer",
     "compat.emf.MixinEMFAnimationEntityContext",
+    "compat.sodium.MixinSodiumWorldRenderer",
     "feature.duplicate_keybindings.KeyMappingAccessor",
     "feature.duplicate_keybindings.MixinKeyMapping"
   ],
