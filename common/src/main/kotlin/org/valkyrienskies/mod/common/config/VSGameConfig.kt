@@ -236,7 +236,7 @@ object VSGameConfig {
         @ConfigEntry(
             description = "Default mass for blocks that do not have it defined in data or code. Blocks with masses below 100 float in water"
         )
-        var defaultBlockMass = 100.0
+        var defaultBlockMass = 1000.0
 
         @ConfigEntry(
             description = "Default elasticity coefficient for blocks. Higher values make blocks more bouncy"

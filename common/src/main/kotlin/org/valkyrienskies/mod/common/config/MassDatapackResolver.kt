@@ -16,6 +16,7 @@ import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.block.entity.BlockEntity
 import net.minecraft.world.level.block.state.BlockState
+import net.minecraft.world.level.material.Fluid
 import net.minecraft.world.level.material.FluidState
 import net.minecraft.world.level.material.Fluids
 import net.minecraft.world.phys.shapes.VoxelShape
@@ -312,12 +313,12 @@ object MassDatapackResolver : BlockStateInfoProvider {
         )
 
         val generatedCollisionShapesMap = HashMap<VoxelShape, SolidBlockShape?>()
-        val liquidMaterialToDensityMap = mapOf(Fluids.WATER to Pair(1000.0, 0.3), Fluids.LAVA to Pair(10000.0, 1.0), Fluids.FLOWING_WATER to Pair(1000.0, 0.3), Fluids.FLOWING_LAVA to Pair(10000.0, 1.0))
+        val liquidMaterialToDensityMap: HashMap<Fluid, Pair<Double, Double>> = hashMapOf(Fluids.WATER to Pair(1000.0, 0.3), Fluids.LAVA to Pair(10000.0, 1.0), Fluids.FLOWING_WATER to Pair(1000.0, 0.3), Fluids.FLOWING_LAVA to Pair(10000.0, 1.0))
 
         val fluidStateToBlockTypeMap = HashMap<FluidState, LiquidState>()
 
         // Get the id of the fluid state/create a new fluid state if necessary
-        fun getFluidState(fluidState: FluidState): LiquidState {
+        fun getFluidState(fluidState: FluidState, blockStateInfo: VSBlockStateInfo?, isLiquid: Boolean = false): LiquidState {
             val cached = fluidStateToBlockTypeMap[fluidState]
             if (cached != null) return cached
             val maxY = ((fluidState.ownHeight * 16.0).roundToInt() - 1).coerceIn(0, 15)
@@ -333,8 +334,28 @@ object MassDatapackResolver : BlockStateInfoProvider {
 
                 newFluidBlockState
             } else {
-                // Default
-                vsCore.blockTypes.waterState.liquidState!!
+                if (isLiquid) {
+                    val density = blockStateInfo?.mass ?: VSGameConfig.SERVER.defaultBlockMass
+                    val dragCoefficient = blockStateInfo?.friction ?: VSGameConfig.SERVER.defaultBlockFriction
+                    val newFluidBlockState = vsCore.newLiquidStateBuilder()
+                        .boxShape(fluidBox)
+                        .density(density)
+                        .dragCoefficient(dragCoefficient)
+                        .velocity(Vector3d())
+                        .build()
+
+                    liquidMaterialToDensityMap[fluidState.type] = Pair(density, dragCoefficient)
+                    newFluidBlockState
+                } else {
+                    //default
+                    val newFluidBlockState = vsCore.newLiquidStateBuilder()
+                        .boxShape(fluidBox)
+                        .density(VSGameConfig.SERVER.defaultBlockMass)
+                        .dragCoefficient(liquidMaterialToDensityMap[Fluids.WATER]!!.second)
+                        .velocity(Vector3d())
+                        .build()
+                    newFluidBlockState
+                }
             }
         }
 
@@ -345,7 +366,7 @@ object MassDatapackResolver : BlockStateInfoProvider {
                 vsBlockState = vsCore.blockTypes.airState
             } else {
                 vsBlockState = if (blockState.liquid()) { //TODO: This is also deprecated. I could check if the blockState is wet and not waterlogged but couldn't be sure if that's what this is for.
-                    VsiBlockState(null, getFluidState(blockState.fluidState))
+                    VsiBlockState(null, getFluidState(blockState.fluidState, map[BuiltInRegistries.BLOCK.getKey(blockState.block)], true))
                 } else {
                     val voxelShape: VoxelShape
                     if (blockState.isSolid) {
@@ -385,7 +406,7 @@ object MassDatapackResolver : BlockStateInfoProvider {
                         .build()
 
                     val fluidState = if (!blockState.fluidState.isEmpty) {
-                        getFluidState(blockState.fluidState)
+                        getFluidState(blockState.fluidState, null)
                     } else {
                         null
                     }
