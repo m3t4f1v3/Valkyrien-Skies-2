@@ -101,6 +101,9 @@ fun Level?.getShipById(id: ShipId): Ship? =
 fun Level?.isBlockInShipyard(blockX: Int, blockY: Int, blockZ: Int): Boolean =
     isChunkInShipyard(blockX shr 4, blockZ shr 4)
 
+fun Level?.isBlockInShipyard(pos: BlockPos): Boolean =
+    isBlockInShipyard(pos.x, pos.y, pos.z)
+
 fun Level?.isChunkInShipyard(chunkX: Int, chunkZ: Int): Boolean =
     vsApi.isChunkInShipyard(this, chunkX, chunkZ)
 
@@ -318,13 +321,13 @@ fun Level?.distanceSquared(x1: Double, y1: Double, z1: Double, x2: Double, y2: D
     val ship2 = this.getShipManagingBlock(x2, y2, z2)
 
     // Do this transform manually to avoid allocation
-    if (ship1 != null && ship2 != null && ship1 != ship2) {
-        ship1.shipToWorld.transformPositionInline(x1, y1, z1) { x, y, z ->
+    if (ship1 != ship2) {
+        ship1?.shipToWorld?.transformPositionInline(x1, y1, z1) { x, y, z ->
             inWorldX1 = x
             inWorldY1 = y
             inWorldZ1 = z
         }
-        ship2.shipToWorld.transformPositionInline(x2, y2, z2) { x, y, z ->
+        ship2?.shipToWorld?.transformPositionInline(x2, y2, z2) { x, y, z ->
             inWorldX2 = x
             inWorldY2 = y
             inWorldZ2 = z

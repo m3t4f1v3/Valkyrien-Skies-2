@@ -1,9 +1,11 @@
 package org.valkyrienskies.mod.common.util
 
+import net.minecraft.client.player.LocalPlayer
 import net.minecraft.core.Direction
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.util.Mth
 import net.minecraft.world.entity.Entity
+import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.level.ClipContext
 import net.minecraft.world.level.Level
@@ -16,7 +18,7 @@ import org.valkyrienskies.core.api.ships.Ship
 import org.valkyrienskies.mod.api.toJOML
 import org.valkyrienskies.mod.api.toMinecraft
 import org.valkyrienskies.mod.common.entity.handling.VSEntityManager
-import org.valkyrienskies.mod.common.getShipObjectManagingPos
+import org.valkyrienskies.mod.common.getLoadedShipManagingPos
 import org.valkyrienskies.mod.common.shipObjectWorld
 import org.valkyrienskies.mod.common.util.EntityLerper.yawToWorld
 import kotlin.math.asin
@@ -35,7 +37,7 @@ object EntityDragger {
      */
     fun dragEntitiesWithShips(entities: Iterable<Entity>, preTick: Boolean = false) {
         for (entity in entities) {
-            val entityDraggingInformation = (entity as IEntityDraggingInformationProvider).draggingInformation
+            val entityDraggingInformation = (entity as? IEntityDraggingInformationProvider)?.draggingInformation ?: continue
 
             var dragTheEntity = false
             var addedMovement: Vector3dc? = null
@@ -51,7 +53,6 @@ object EntityDragger {
                     val shipData = entity.level().shipObjectWorld.allShips.getById(shipDraggingEntity)
                     if (shipData != null) {
                         dragTheEntity = true
-
                         val entityReferencePos: Vector3dc = if (preTick) {
                             Vector3d(entity.x, entity.y, entity.z)
                         } else {
@@ -104,10 +105,8 @@ object EntityDragger {
                         // endregion
                     }
                 } else {
-                    dragTheEntity = true
-                    addedMovement = entityDraggingInformation.addedMovementLastTick
-                        .mul(ADDED_MOVEMENT_DECAY, Vector3d())
-                    addedYRot = entityDraggingInformation.addedYawRotLastTick * ADDED_MOVEMENT_DECAY
+                    addedMovement = Vector3d(entityDraggingInformation.addedMovementLastTick)
+                    addedYRot = 0.0
                 }
             }
 
@@ -122,6 +121,13 @@ object EntityDragger {
                     entity.y + addedMovement.y(),
                     entity.z + addedMovement.z()
                 )
+
+                if(entityDraggingInformation.shouldImpulseMovement && (!entity.level().isClientSide || entity is LocalPlayer)) { //This is the first Tick on the ship. Also, should push the entity in server side only and propagate the result.
+                    val acceleration = Vector3d(entityDraggingInformation.addedMovementLastTick) // if it was on a different ship last tick, consider that too.
+                        .sub(addedMovement) // relative velocity to current ship.
+                    entity.push(acceleration.x, acceleration.y, acceleration.z)
+                }
+
                 entityDraggingInformation.addedMovementLastTick = addedMovement
 
                 // Apply [addedYRot]
@@ -130,22 +136,38 @@ object EntityDragger {
                         if (entity !is ServerPlayer) {
                             entity.yRot = ((entity.yRot + addedYRot.toFloat()) + 360f) % 360f
                             entity.yHeadRot = ((entity.yHeadRot + addedYRot.toFloat()) + 360f) % 360f
+                            if(entity is LivingEntity) {
+                                entity.yBodyRot = ((entity.yBodyRot + addedYRot.toFloat()) + 360f) % 360f
+                            }
                         } else {
                             entity.yRot = Mth.wrapDegrees(entity.yRot + addedYRot.toFloat())
                             entity.yHeadRot = Mth.wrapDegrees(entity.yHeadRot + addedYRot.toFloat())
+                            entity.yBodyRot = Mth.wrapDegrees(entity.yBodyRot + addedYRot.toFloat())
                         }
                     } else {
                         if (!entity.isControlledByLocalInstance && entity !is Player) {
                             entity.yRot = Mth.wrapDegrees(entity.yRot + addedYRot.toFloat())
                             entity.yHeadRot = Mth.wrapDegrees(entity.yHeadRot + addedYRot.toFloat())
+                            if(entity is LivingEntity) {
+                                entity.yBodyRot = Mth.wrapDegrees(entity.yBodyRot + addedYRot.toFloat())
+                            }
                         } else {
                             entity.yRot = (entity.yRot + addedYRot.toFloat())
                             entity.yHeadRot = (entity.yHeadRot + addedYRot.toFloat())
+                            if(entity is LivingEntity) {
+                                entity.yBodyRot = (entity.yBodyRot + addedYRot.toFloat())
+                            }
                         }
                     }
 
                     entityDraggingInformation.addedYawRotLastTick = addedYRot
                 }
+            } else if ((!entity.level().isClientSide || entity is LocalPlayer) && entityDraggingInformation.addedMovementLastTick.length() > 1e-3) {
+                entity.push(entityDraggingInformation.addedMovementLastTick.x(),
+                    entityDraggingInformation.addedMovementLastTick.y(),
+                    entityDraggingInformation.addedMovementLastTick.z())
+                entityDraggingInformation.addedMovementLastTick = Vector3d()
+                entityDraggingInformation.addedYawRotLastTick = 0.0
             }
             entityDraggingInformation.ticksSinceStoodOnShip++
             entityDraggingInformation.mountedToEntity = entity.vehicle != null
@@ -153,12 +175,25 @@ object EntityDragger {
     }
 
     /**
+     * Checks if the entity is a ServerPlayer and has a [serverRelativePlayerPosition] set. If it does, returns that, which is in ship space; otherwise, returns worldspace entity position.
+     */
+    fun Entity.serversidePosition(): Vec3 {
+        if (this is IEntityDraggingInformationProvider && this.draggingInformation.isEntityBeingDraggedByAShip()) {
+            if (this.draggingInformation.bestRelativeEntityPosition() != null) {
+                return this.draggingInformation.bestRelativeEntityPosition()!!.toMinecraft()
+            }
+        }
+        return this.position()
+    }
+
+    /**
      * Checks if the entity is a ServerPlayer and has a [serverRelativePlayerPosition] set. If it does, returns that, which is in ship space; otherwise, returns worldspace eye position.
      */
     fun Entity.serversideEyePosition(): Vec3 {
-        if (this is ServerPlayer && this is IEntityDraggingInformationProvider && this.draggingInformation.isEntityBeingDraggedByAShip()) {
-            if (this.draggingInformation.serverRelativePlayerPosition != null) {
-                return this.draggingInformation.serverRelativePlayerPosition!!.toMinecraft()
+        if (this is IEntityDraggingInformationProvider && this.draggingInformation.isEntityBeingDraggedByAShip()) {
+            if (this.draggingInformation.bestRelativeEntityPosition() != null) {
+                return this.draggingInformation.bestRelativeEntityPosition()!!.add(0.0, this.getEyeHeight(pose).toDouble(), 0.0,
+                    Vector3d())!!.toMinecraft()
             }
         }
         return this.eyePosition
@@ -302,7 +337,7 @@ object EntityDragger {
             return false
         }
         //get the normal of the hit face in worldspace
-        val hitShip = level.getShipObjectManagingPos(result.blockPos)
+        val hitShip = level.getLoadedShipManagingPos(result.blockPos)
         if (hitShip != null) {
             val hitSide = result.direction.normal.toJOMLD()
             val upDir: Vector3dc = Vector3d(0.0, 1.0, 0.0)

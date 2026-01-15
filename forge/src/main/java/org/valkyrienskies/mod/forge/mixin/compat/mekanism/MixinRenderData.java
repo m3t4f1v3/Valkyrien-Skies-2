@@ -3,14 +3,17 @@ package org.valkyrienskies.mod.forge.mixin.compat.mekanism;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
+import mekanism.client.render.data.RenderData;
 import mekanism.common.lib.multiblock.MultiblockData;
 import net.minecraft.core.Direction;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 
-@Mixin(targets = {"mekanism.client.render.data.RenderData$Builder"}, remap = false)
+@Mixin(value = RenderData.Builder.class, remap = false)
 public class MixinRenderData {
     /**
+     * The issue seems to not be present with latest VS and Mekanism. Still useful as a failsafe for old Mek versions.
+     *
      * This is a temporary fix for https://github.com/ValkyrienSkies/Valkyrien-Skies-2/issues/1252
      * which bypasses the fatal error (renderLocation not existing for multiblocks on client side) by calculating it
      * manually.<p>

@@ -20,6 +20,7 @@ import org.valkyrienskies.mod.common.networking.PacketStopChunkUpdates
 import org.valkyrienskies.mod.common.util.toMinecraft
 import org.valkyrienskies.mod.common.vsCore
 import org.valkyrienskies.mod.mixinducks.feature.seamless_copy.SeamlessCopyClientPacketListenerDuck
+import org.valkyrienskies.mod.mixinducks.feature.tickets.PlayerKnownShipsDuck
 import org.valkyrienskies.mod.util.logger
 import java.util.Queue
 import java.util.concurrent.ConcurrentHashMap
@@ -64,6 +65,10 @@ class SeamlessChunksManager(private val listener: ClientPacketListener) {
         if (!packets.isNullOrEmpty()) {
             logger.debug("Executing ${packets.size} deferred updates for ship ID=${ship.id} at ${ship.chunkClaim}")
             dispatchQueuedPackets(packets)
+        }
+        val player = Minecraft.getInstance().player
+        if (player is PlayerKnownShipsDuck) {
+            player.vs_addKnownShip(ship.id)
         }
     }
 

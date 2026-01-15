@@ -43,11 +43,21 @@ include("common")
 include("fabric")
 include("forge")
 
-//try {
-//    def core = file("../vs-core")
-//    if (core.isDirectory()) {
-//        includeBuild(core)
-//    }
-//} catch (SecurityException ignore) {}
+try {
+    def core = file("./vs-core")
+    println "VS-CORE DEBUG: Looking at path: ${core.absolutePath}"
+    println "VS-CORE DEBUG: Exists? ${core.isDirectory()}"
+    if (core.isDirectory()) {
+        includeBuild(core) {
+            dependencySubstitution {
+                // Tell Gradle: "Whenever someone asks for 'org.valkyrienskies.core:api',
+                // use the project named ':api' inside this included build instead."
+                substitute module('org.valkyrienskies.core:api') using project(':api')
+                substitute module('org.valkyrienskies.core:util') using project(':util')
+                substitute module('org.valkyrienskies.core:impl') using project(':impl')
+            }
+        }
+    }
+} catch (SecurityException ignore) {}
 
 rootProject.name = "valkyrienskies"
