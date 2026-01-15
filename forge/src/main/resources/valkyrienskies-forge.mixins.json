@@ -37,6 +37,8 @@
     "compat.create.client.MixinChainConveyorBlockEntity",
     "compat.create.client.MixinContraptionHandlerClient",
     "compat.emf.MixinEMFAnimationEntityContext",
+    "compat.mekanism.MixinRenderData",
+    "compat.mekanism.MixinRenderResizableCuboid",
     "compat.oc2r.MixinComputerRenderer",
     "compat.oc2r.MixinMonitorRenderer",
     "compat.oc2r.MixinProjectorDepthRenderer",

@@ -145,7 +145,7 @@ dependencies {
     //modCompileOnly("maven.modrinth:vmp-forge:0.2.0+beta.7.101+1.20.1")
 
     // Mekanism
-    modCompileOnly ("curse.maven:mekanism-268560:4644795")
+    modImplementation ("maven.modrinth:mekanism:${mekanism_version}")
 
     // Connectible Chains [Forge]
     modImplementation("curse.maven:connectible-chains-forge-418514:6142294")
