@@ -49,6 +49,9 @@ dependencies {
     // Hexal
     modCompileOnly("ram.talia.hexal:hexal-fabric-$minecraft_version:$hexal_version") { transitive = false }
 
+    // Supplementaries (Moonlight Lib)
+    modImplementation("maven.modrinth:moonlight:$moonlight_version")
+
     // Common create compat,
     // We just use a version from a platform and hope the classes exist on both versions and mixins apply correctly
     // EMF compat

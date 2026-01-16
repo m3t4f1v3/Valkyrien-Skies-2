@@ -62,6 +62,7 @@ import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
 import org.valkyrienskies.mod.mixin.accessors.server.level.ChunkMapAccessor;
 import org.valkyrienskies.mod.mixin.accessors.server.level.DistanceManagerAccessor;
 import org.valkyrienskies.mod.mixinducks.world.OfLevel;
+import org.valkyrienskies.mod.mixinducks.world.level.NoVSLevelDuck;
 import org.valkyrienskies.mod.util.McMathUtilKt;
 
 @Mixin(ServerLevel.class)
@@ -98,6 +99,8 @@ public abstract class MixinServerLevel implements IShipObjectWorldServerProvider
 
     @Inject(method = "<init>", at = @At("RETURN"))
     void onInit(final CallbackInfo ci) {
+        // Fake / wrapped ServerLevels are used by Create, Supplementaries and maybe others.
+        if (this instanceof NoVSLevelDuck) return;
 
         // This only happens when overworld gets loaded on startup, we have a mixin in MixinMinecraftServer for this specific case
         if (getShipObjectWorld() != null) {
