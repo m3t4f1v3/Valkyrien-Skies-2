@@ -54,6 +54,7 @@ import org.valkyrienskies.core.internal.world.VsiClientShipWorld;
 import org.valkyrienskies.core.util.AABBdUtilKt;
 import org.valkyrienskies.core.util.VectorConversionsKt;
 import org.valkyrienskies.mod.client.audio.SimpleSoundInstanceOnShip;
+import org.valkyrienskies.mod.common.IShipObjectWorldClientCreator;
 import org.valkyrienskies.mod.common.IShipObjectWorldClientProvider;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.config.DimensionParametersResolver;
@@ -123,6 +124,7 @@ public abstract class MixinClientLevel implements IShipObjectWorldClientProvider
     @Inject(method = "disconnect", at = @At("TAIL"))
     private void afterDisconnect(final CallbackInfo ci) {
         getVsCore().getHooks().afterDisconnect();
+        ((IShipObjectWorldClientCreator) minecraft).deleteShipObjectWorldClient();
     }
 
     // do particle ticks for ships near the player

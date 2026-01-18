@@ -73,9 +73,11 @@ public abstract class MixinClientChunkCache implements ClientChunkCacheDuck {
             final long chunkPosLong = pos.toLong();
             final LevelChunk oldChunk = vs$shipChunks.get(chunkPosLong);
             final LevelChunk worldChunk;
+            boolean shouldForce = false;
             if (oldChunk != null) {
                 worldChunk = oldChunk;
                 oldChunk.replaceWithPacketData(buf, tag, consumer);
+                shouldForce = true;
             } else {
                 worldChunk = new LevelChunk(this.level, pos);
                 worldChunk.replaceWithPacketData(buf, tag, consumer);
@@ -105,7 +107,20 @@ public abstract class MixinClientChunkCache implements ClientChunkCacheDuck {
                         voxelShapeUpdates.add(emptyVoxelShapeUpdate);
                     }
                 }
-                clientShipWorld.addTerrainUpdates(getApi().getDimensionId(level), voxelShapeUpdates);
+                if (!shouldForce) {
+                    clientShipWorld.addTerrainUpdates(getApi().getDimensionId(level), voxelShapeUpdates);
+                } else {
+                    for (VsiTerrainUpdate update : voxelShapeUpdates) {
+                        clientShipWorld.forceUpdateConnectivityChunk(
+                            getApi().getDimensionId(level),
+                            update.getChunkX(),
+                            update.getChunkY(),
+                            update.getChunkZ(),
+                            update
+                        );
+                    }
+                }
+
             }
 
             this.level.onChunkLoaded(pos);
