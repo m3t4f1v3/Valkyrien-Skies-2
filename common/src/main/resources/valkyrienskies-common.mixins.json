@@ -242,7 +242,6 @@
     "client.renderer.MixinEntityRenderer",
     "client.renderer.MixinGameRenderer",
     "client.renderer.MixinLevelRenderer",
-    "client.renderer.chunk.MixinRenderChunkRegion",
     "client.world.MixinClientChunkCache",
     "client.world.MixinClientLevel",
     "feature.block_tint.MixinClientLevel",
