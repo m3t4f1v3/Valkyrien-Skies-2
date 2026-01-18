@@ -76,10 +76,6 @@ object VSGameConfig {
             description = "The way ships are rendered by default"
         )
         var defaultRenderer = ShipRenderer.VANILLA
-
-        @ConfigEntry(description = "Use a custom vanilla shader for rendering ship chunks, improving lighting on tilted and upside down ships. Reload chunks (F3+A) after applying.")
-        var normalCoreShader = true
-
     }
 
     class Server {
