@@ -1,6 +1,8 @@
 package org.valkyrienskies.mod.forge.common
 
+import com.mojang.blaze3d.vertex.DefaultVertexFormat
 import dev.engine_room.flywheel.api.event.ReloadLevelRendererEvent
+import net.minecraft.client.renderer.ShaderInstance
 import net.minecraft.commands.Commands.CommandSelection.ALL
 import net.minecraft.commands.Commands.CommandSelection.INTEGRATED
 import net.minecraft.resources.ResourceLocation
@@ -14,6 +16,7 @@ import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraftforge.client.event.EntityRenderersEvent
 import net.minecraftforge.client.event.RegisterKeyMappingsEvent
+import net.minecraftforge.client.event.RegisterShadersEvent
 import net.minecraftforge.event.AddReloadListenerEvent
 import net.minecraftforge.event.BuildCreativeModeTabContentsEvent
 import net.minecraftforge.event.RegisterCommandsEvent
@@ -33,6 +36,7 @@ import net.minecraftforge.registries.RegistryObject
 import org.valkyrienskies.mod.client.EmptyRenderer
 import org.valkyrienskies.mod.client.VSPhysicsEntityModel
 import org.valkyrienskies.mod.client.VSPhysicsEntityRenderer
+import org.valkyrienskies.mod.common.VSRenderTypes
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod.AREA_ASSEMBLER_ITEM
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod.CONNECTION_CHECKER_ITEM
@@ -75,12 +79,14 @@ import org.valkyrienskies.mod.common.item.ShipAssemblerItem
 import org.valkyrienskies.mod.common.item.ShipCreatorItem
 import org.valkyrienskies.mod.common.item.ShipRemoverItem
 import org.valkyrienskies.mod.compat.LoadedMods
-import org.valkyrienskies.mod.compat.flywheel.ShipEmbeddingManager
-import org.valkyrienskies.mod.forge.compat.dynmap.ForgeDynmapHandler
 import org.valkyrienskies.mod.compat.flywheel.FlywheelCompat
+import org.valkyrienskies.mod.compat.flywheel.ShipEmbeddingManager
 import org.valkyrienskies.mod.compat.hexcasting.HexcastingCompat
+import org.valkyrienskies.mod.forge.compat.dynmap.ForgeDynmapHandler
 import org.valkyrienskies.mod.forge.compat.epicfight.FracturedBlockStateInfoProvider
 import org.valkyrienskies.mod.forge.compat.hexcasting.ForgeShipAmbit
+import yesman.epicfight.gameasset.Armatures.registerEntityTypes
+import java.util.function.Consumer
 
 @Mod(MOD_ID)
 class ValkyrienSkiesModForge {
@@ -135,6 +141,7 @@ class ValkyrienSkiesModForge {
             modBus.addListener(::registerKeyBindings)
             modBus.addListener(::entityRenderers)
             modBus.addListener(::registerLayerDefinitions)
+            modBus.addListener(::registerShaders)
             if (LoadedMods.flywheel == LoadedMods.FlywheelVersion.V1) FlywheelCompat.initClient()
             if (ModList.get().isLoaded("flywheel")) {
                 forgeBus.addListener(::registerFlywheelReload)
@@ -323,6 +330,18 @@ class ValkyrienSkiesModForge {
         if (event.commandSelection == ALL || event.commandSelection == INTEGRATED) {
             VSCommands.registerClientCommands(event.dispatcher)
         }
+    }
+
+    private fun registerShaders(event: RegisterShadersEvent) {
+        event.registerShader(
+            ShaderInstance(event.resourceProvider, "rendertype_ship_solid", DefaultVertexFormat.BLOCK)
+        ) { shaderInstance: ShaderInstance? -> VSRenderTypes.shipSolidShader = shaderInstance }
+        event.registerShader(
+            ShaderInstance(event.resourceProvider, "rendertype_ship_cutout_mipped", DefaultVertexFormat.BLOCK)
+        ) { shaderInstance: ShaderInstance? -> VSRenderTypes.shipCutoutMippedShader = shaderInstance }
+        event.registerShader(
+            ShaderInstance(event.resourceProvider, "rendertype_ship_cutout", DefaultVertexFormat.BLOCK)
+        ) { shaderInstance: ShaderInstance? -> VSRenderTypes.shipCutoutShader = shaderInstance }
     }
 
     private fun tagsUpdated(event: TagsUpdatedEvent) {

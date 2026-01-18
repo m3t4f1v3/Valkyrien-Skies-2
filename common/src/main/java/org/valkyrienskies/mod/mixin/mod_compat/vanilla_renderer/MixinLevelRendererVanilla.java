@@ -48,8 +48,10 @@ import org.valkyrienskies.core.api.ships.properties.ShipTransform;
 import org.valkyrienskies.core.util.datastructures.BlockPos2ByteOpenHashMap;
 import org.valkyrienskies.mod.common.VSClientGameUtils;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
+import org.valkyrienskies.mod.common.VSRenderTypes;
 import org.valkyrienskies.mod.common.config.ShipRenderer;
 import org.valkyrienskies.mod.common.config.ShipRendererKt;
+import org.valkyrienskies.mod.common.config.VSGameConfig;
 import org.valkyrienskies.mod.common.hooks.VSGameEvents;
 import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
 import org.valkyrienskies.mod.compat.VSRenderer;
@@ -254,6 +256,7 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
             );
 
             VSGameEvents.INSTANCE.getRenderShip().emit(event);
+            RenderSystem.setShaderTexture(2, 0);
             renderChunkLayer(renderType, poseStack, cameraShipSpace.x(), cameraShipSpace.y(), cameraShipSpace.z(), matrix4f, chunks);
             VSGameEvents.INSTANCE.getPostRenderShip().emit(event);
 
@@ -274,7 +277,14 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
         });
         boolean bl = renderType != RenderType.translucent();
         final ListIterator objectListIterator = chunksToRender.listIterator(bl ? 0 : chunksToRender.size());
-        ShaderInstance shaderInstance = RenderSystem.getShader();
+
+        // Use custom shader for existing render types
+        ShaderInstance shaderInstance = null;
+        if (VSGameConfig.CLIENT.getNormalCoreShader()) {
+            ShaderInstance shipShader = VSRenderTypes.Companion.shipShaderFor(renderType);
+            if (shipShader != null) shaderInstance = shipShader;
+        }
+        if (shaderInstance == null) shaderInstance = RenderSystem.getShader();
 
         for(int k = 0; k < 12; ++k) {
             int l = RenderSystem.getShaderTexture(k);
@@ -287,6 +297,11 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
 
         if (shaderInstance.PROJECTION_MATRIX != null) {
             shaderInstance.PROJECTION_MATRIX.set(matrix4f);
+        }
+
+        // Custom
+        if (shaderInstance.INVERSE_VIEW_ROTATION_MATRIX != null) {
+            shaderInstance.INVERSE_VIEW_ROTATION_MATRIX.set(RenderSystem.getInverseViewRotationMatrix());
         }
 
         if (shaderInstance.COLOR_MODULATOR != null) {
