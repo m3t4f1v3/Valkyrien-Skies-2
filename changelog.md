@@ -1,24 +1,17 @@
-## VS 2.4.8
-Assembly fixes, seamless assembly, improved buoyancy updating, lift improvements, etc.
+## VS 2.4.9
+More buoyancy fixes, connectivity fixes, 
 
 #### Changes:
-- Air pockets now update all pockets on ship and don't update a tick late
-- Re-added removed assembly methods as redirects to prevent addon breaking
-- Visually seamless assembly
-- Lift improved and now configurable
-- More commands
-- Improved split detection
-- `/vs set-splitting` command added to enable/disable splitting per ship
+- Datapackable fluid values (for buoyancy in non-vanilla fluids)
 - Removed Herobrine
 
 #### Bugfixes:
-- Splitting config now works
-- Contraptions should no longer split on assembly
-- Drag uses the correct face direction
-- Explosions split ships properly
-- Fabric breathing in sealed pockets fixed
-- Hexcasting compat fixes
-- ICopyableBlock/ICopyableAttachment now use immutable vectors
-- Deployers can place blocks in ships again
-- Hypertube compat fixed
-- Connectible Chains compat fixed
+- Joining Multiplayer is no longer cooked if you have a ship in the world
+- Connectivity no longer incorrectly caches components (should fix excessive buoyancy)
+- Connectivity no longer allows buoyancy to use the world air component
+- Avoid crashing with latest forge
+- Fix compat with create tree fertilizer and supplementaries
+- Forge air pocket breathing
+- Connectible chains no longer leave behind their hitbox
+- Fixed Mekanism multiblock crash
+- Fixed extreme slowdown caused while recalculating pockets in client connectivity
