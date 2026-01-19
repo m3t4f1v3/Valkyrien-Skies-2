@@ -32,8 +32,10 @@ import org.valkyrienskies.mod.api_impl.events.VsApiImpl
 import org.valkyrienskies.mod.common.blockentity.TestAntigravBlockEntity
 import org.valkyrienskies.mod.common.blockentity.TestHingeBlockEntity
 import org.valkyrienskies.mod.common.blockentity.TestThrusterBlockEntity
+import org.valkyrienskies.mod.common.config.ConfigType
 import org.valkyrienskies.mod.common.entity.ShipMountingEntity
 import org.valkyrienskies.mod.common.entity.VSPhysicsEntity
+import org.valkyrienskies.mod.common.hooks.VSGameEvents
 import org.valkyrienskies.mod.common.jackson.BlockPosDeserializer
 import org.valkyrienskies.mod.common.jackson.BlockPosKeyDeserializer
 import org.valkyrienskies.mod.common.jackson.BlockPosKeySerializer
@@ -174,6 +176,15 @@ object ValkyrienSkiesMod {
                 player.vs_removeKnownShip(event.ship.id)
             }
         }
+
+        // region Non-core
+        VSGameEvents.configUpdated.on { entries ->
+            val shipShaderChanged = entries.any {
+                it.configType == ConfigType.CLIENT && it.name == "normalCoreShader"
+            }
+            if (shipShaderChanged) Minecraft.getInstance().levelRenderer.allChanged()
+        }
+        // end region
     }
 
     @JvmStatic

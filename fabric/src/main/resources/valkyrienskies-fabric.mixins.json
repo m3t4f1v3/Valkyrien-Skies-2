@@ -28,7 +28,8 @@
     "compat.emf.MixinEMFAnimationEntityContext",
     "compat.sodium.MixinSodiumWorldRenderer",
     "feature.duplicate_keybindings.KeyMappingAccessor",
-    "feature.duplicate_keybindings.MixinKeyMapping"
+    "feature.duplicate_keybindings.MixinKeyMapping",
+    "feature.render_ship_core_shader.MixinAbstractBlockRenderContext"
   ],
   "injectors": {
     "defaultRequire": 1

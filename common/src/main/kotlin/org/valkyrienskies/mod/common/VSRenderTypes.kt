@@ -20,10 +20,12 @@ class VSRenderTypes(
         var shipSolidShader: ShaderInstance? = null
         var shipCutoutMippedShader: ShaderInstance? = null
         var shipCutoutShader: ShaderInstance? = null
+        var shipTranslucentShader: ShaderInstance? = null
 
         private val RENDERTYPE_SHIP_SOLID_SHADER: ShaderStateShard = ShaderStateShard(Supplier { shipSolidShader })
         private val RENDERTYPE_SHIP_CUTOUT_MIPPED_SHADER: ShaderStateShard = ShaderStateShard(Supplier { shipCutoutMippedShader })
         private val RENDERTYPE_SHIP_CUTOUT_SHADER: ShaderStateShard = ShaderStateShard(Supplier { shipCutoutShader })
+        private val RENDERTYPE_SHIP_TRANSLUCENT_SHADER: ShaderStateShard = ShaderStateShard(Supplier { shipTranslucentShader })
 
         val SHIP_SOLID = create(
             ValkyrienSkiesMod.MOD_ID + "ship_solid",
@@ -64,12 +66,22 @@ class VSRenderTypes(
                 .setTextureState(BLOCK_SHEET)
                 .createCompositeState(true)
         )
+        val TRANSLUCENT: RenderType = create(
+            ValkyrienSkiesMod.MOD_ID + "translucent",
+            DefaultVertexFormat.BLOCK,
+            VertexFormat.Mode.QUADS,
+            2097152,
+            true,
+            true,
+            translucentState(RENDERTYPE_SHIP_TRANSLUCENT_SHADER)
+        )
 
         fun shipShaderFor(renderType: RenderType): ShaderInstance? {
             return when (renderType) {
                 RenderType.solid() -> shipSolidShader
                 RenderType.cutoutMipped() -> shipCutoutMippedShader
                 RenderType.cutout() -> shipCutoutShader
+                RenderType.translucent() -> shipTranslucentShader
                 else -> null
             }
         }

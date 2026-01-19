@@ -31,9 +31,13 @@ void main() {
     texCoord0 = UV0;
     normal = ProjMat * ModelViewMat * vec4(Normal, 0.0);
 
-    vertexColor = Color * minecraft_sample_lightmap(Sampler2, UV2);
-
-    vec3 worldNormal = normalize(IViewRotMat * mat3(ModelViewMat) * Normal);
-    float shade = vanillaShadeFromNormal(worldNormal);
-    vertexColor.rgb *= shade;
+    if (Color.a == 0.0) {
+        vertexColor = Color * minecraft_sample_lightmap(Sampler2, UV2);
+        vertexColor.a = 1.0;
+    } else {
+        vertexColor = Color * minecraft_sample_lightmap(Sampler2, UV2);
+        vec3 worldNormal = normalize(IViewRotMat * mat3(ModelViewMat) * Normal);
+        float shade = vanillaShadeFromNormal(worldNormal);
+        vertexColor.rgb *= shade;
+    }
 }
