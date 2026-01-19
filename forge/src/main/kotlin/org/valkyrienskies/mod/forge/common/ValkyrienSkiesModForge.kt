@@ -152,7 +152,7 @@ class ValkyrienSkiesModForge {
             }
             VSGameEvents.configUpdated.on { entries ->
                 val shipShaderChanged = entries.any {
-                    it.configType == ConfigType.CLIENT && it.name == "normalCoreShader"
+                    it.configType == ConfigType.CLIENT && it.name == "betterVanillaShipShading"
                 }
                 if (shipShaderChanged) Minecraft.getInstance().levelRenderer.allChanged()
             }

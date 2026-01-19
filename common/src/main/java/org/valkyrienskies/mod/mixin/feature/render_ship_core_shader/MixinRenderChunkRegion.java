@@ -22,7 +22,7 @@ public abstract class MixinRenderChunkRegion {
     // Shading should not be confused with lighting or ambient occlusion which we avoid breaking.
     @WrapMethod(method = "getShade")
     private float maxShadeForShips(Direction direction, boolean bl, Operation<Float> original) {
-        if (VSGameConfig.CLIENT.getNormalCoreShader() && VS2ChunkAllocator.INSTANCE.isChunkInShipyardCompanion(centerX, centerZ))
+        if (VSGameConfig.CLIENT.getBetterVanillaShipShading() && VS2ChunkAllocator.INSTANCE.isChunkInShipyardCompanion(centerX, centerZ))
             // Because we force a 1f (or 0.9f, if in Nether) shading value, as if the quad was exempt from shading,
             // we cannot discern quads that actually need this special treatment.
             // The workaround is to offset the brightness value and detect it later in the chunk building pipeline.
