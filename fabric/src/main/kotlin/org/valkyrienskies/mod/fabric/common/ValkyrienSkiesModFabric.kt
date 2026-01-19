@@ -18,6 +18,7 @@ import net.fabricmc.fabric.api.`object`.builder.v1.entity.FabricDefaultAttribute
 import net.fabricmc.fabric.api.resource.IdentifiableResourceReloadListener
 import net.fabricmc.fabric.api.resource.ResourceManagerHelper
 import net.fabricmc.loader.api.FabricLoader
+import net.minecraft.client.Minecraft
 import net.minecraft.client.multiplayer.ClientLevel
 import net.minecraft.client.renderer.ShaderInstance
 import net.minecraft.client.renderer.entity.EntityRendererProvider.Context
@@ -64,6 +65,7 @@ import org.valkyrienskies.mod.common.blockentity.TestAntigravBlockEntity
 import org.valkyrienskies.mod.common.blockentity.TestHingeBlockEntity
 import org.valkyrienskies.mod.common.blockentity.TestThrusterBlockEntity
 import org.valkyrienskies.mod.common.command.VSCommands
+import org.valkyrienskies.mod.common.config.ConfigType
 import org.valkyrienskies.mod.common.config.DimensionParametersResolver
 import org.valkyrienskies.mod.common.config.MassDatapackResolver
 import org.valkyrienskies.mod.common.config.VSConfigUpdater
@@ -86,6 +88,7 @@ import org.valkyrienskies.mod.compat.flywheel.ShipEmbeddingManager
 import org.valkyrienskies.mod.compat.hexcasting.HexcastingCompat
 import org.valkyrienskies.mod.fabric.compat.dynmap.FabricDynmapHandler
 import org.valkyrienskies.mod.fabric.compat.hexcasting.FabricShipAmbit
+import org.valkyrienskies.mod.util.ClientConnectivityUpdateQueue
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executor
 import java.util.concurrent.atomic.AtomicBoolean
@@ -360,6 +363,17 @@ class ValkyrienSkiesModFabric : ModInitializer {
 
         VSKeyBindings.clientSetup {
             KeyBindingHelper.registerKeyBinding(it)
+        }
+
+        VSGameEvents.registriesCompleted.on {
+            ClientConnectivityUpdateQueue.onRegistriesCompleted()
+        }
+
+        VSGameEvents.configUpdated.on { entries ->
+            val shipShaderChanged = entries.any {
+                it.configType == ConfigType.CLIENT && it.name == "normalCoreShader"
+            }
+            if (shipShaderChanged) Minecraft.getInstance().levelRenderer.allChanged()
         }
 
         if (LoadedMods.flywheel == LoadedMods.FlywheelVersion.V1) {

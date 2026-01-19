@@ -1,5 +1,6 @@
 package org.valkyrienskies.mod.mixin.client.world;
 
+import static org.valkyrienskies.mod.common.BlockStateInfo.isSortedRegistryInitialized;
 import static org.valkyrienskies.mod.common.ValkyrienSkiesMod.getApi;
 import static org.valkyrienskies.mod.common.ValkyrienSkiesMod.getVsCore;
 
@@ -41,6 +42,7 @@ import org.valkyrienskies.mod.mixin.accessors.client.render.LevelRendererAccesso
 import org.valkyrienskies.mod.mixinducks.client.render.IVSViewAreaMethods;
 import org.valkyrienskies.mod.mixinducks.client.world.ClientChunkCacheDuck;
 import org.valkyrienskies.mod.mixinducks.mod_compat.vanilla_renderer.LevelRendererDuck;
+import org.valkyrienskies.mod.util.ClientConnectivityUpdateQueue;
 
 /**
  * The purpose of this mixin is to allow {@link ClientChunkCache} to store ship chunks.
@@ -73,18 +75,26 @@ public abstract class MixinClientChunkCache implements ClientChunkCacheDuck {
             final long chunkPosLong = pos.toLong();
             final LevelChunk oldChunk = vs$shipChunks.get(chunkPosLong);
             final LevelChunk worldChunk;
+            boolean shouldForce = false;
             if (oldChunk != null) {
                 worldChunk = oldChunk;
                 oldChunk.replaceWithPacketData(buf, tag, consumer);
+                shouldForce = true;
             } else {
                 worldChunk = new LevelChunk(this.level, pos);
                 worldChunk.replaceWithPacketData(buf, tag, consumer);
                 vs$shipChunks.put(chunkPosLong, worldChunk);
             }
 
+            boolean shouldDefer = !isSortedRegistryInitialized();
+            if (shouldDefer) {
+                ClientConnectivityUpdateQueue.queueChunkForInitialization(pos, shouldForce);
+            }
+
             VsiClientShipWorld clientShipWorld = VSGameUtilsKt.getShipObjectWorld(level);
-            if (clientShipWorld != null && VSGameConfig.CLIENT.getConnectivity().getEnableClientConnectivity()) {
+            if (clientShipWorld != null && VSGameConfig.CLIENT.getConnectivity().getEnableClientConnectivity() && !shouldDefer) {
                 ArrayList<VsiTerrainUpdate> voxelShapeUpdates = new ArrayList<>();
+
 
                 final LevelChunkSection[] chunkSections = worldChunk.getSections();
 
@@ -105,7 +115,20 @@ public abstract class MixinClientChunkCache implements ClientChunkCacheDuck {
                         voxelShapeUpdates.add(emptyVoxelShapeUpdate);
                     }
                 }
-                clientShipWorld.addTerrainUpdates(getApi().getDimensionId(level), voxelShapeUpdates);
+                if (!shouldForce) {
+                    clientShipWorld.addTerrainUpdates(getApi().getDimensionId(level), voxelShapeUpdates);
+                } else {
+                    for (VsiTerrainUpdate update : voxelShapeUpdates) {
+                        clientShipWorld.forceUpdateConnectivityChunk(
+                            getApi().getDimensionId(level),
+                            update.getChunkX(),
+                            update.getChunkY(),
+                            update.getChunkZ(),
+                            update
+                        );
+                    }
+                }
+
             }
 
             this.level.onChunkLoaded(pos);

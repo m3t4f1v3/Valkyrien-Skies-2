@@ -4,6 +4,7 @@ import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
+import com.llamalad7.mixinextras.sugar.ref.LocalRef;
 import it.unimi.dsi.fastutil.objects.Object2DoubleMap;
 import it.unimi.dsi.fastutil.objects.Object2ObjectArrayMap;
 import it.unimi.dsi.fastutil.objects.Object2ObjectMap;
@@ -22,6 +23,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Coerce;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.Redirect;
@@ -100,10 +102,36 @@ public abstract class MixinEntity {
         return (Object2ObjectArrayMap<?, ?>) (valkyrienskies$interimCalcs = new Object2ObjectArrayMap<>(capacity));
     }
 
+    // From Forge 47.4.15, the map used in forEach is only instantiated if a world fluid collision was found.
+    // This makes forEach, which we mixin for the purpose of re-running the method again, never trigger.
+    // We do not need it to be a valid map or anything, just whatever will get us through the null check.
+
+    // @ModifyConstant doesn't work on null constants despite supporting targeting ACONST_NULL opcode.
     @Inject(
         method = "updateFluidHeightAndDoFluidPushing(Ljava/util/function/Predicate;)V",
-        at = @At(value = "INVOKE",
-            target = "Lit/unimi/dsi/fastutil/objects/Object2ObjectMap;forEach(Ljava/util/function/BiConsumer;)V"),
+        at = @At(value = "INVOKE", target = "Lnet/minecraft/core/BlockPos$MutableBlockPos;set(III)Lnet/minecraft/core/BlockPos$MutableBlockPos;"),
+        require = 0, // local not resolving with older Forge
+        remap = false
+    )
+    private void setInterimCalcInstance2(Predicate<FluidState> shouldUpdate, CallbackInfo ci,
+        @Local LocalRef<Object2ObjectArrayMap> interimCalcs
+    ) {
+        if (interimCalcs.get() == null) { // our special case for new Forge
+            if (inShipContext()) {
+                interimCalcs.set((Object2ObjectArrayMap) valkyrienskies$interimCalcs);
+            } else interimCalcs.set((Object2ObjectArrayMap) (valkyrienskies$interimCalcs = new Object2ObjectArrayMap<>()));
+        }
+    }
+
+    @Inject(
+        method = "updateFluidHeightAndDoFluidPushing(Ljava/util/function/Predicate;)V",
+        at = {
+            @At(value = "INVOKE",
+                target = "Lit/unimi/dsi/fastutil/objects/Object2ObjectMap;forEach(Ljava/util/function/BiConsumer;)V"),
+            @At(value = "INVOKE",
+                target = "Lit/unimi/dsi/fastutil/objects/Object2ObjectArrayMap;forEach(Ljava/util/function/BiConsumer;)V")
+        },
+        require = 1,
         remap = false,
         cancellable = true
     )
@@ -113,14 +141,19 @@ public abstract class MixinEntity {
         }
     }
 
-    @Redirect(
+    @WrapOperation(
         method = "updateFluidHeightAndDoFluidPushing(Ljava/util/function/Predicate;)V",
-        at = @At(value = "INVOKE",
-            target = "Lit/unimi/dsi/fastutil/objects/Object2ObjectMap;forEach(Ljava/util/function/BiConsumer;)V"),
+        at = {
+            @At(value = "INVOKE",
+                target = "Lit/unimi/dsi/fastutil/objects/Object2ObjectMap;forEach(Ljava/util/function/BiConsumer;)V"),
+            @At(value = "INVOKE",
+                target = "Lit/unimi/dsi/fastutil/objects/Object2ObjectArrayMap;forEach(Ljava/util/function/BiConsumer;)V")
+        },
+        require = 1,
         remap = false
     )
-    private void collectShipFluidPush(Object2ObjectMap instance, BiConsumer consumer,
-        @Local(ordinal = 0, argsOnly = true) Predicate<FluidState> shouldUpdate, @Local(ordinal = 0) AABB aabb) {
+    private void collectShipFluidPush(@Coerce Object2ObjectMap instance, BiConsumer consumer, Operation<Void> original,
+        @Local(ordinal = 0, argsOnly = true) Predicate<FluidState> shouldUpdate, @Local AABB aabb) {
         VSGameUtilsKt.transformFromWorldToNearbyShipsAndWorld(level, aabb, (shipAabb) -> {
             valkyrienskies$fluidPushAABB = shipAabb; // enable ship context
             this.updateFluidHeightAndDoFluidPushing(shouldUpdate); //recall in the ship context
@@ -129,7 +162,7 @@ public abstract class MixinEntity {
         valkyrienskies$interimCalcs = null;
 
         //processing collected push (vanilla and ship)
-        instance.forEach(consumer);
+        original.call(instance, consumer);
     }
 
     @WrapOperation(

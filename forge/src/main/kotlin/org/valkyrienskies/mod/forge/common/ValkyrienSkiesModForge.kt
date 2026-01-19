@@ -2,6 +2,7 @@ package org.valkyrienskies.mod.forge.common
 
 import com.mojang.blaze3d.vertex.DefaultVertexFormat
 import dev.engine_room.flywheel.api.event.ReloadLevelRendererEvent
+import net.minecraft.client.Minecraft
 import net.minecraft.client.renderer.ShaderInstance
 import net.minecraft.commands.Commands.CommandSelection.ALL
 import net.minecraft.commands.Commands.CommandSelection.INTEGRATED
@@ -62,6 +63,7 @@ import org.valkyrienskies.mod.common.blockentity.TestAntigravBlockEntity
 import org.valkyrienskies.mod.common.blockentity.TestHingeBlockEntity
 import org.valkyrienskies.mod.common.blockentity.TestThrusterBlockEntity
 import org.valkyrienskies.mod.common.command.VSCommands
+import org.valkyrienskies.mod.common.config.ConfigType
 import org.valkyrienskies.mod.common.config.DimensionParametersResolver
 import org.valkyrienskies.mod.common.config.MassDatapackResolver
 import org.valkyrienskies.mod.common.config.VSConfigUpdater
@@ -79,14 +81,13 @@ import org.valkyrienskies.mod.common.item.ShipAssemblerItem
 import org.valkyrienskies.mod.common.item.ShipCreatorItem
 import org.valkyrienskies.mod.common.item.ShipRemoverItem
 import org.valkyrienskies.mod.compat.LoadedMods
-import org.valkyrienskies.mod.compat.flywheel.FlywheelCompat
 import org.valkyrienskies.mod.compat.flywheel.ShipEmbeddingManager
-import org.valkyrienskies.mod.compat.hexcasting.HexcastingCompat
 import org.valkyrienskies.mod.forge.compat.dynmap.ForgeDynmapHandler
+import org.valkyrienskies.mod.compat.flywheel.FlywheelCompat
+import org.valkyrienskies.mod.compat.hexcasting.HexcastingCompat
 import org.valkyrienskies.mod.forge.compat.epicfight.FracturedBlockStateInfoProvider
 import org.valkyrienskies.mod.forge.compat.hexcasting.ForgeShipAmbit
-import yesman.epicfight.gameasset.Armatures.registerEntityTypes
-import java.util.function.Consumer
+import org.valkyrienskies.mod.util.ClientConnectivityUpdateQueue
 
 @Mod(MOD_ID)
 class ValkyrienSkiesModForge {
@@ -145,6 +146,15 @@ class ValkyrienSkiesModForge {
             if (LoadedMods.flywheel == LoadedMods.FlywheelVersion.V1) FlywheelCompat.initClient()
             if (ModList.get().isLoaded("flywheel")) {
                 forgeBus.addListener(::registerFlywheelReload)
+            }
+            VSGameEvents.registriesCompleted.on {
+                ClientConnectivityUpdateQueue.onRegistriesCompleted()
+            }
+            VSGameEvents.configUpdated.on { entries ->
+                val shipShaderChanged = entries.any {
+                    it.configType == ConfigType.CLIENT && it.name == "normalCoreShader"
+                }
+                if (shipShaderChanged) Minecraft.getInstance().levelRenderer.allChanged()
             }
         }
         modBus.addListener(::loadComplete)

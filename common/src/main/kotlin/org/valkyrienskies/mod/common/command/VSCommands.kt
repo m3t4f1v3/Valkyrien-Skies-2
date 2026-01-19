@@ -6,6 +6,7 @@ import com.mojang.brigadier.arguments.DoubleArgumentType
 import com.mojang.brigadier.arguments.IntegerArgumentType
 import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.context.CommandContext
+import net.minecraft.client.Minecraft
 import net.minecraft.commands.CommandRuntimeException
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands.argument
@@ -94,8 +95,10 @@ object VSCommands {
                         if (rayTrace is BlockHitResult) {
                             val ship = sourceEntity.level().getShipManagingPos(rayTrace.blockPos)
                             if (ship != null) {
-                                it.source.sendVSMessage(
-                                    translatable(GET_SHIP_SUCCESS_MESSAGE, ship.slug, ship.id)
+                                it.source.sendSuccess(
+                                    {
+                                        translatable(GET_SHIP_SUCCESS_MESSAGE, ship.slug, ship.id)
+                                    }, true
                                 )
                                 success = true
                             }
@@ -103,13 +106,11 @@ object VSCommands {
                         if (success) {
                             1
                         } else {
-                            it.source.sendVSMessage(translatable(GET_SHIP_FAIL_MESSAGE))
+                            it.source.sendFailure(translatable(GET_SHIP_FAIL_MESSAGE))
                             0
                         }
                     } else {
-                        it.source.sendVSMessage(
-                            translatable(GET_SHIP_ONLY_USABLE_BY_ENTITIES_MESSAGE)
-                        )
+                        it.source.sendFailure(translatable(GET_SHIP_ONLY_USABLE_BY_ENTITIES_MESSAGE))
                         0
                     }
 
@@ -141,7 +142,11 @@ object VSCommands {
 
                                 if (ships.isEmpty()) return@executes 0
 
-                                it.source.sendVSMessage(translatable(SET_SPLITTING_MESSAGE, enable, ships.size))
+                                it.source.sendSuccess(
+                                    {
+                                        translatable(SET_SPLITTING_MESSAGE, enable, ships.size)
+                                    }, true
+                                )
 
                                 1
                             }
@@ -158,7 +163,11 @@ object VSCommands {
                         val temperature = aero.getAirTemperatureForY(height, dimId)
                         val pressure = aero.getAirPressureForY(height, dimId)
 
-                        it.source.sendVSMessage(translatable(AIR_VALUES_MESSAGE, round(height*10.0)/10, density, temperature, pressure))
+                        it.source.sendSuccess(
+                            {
+                                translatable(AIR_VALUES_MESSAGE, round(height*10.0)/10, density, temperature, pressure)
+                            }, true
+                        )
 
                         1
                     }
@@ -170,7 +179,11 @@ object VSCommands {
 
                             val density = aero.getAirDensityForY(height, dimId)
 
-                            it.source.sendVSMessage(translatable(AIR_VALUES_DENSITY_MESSAGE, round(height*10.0)/10, density))
+                            it.source.sendSuccess(
+                                {
+                                    translatable(AIR_VALUES_DENSITY_MESSAGE, round(height*10.0)/10, density)
+                                }, true
+                            )
 
                             density.roundToInt()
                         }
@@ -183,7 +196,11 @@ object VSCommands {
 
                             val temperature = aero.getAirTemperatureForY(height, dimId)
 
-                            it.source.sendVSMessage(translatable(AIR_VALUES_TEMPERATURE_MESSAGE, round(height*10.0)/10, temperature))
+                            it.source.sendSuccess(
+                                {
+                                    translatable(AIR_VALUES_TEMPERATURE_MESSAGE, round(height*10.0)/10, temperature)
+                                }, true
+                            )
 
                             temperature.roundToInt()
                         }
@@ -196,7 +213,11 @@ object VSCommands {
 
                             val pressure = aero.getAirPressureForY(height, dimId)
 
-                            it.source.sendVSMessage(translatable(AIR_VALUES_PRESSURE_MESSAGE, round(height*10.0)/10, pressure))
+                            it.source.sendSuccess(
+                                {
+                                    translatable(AIR_VALUES_PRESSURE_MESSAGE, round(height*10.0)/10, pressure)
+                                }, true
+                            )
 
                             pressure.roundToInt()
                         }
@@ -207,7 +228,12 @@ object VSCommands {
                         val level = it.source.level
                         val gravity = level.shipObjectWorld.aerodynamicUtils.getAtmosphereForDimension(level.dimensionId).third
 
-                        it.source.sendVSMessage(translatable(GET_GRAVITY_MESSAGE, level.dimensionId.toNiceString(), gravity))
+                        it.source.sendSuccess(
+                            {
+                                translatable(GET_GRAVITY_MESSAGE, level.dimensionId.toNiceString(), gravity)
+                            },
+                            true
+                        )
 
                         gravity.roundToInt()
                     }
@@ -220,7 +246,11 @@ object VSCommands {
                                 VSCoreConfig.SERVER.physics.physicsBackend = ConfigPhysicsBackendType.KRUNCH_CLASSIC
                                 (VSConfigUpdater.forgeConfigValuesMap.get("physicsBackend") as ForgeConfigSpec.ConfigValue<String>).set(ConfigPhysicsBackendType.KRUNCH_CLASSIC.name)
 
-                                it.source.sendVSMessage(translatable(BACKEND_SET_MESSAGE, VSCoreConfig.SERVER.physics.physicsBackend.name))
+                                it.source.sendSuccess(
+                                    {
+                                        translatable(BACKEND_SET_MESSAGE, VSCoreConfig.SERVER.physics.physicsBackend.name)
+                                    }, true
+                                )
 
                                 1
                             }
@@ -229,7 +259,11 @@ object VSCommands {
                                 VSCoreConfig.SERVER.physics.physicsBackend = ConfigPhysicsBackendType.KRUNCH_CLASSIC
                                 (VSConfigUpdater.forgeConfigValuesMap.get("physicsBackend") as ForgeConfigSpec.ConfigValue<String>).set(ConfigPhysicsBackendType.KRUNCH_CLASSIC.name)
 
-                                it.source.sendVSMessage(translatable(BACKEND_SET_MESSAGE, VSCoreConfig.SERVER.physics.physicsBackend.name))
+                                it.source.sendSuccess(
+                                    {
+                                        translatable(BACKEND_SET_MESSAGE, VSCoreConfig.SERVER.physics.physicsBackend.name)
+                                    }, true
+                                )
 
                                 1
                             }
@@ -238,12 +272,20 @@ object VSCommands {
                                 VSCoreConfig.SERVER.physics.physicsBackend = ConfigPhysicsBackendType.KRUNCH_PHYSX
                                 (VSConfigUpdater.forgeConfigValuesMap.get("physicsBackend") as ForgeConfigSpec.ConfigValue<String>).set(ConfigPhysicsBackendType.KRUNCH_PHYSX.name)
 
-                                it.source.sendVSMessage(translatable(BACKEND_SET_MESSAGE, VSCoreConfig.SERVER.physics.physicsBackend.name))
+                                it.source.sendSuccess(
+                                    {
+                                        translatable(BACKEND_SET_MESSAGE, VSCoreConfig.SERVER.physics.physicsBackend.name)
+                                    }, true
+                                )
 
                                 1
                             }
                         ).executes {
-                            it.source.sendVSMessage(translatable(BACKEND_CURRENT_MESSAGE, VSCoreConfig.SERVER.physics.physicsBackend.name))
+                            it.source.sendSuccess(
+                                {
+                                    translatable(BACKEND_CURRENT_MESSAGE, VSCoreConfig.SERVER.physics.physicsBackend.name)
+                                }, true
+                            )
 
                             1
                         }
@@ -261,7 +303,11 @@ object VSCommands {
                                     amount.toString()
                                 }
 
-                                it.source.sendVSMessage(translatable(LOD_SET_MESSAGE, msg))
+                                it.source.sendSuccess(
+                                    {
+                                        translatable(LOD_SET_MESSAGE, msg)
+                                    }, true
+                                )
 
                                 1
                             }
@@ -274,7 +320,12 @@ object VSCommands {
                                 lod.toString()
                             }
 
-                            it.source.sendVSMessage(translatable(LOD_CURRENT_MESSAGE, msg))
+                            it.source.sendSuccess(
+                                {
+                                    translatable(LOD_CURRENT_MESSAGE, msg)
+                                },
+                                true
+                            )
 
                             1
                         }
@@ -304,18 +355,20 @@ object VSCommands {
                                     if (BlockStateInfo.remassShip(it.source.level, ship)) {
                                         ++successful
                                     } else {
-                                        it.source.sendVSMessage(
+                                        it.source.sendFailure(
                                             translatable(
                                                 REMASSED_SHIP_FAIL_MESSAGE, ship.slug
                                             )
                                         )
                                     }
                                 }
-                                it.source.sendVSMessage(
-                                       translatable(
-                                           REMASSED_SHIPS_SUCCESS_MESSAGE, successful
-                                       )
-                                   )
+                                it.source.sendSuccess(
+                                    {
+                                        translatable(
+                                            REMASSED_SHIPS_SUCCESS_MESSAGE, successful
+                                        )
+                                    }, true
+                                )
                                 successful
                             })
                 )
@@ -329,10 +382,12 @@ object VSCommands {
                                 r.forEach { ship ->
                                     ship.isStatic = isStatic
                                 }
-                                it.source.sendVSMessage(
-                                    translatable(
-                                        SET_SHIP_STATIC_SUCCESS_MESSAGE, r.size, if (isStatic) "true" else "false"
-                                    )
+                                it.source.sendSuccess(
+                                    {
+                                        translatable(
+                                            SET_SHIP_STATIC_SUCCESS_MESSAGE, r.size, if (isStatic) "true" else "false"
+                                        )
+                                    }, true
                                 )
                                 r.size
                             })
@@ -377,8 +432,12 @@ object VSCommands {
                                         ship, shipTeleportData
                                     )
                                 }
-                                it.source.sendVSMessage(
-                                    translatable(TELEPORT_SHIP_SUCCESS_MESSAGE, r.size, shipTeleportData.getMessage())
+                                it.source.sendSuccess(
+                                    {
+                                        translatable(
+                                            TELEPORT_SHIP_SUCCESS_MESSAGE, r.size, shipTeleportData.getMessage()
+                                        )
+                                    }, true
                                 )
                                 r.size
 
@@ -410,8 +469,12 @@ object VSCommands {
                                             ship, shipTeleportData
                                         )
                                     }
-                                    it.source.sendVSMessage(
-                                        translatable(TELEPORT_SHIP_SUCCESS_MESSAGE, r.size, shipTeleportData.getMessage())
+                                    it.source.sendSuccess(
+                                        {
+                                            translatable(
+                                                TELEPORT_SHIP_SUCCESS_MESSAGE, r.size, shipTeleportData.getMessage()
+                                            )
+                                        }, true
                                     )
                                     r.size
 
@@ -449,8 +512,12 @@ object VSCommands {
                                                 ship, shipTeleportData
                                             )
                                         }
-                                        it.source.sendVSMessage(
-                                            translatable(TELEPORT_SHIP_SUCCESS_MESSAGE, r.size, shipTeleportData.getMessage())
+                                        it.source.sendSuccess(
+                                            {
+                                                translatable(
+                                                    TELEPORT_SHIP_SUCCESS_MESSAGE, r.size, shipTeleportData.getMessage()
+                                                )
+                                            }, true
                                         )
                                         r.size
 
@@ -494,8 +561,14 @@ object VSCommands {
                                                     ship, shipTeleportData
                                                 )
                                             }
-                                            it.source.sendVSMessage(
-                                                translatable(TELEPORT_SHIP_SUCCESS_MESSAGE, r.size, shipTeleportData.getMessage())
+                                            it.source.sendSuccess(
+                                                {
+                                                    translatable(
+                                                        TELEPORT_SHIP_SUCCESS_MESSAGE, r.size,
+                                                        shipTeleportData.getMessage()
+                                                    )
+                                                },
+                                                true
                                             )
                                             r.size
 
@@ -578,13 +651,24 @@ object VSCommands {
             ship -> ShipAssembler.deleteShip(context.source.level, ship, deleteBlocks, dropBlocks = false)
         }
 
-        context.source.sendVSMessage(
-            when (deletedShips.sum()) {
-                0 -> { Component.translatable(GET_SHIP_FAIL_MESSAGE)}
-                1 -> { Component.translatable(DELETED_ONE_SHIP_MESSAGE, r[0].slug)}
-                else -> { Component.translatable(DELETED_SHIPS_MESSAGE, r.size) }
-            }
-        )
+        if (deletedShips.sum() == 0) {
+            context.source.sendFailure(Component.translatable(GET_SHIP_FAIL_MESSAGE))
+            return 0
+        }
+        if (deletedShips.sum() == 1) {
+            context.source.sendSuccess(
+                {
+                    Component.translatable(DELETED_ONE_SHIP_MESSAGE, r[0].slug)
+                }, true
+            )
+        } else {
+            context.source.sendSuccess(
+                {
+                    Component.translatable(DELETED_SHIPS_MESSAGE, r.size)
+                }, true
+            )
+        }
+
         return r.size
     }
 
@@ -635,10 +719,3 @@ val SharedSuggestionProvider.shipWorld: ShipWorld
             )
     }
 
-fun SharedSuggestionProvider.sendVSMessage(component: Component) {
-    if (this is CommandSourceStack) {
-        this.sendSystemMessage(component)
-    } else if (this is ClientSuggestionProviderAccessor) {
-        this.minecraft.player?.sendSystemMessage(component)
-    }
-}

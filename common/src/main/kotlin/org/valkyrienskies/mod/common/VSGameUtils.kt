@@ -528,7 +528,7 @@ fun getShipMountedTo(entity: Entity): LoadedShip? {
 
 fun Level.isPositionSealed(pos: BlockPos): Boolean {
     val result = this.shipObjectWorld.isIsolatedAir(pos.x, pos.y, pos.z, this.dimensionId)
-    return result == ConnectionStatus.DISCONNECTED
+    return result == ConnectionStatus.DISCONNECTED || result == ConnectionStatus.UNKNOWN
 }
 
 fun Level.isPositionMaybeSealed(pos: BlockPos): Boolean {
