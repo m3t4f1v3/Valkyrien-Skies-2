@@ -82,6 +82,7 @@ import org.valkyrienskies.mod.compat.flywheel.ShipEmbeddingManager
 import org.valkyrienskies.mod.compat.hexcasting.HexcastingCompat
 import org.valkyrienskies.mod.fabric.compat.dynmap.FabricDynmapHandler
 import org.valkyrienskies.mod.fabric.compat.hexcasting.FabricShipAmbit
+import org.valkyrienskies.mod.util.ClientConnectivityUpdateQueue
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executor
 import java.util.concurrent.atomic.AtomicBoolean
@@ -341,6 +342,10 @@ class ValkyrienSkiesModFabric : ModInitializer {
 
         VSKeyBindings.clientSetup {
             KeyBindingHelper.registerKeyBinding(it)
+        }
+
+        VSGameEvents.registriesCompleted.on {
+            ClientConnectivityUpdateQueue.onRegistriesCompleted()
         }
 
         if (LoadedMods.flywheel == LoadedMods.FlywheelVersion.V1) {

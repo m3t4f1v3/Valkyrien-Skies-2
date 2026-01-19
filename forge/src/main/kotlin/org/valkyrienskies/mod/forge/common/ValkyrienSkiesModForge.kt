@@ -81,6 +81,7 @@ import org.valkyrienskies.mod.compat.flywheel.FlywheelCompat
 import org.valkyrienskies.mod.compat.hexcasting.HexcastingCompat
 import org.valkyrienskies.mod.forge.compat.epicfight.FracturedBlockStateInfoProvider
 import org.valkyrienskies.mod.forge.compat.hexcasting.ForgeShipAmbit
+import org.valkyrienskies.mod.util.ClientConnectivityUpdateQueue
 
 @Mod(MOD_ID)
 class ValkyrienSkiesModForge {
@@ -138,6 +139,9 @@ class ValkyrienSkiesModForge {
             if (LoadedMods.flywheel == LoadedMods.FlywheelVersion.V1) FlywheelCompat.initClient()
             if (ModList.get().isLoaded("flywheel")) {
                 forgeBus.addListener(::registerFlywheelReload)
+            }
+            VSGameEvents.registriesCompleted.on {
+                ClientConnectivityUpdateQueue.onRegistriesCompleted()
             }
         }
         modBus.addListener(::loadComplete)

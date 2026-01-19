@@ -1,5 +1,6 @@
 package org.valkyrienskies.mod.mixin.client.world;
 
+import static org.valkyrienskies.mod.common.BlockStateInfo.isSortedRegistryInitialized;
 import static org.valkyrienskies.mod.common.ValkyrienSkiesMod.getApi;
 import static org.valkyrienskies.mod.common.ValkyrienSkiesMod.getVsCore;
 
@@ -41,6 +42,7 @@ import org.valkyrienskies.mod.mixin.accessors.client.render.LevelRendererAccesso
 import org.valkyrienskies.mod.mixinducks.client.render.IVSViewAreaMethods;
 import org.valkyrienskies.mod.mixinducks.client.world.ClientChunkCacheDuck;
 import org.valkyrienskies.mod.mixinducks.mod_compat.vanilla_renderer.LevelRendererDuck;
+import org.valkyrienskies.mod.util.ClientConnectivityUpdateQueue;
 
 /**
  * The purpose of this mixin is to allow {@link ClientChunkCache} to store ship chunks.
@@ -84,9 +86,15 @@ public abstract class MixinClientChunkCache implements ClientChunkCacheDuck {
                 vs$shipChunks.put(chunkPosLong, worldChunk);
             }
 
+            boolean shouldDefer = !isSortedRegistryInitialized();
+            if (shouldDefer) {
+                ClientConnectivityUpdateQueue.queueChunkForInitialization(pos, shouldForce);
+            }
+
             VsiClientShipWorld clientShipWorld = VSGameUtilsKt.getShipObjectWorld(level);
-            if (clientShipWorld != null && VSGameConfig.CLIENT.getConnectivity().getEnableClientConnectivity()) {
+            if (clientShipWorld != null && VSGameConfig.CLIENT.getConnectivity().getEnableClientConnectivity() && !shouldDefer) {
                 ArrayList<VsiTerrainUpdate> voxelShapeUpdates = new ArrayList<>();
+
 
                 final LevelChunkSection[] chunkSections = worldChunk.getSections();
 
