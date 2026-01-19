@@ -27,6 +27,9 @@ class VSRenderTypes(
         private val RENDERTYPE_SHIP_CUTOUT_SHADER: ShaderStateShard = ShaderStateShard(Supplier { shipCutoutShader })
         private val RENDERTYPE_SHIP_TRANSLUCENT_SHADER: ShaderStateShard = ShaderStateShard(Supplier { shipTranslucentShader })
 
+        // RenderTypes are not actually used anywhere, only shaders.
+        // Needs refactoring to adjust for CompositeState.builder() being protected on Forge, not urgent for now?
+        /*
         val SHIP_SOLID = create(
             ValkyrienSkiesMod.MOD_ID + "ship_solid",
             DefaultVertexFormat.BLOCK,
@@ -75,6 +78,7 @@ class VSRenderTypes(
             true,
             translucentState(RENDERTYPE_SHIP_TRANSLUCENT_SHADER)
         )
+        */
 
         fun shipShaderFor(renderType: RenderType): ShaderInstance? {
             return when (renderType) {
