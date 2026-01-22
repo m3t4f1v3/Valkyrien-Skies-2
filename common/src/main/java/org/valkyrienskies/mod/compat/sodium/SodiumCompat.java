@@ -129,14 +129,6 @@ public class SodiumCompat {
             final ChunkRenderMatrices newMatrices =
                 new ChunkRenderMatrices(matrices.projection(), new Matrix4f(newModelView));
             DefaultChunkRenderer chunkRenderer = (DefaultChunkRenderer) ((RenderSectionManagerAccessor) renderSectionManager).getChunkRenderer();
-            ChunkShaderOptions options = new ChunkShaderOptions(ChunkFogMode.SMOOTH, pass, ((ShaderChunkRendererAccessor)chunkRenderer).getVertexType());
-            
-
-            GlProgram<ShipThing> newProgram = cachedPrograms.get(options);
-            if (newProgram == null) {
-                newProgram = createShader("blocks/block_layer_opaque", options);
-                cachedPrograms.put(options, newProgram);
-            }
             
             // Extract rotation matrix from ship-to-world transform (3x3 upper-left)
             Matrix4f shipRotation = new Matrix4f(

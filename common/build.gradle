@@ -10,6 +10,7 @@ dependencies {
     modCompileOnly "fuzs.forgeconfigapiport:forgeconfigapiport-common:${rootProject.fcap_version}"
 
     modCompileOnly("maven.modrinth:sodium:${sodium_version}")
+    modCompileOnly("maven.modrinth:iris:${iris_version}")
 
     // vs-core
     runtimeOnly("org.valkyrienskies.core:impl:${rootProject.vs_core_version}") {
