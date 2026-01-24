@@ -1,6 +1,7 @@
 package org.valkyrienskies.mod.common.util
 
 import net.minecraft.client.multiplayer.ClientLevel
+import net.minecraft.core.SectionPos
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.util.Mth
 import net.minecraft.world.entity.Entity
@@ -11,20 +12,47 @@ import net.minecraft.world.phys.Vec3
 import net.minecraft.world.phys.shapes.VoxelShape
 import org.joml.primitives.AABBd
 import org.joml.primitives.AABBdc
+import org.joml.primitives.AABBi
 import org.valkyrienskies.core.api.ships.Ship
 import org.valkyrienskies.core.internal.collision.VsiConvexPolygonc
 import org.valkyrienskies.core.util.extend
+import org.valkyrienskies.core.util.toAABBd
+import org.valkyrienskies.mod.common.allShips
 import org.valkyrienskies.mod.common.dimensionId
 import org.valkyrienskies.mod.common.getLoadedShipManagingPos
-import org.valkyrienskies.mod.common.getShipsIntersecting
 import org.valkyrienskies.mod.common.shipObjectWorld
 import org.valkyrienskies.mod.common.vsCore
 import org.valkyrienskies.mod.mixinducks.feature.tickets.PlayerKnownShipsDuck
 import org.valkyrienskies.mod.util.BugFixUtil
+import java.util.stream.Stream
 
 object EntityShipCollisionUtils {
 
     private val collider = vsCore.entityPolygonCollider
+
+    private fun getShipyardChunkAABBAround(ship: Ship): AABBi {
+        val box = AABBi()
+        // Since we don't know how big the ship is vertically we'll just have to trust the shipAABB and add some margin of error.
+        val minY = (ship.shipAABB?.minY() ?: Mth.floor(ship.transform.position.y())) - 16
+        val maxY = (ship.shipAABB?.maxY() ?: Mth.ceil(ship.transform.position.y())) + 16
+        ship.activeChunksSet.forEach { x, z ->
+            val minX = SectionPos.sectionToBlockCoord(x)
+            val minZ = SectionPos.sectionToBlockCoord(z)
+            val maxX = SectionPos.sectionToBlockCoord(x, 15)
+            val maxZ = SectionPos.sectionToBlockCoord(z, 15)
+            box.union(minX, minY, minZ).union(maxX, maxY, maxZ)
+        }
+        return box
+    }
+
+    private fun getAllShipsIntersectingEvenIfNotYetFullyLoaded(level: Level, aabb: AABBd): Stream<Ship> {
+        // shipAABB and worldAABB are sometimes too small when ship was just loaded for the first time.
+        // To circumvent this, we use activeChunksSet to find a rougher bounding box which should always contain the entire ship.
+        return level.allShips.stream().filter { ship ->
+            ship.chunkClaimDimension == level.dimensionId &&
+            getShipyardChunkAABBAround(ship).toAABBd(AABBd()).transform(ship.shipToWorld).intersectsAABB(aabb)
+        }
+    }
 
     @JvmStatic
     fun isCollidingWithUnloadedShips(entity: Entity): Boolean {
@@ -36,10 +64,10 @@ object EntityShipCollisionUtils {
             }
 
             val aabb = entity.boundingBox.toJOML()
-            return level.getShipsIntersecting(aabb)
-                .all { ship ->
+            return getAllShipsIntersectingEvenIfNotYetFullyLoaded(level, aabb)
+                .allMatch { ship ->
                     if (entity is PlayerKnownShipsDuck && !entity.vs_isKnownShip(ship.id)) {
-                        return true
+                        return@allMatch false
                     }
                     val aabbInShip = AABBd(aabb).transform(ship.worldToShip)
                     areAllChunksLoaded(ship, aabbInShip, level)
