@@ -15,7 +15,7 @@ import org.valkyrienskies.mod.common.util.toJOML
 import org.valkyrienskies.mod.compat.hexcasting.hextweaks.HexTweaksCompat
 import java.util.UUID
 
-open class AmbitRemapping(val env: CastingEnvironment) : IsVecInRange, HasEditPermissionsAt {
+open class ShipAmbit(val env: CastingEnvironment) : IsVecInRange, HasEditPermissionsAt {
     private val id = UUID.randomUUID()
     private val key = Key(id)
 
@@ -51,10 +51,6 @@ open class AmbitRemapping(val env: CastingEnvironment) : IsVecInRange, HasEditPe
     }
 
     open fun getCasterPosition(): Vec3? {
-        try { // Since there is no X-Plat way to test if a mod is loaded
-            return HexTweaksCompat.getComputerPosition(env)
-        } catch (_: ClassNotFoundException) {}
-
         return when (env) {
             is CircleCastEnv -> {
                 env.impetus?.blockPos?.center
@@ -66,4 +62,4 @@ open class AmbitRemapping(val env: CastingEnvironment) : IsVecInRange, HasEditPe
     }
 }
 
-class Key(val id: UUID) : Key<AmbitRemapping> {}
+class Key(val id: UUID) : Key<ShipAmbit> {}
