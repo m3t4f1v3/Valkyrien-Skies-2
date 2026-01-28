@@ -12,7 +12,6 @@ import org.valkyrienskies.mod.api.positionToShip
 import org.valkyrienskies.mod.api.positionToWorld
 import org.valkyrienskies.mod.common.getLoadedShipManagingPos
 import org.valkyrienskies.mod.common.util.toJOML
-import org.valkyrienskies.mod.compat.hexcasting.hextweaks.HexTweaksCompat
 import java.util.UUID
 
 open class ShipAmbit(val env: CastingEnvironment) : IsVecInRange, HasEditPermissionsAt {
@@ -25,10 +24,8 @@ open class ShipAmbit(val env: CastingEnvironment) : IsVecInRange, HasEditPermiss
     override fun onHasEditPermissionsAt(pos: BlockPos, current: Boolean): Boolean {
         if (current) return true
         // Always use Worldspace for permissions
-        env.world.getLoadedShipManagingPos(pos)?.let { ship ->
-            return env.hasEditPermissionsAt(BlockPos.containing(ship.positionToWorld(pos.center)))
-        }
-        return current
+        val ship = env.world.getLoadedShipManagingPos(pos)
+        return env.hasEditPermissionsAt(BlockPos.containing(ship.positionToWorld(pos.center)))
     }
 
     @OptIn(GameTickOnly::class)
@@ -47,7 +44,7 @@ open class ShipAmbit(val env: CastingEnvironment) : IsVecInRange, HasEditPermiss
 
         // Is Caster in the Shipyard?
         // Transform Other Position to Caster's Shipyard
-        casterShip?.let { casterShip -> return env.isVecInRange(casterShip.positionToShip(otherPos)) } ?: return env.isVecInRange(otherPos)
+        return env.isVecInRange(casterShip?.positionToShip(otherPos))
     }
 
     open fun getCasterPosition(): Vec3? {
