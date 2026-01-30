@@ -41,7 +41,8 @@ public class MixinCannonContraption {
         if (VSGameConfig.SERVER.getCbc().getShellRecoil()) {
             GameToPhysicsAdapter applier = ValkyrienSkiesMod.getOrCreateGTPA(VSGameUtilsKt.getDimensionId(cannon.level()));
             if (applier != null) {
-                double recoilForce = magnitude * VSGameConfig.SERVER.getCbc().getShellRecoilMult();
+                // Invert (by mult by -1) because magnitude is in direction the cannon shot, not the direction recoil is
+                double recoilForce = magnitude * VSGameConfig.SERVER.getCbc().getShellRecoilMult() * -1;
                 applier.applyInvariantForceToPos(
                     ship.getId(),
                     ship.getTransform().getShipToWorldRotation().transform(VectorConversionsMCKt.toJOML(vector).negate().normalize()).mul(recoilForce),
