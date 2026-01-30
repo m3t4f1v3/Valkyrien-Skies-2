@@ -1,13 +1,19 @@
 package org.valkyrienskies.mod.mixin.feature.spawn_player_on_ship;
 
+import com.mojang.authlib.GameProfile;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
+import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod;
 import org.valkyrienskies.mod.common.networking.PacketChangeKnownShips;
 import org.valkyrienskies.mod.mixinducks.feature.tickets.PlayerKnownShipsDuck;
@@ -21,6 +27,11 @@ public abstract class MixinPlayer extends LivingEntity implements PlayerKnownShi
     protected MixinPlayer(EntityType<? extends LivingEntity> entityType,
         Level level) {
         super(entityType, level);
+    }
+
+    @Inject(method = "<init>", at = @At("TAIL"))
+    private void populateLoadedShips(Level level, BlockPos blockPos, float f, GameProfile gameProfile, CallbackInfo ci) {
+        VSGameUtilsKt.getShipObjectWorld(level).getLoadedShips().forEach(ship -> vs_knownShips.add(ship.getId()));
     }
 
     @Override
