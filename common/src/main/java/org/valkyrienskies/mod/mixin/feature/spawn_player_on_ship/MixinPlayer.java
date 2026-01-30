@@ -31,7 +31,7 @@ public abstract class MixinPlayer extends LivingEntity implements PlayerKnownShi
 
     @Inject(method = "<init>", at = @At("TAIL"))
     private void populateLoadedShips(Level level, BlockPos blockPos, float f, GameProfile gameProfile, CallbackInfo ci) {
-        if (level.isClientSide()) { // Serverside we repopulate it from the previous ServerPlayer in ServerPlayer::restoreFrom.
+        if (level != null && level.isClientSide()) { // Serverside we repopulate it from the previous ServerPlayer in ServerPlayer::restoreFrom.
             VSGameUtilsKt.getShipObjectWorld(level).getLoadedShips().forEach(ship -> vs_knownShips.add(ship.getId()));
         }
     }
