@@ -22,7 +22,7 @@ import org.valkyrienskies.mod.mixinducks.feature.tickets.PlayerKnownShipsDuck;
 public abstract class MixinPlayer extends LivingEntity implements PlayerKnownShipsDuck {
 
     @Unique
-    private final LongSet vs_knownShips = new LongOpenHashSet();
+    private LongSet vs_knownShips = new LongOpenHashSet();
 
     protected MixinPlayer(EntityType<? extends LivingEntity> entityType,
         Level level) {
@@ -31,7 +31,9 @@ public abstract class MixinPlayer extends LivingEntity implements PlayerKnownShi
 
     @Inject(method = "<init>", at = @At("TAIL"))
     private void populateLoadedShips(Level level, BlockPos blockPos, float f, GameProfile gameProfile, CallbackInfo ci) {
-        VSGameUtilsKt.getShipObjectWorld(level).getLoadedShips().forEach(ship -> vs_knownShips.add(ship.getId()));
+        if (level.isClientSide()) { // Serverside we repopulate it from the previous ServerPlayer in ServerPlayer::restoreFrom.
+            VSGameUtilsKt.getShipObjectWorld(level).getLoadedShips().forEach(ship -> vs_knownShips.add(ship.getId()));
+        }
     }
 
     @Override
@@ -55,5 +57,15 @@ public abstract class MixinPlayer extends LivingEntity implements PlayerKnownShi
     @Override
     public boolean vs_isKnownShip(long shipId) {
         return vs_knownShips.contains(shipId);
+    }
+
+    @Override
+    public LongSet vs_getKnownShips() {
+        return vs_knownShips;
+    }
+
+    @Override
+    public void vs_setKnownShips(LongSet ships) {
+        this.vs_knownShips = ships;
     }
 }
