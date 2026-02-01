@@ -69,7 +69,7 @@ object VSGameConfig {
             @ConfigEntry(
                 description = "Enable client connectivity; increases client load, but allows for client-sided sealed space visuals, like occluding water in a submarine."
             )
-            var enableClientConnectivity = true
+            var enableClientConnectivity = false
         }
 
         @ConfigEntry(
