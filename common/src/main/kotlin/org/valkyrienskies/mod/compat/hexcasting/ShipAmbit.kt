@@ -25,7 +25,7 @@ open class ShipAmbit(val env: CastingEnvironment) : IsVecInRange, HasEditPermiss
         if (current) return true
         // Always use Worldspace for permissions
         val ship = env.world.getLoadedShipManagingPos(pos)
-        return env.hasEditPermissionsAt(BlockPos.containing(ship.positionToWorld(pos.center)))
+        return env.hasEditPermissionsAt(ship?.let { BlockPos.containing(it.positionToWorld(pos.center)) } ?: pos)
     }
 
     @OptIn(GameTickOnly::class)
@@ -44,7 +44,7 @@ open class ShipAmbit(val env: CastingEnvironment) : IsVecInRange, HasEditPermiss
 
         // Is Caster in the Shipyard?
         // Transform Other Position to Caster's Shipyard
-        return env.isVecInRange(casterShip?.positionToShip(otherPos))
+        return env.isVecInRange(casterShip?.positionToShip(otherPos) ?: otherPos)
     }
 
     open fun getCasterPosition(): Vec3? {
