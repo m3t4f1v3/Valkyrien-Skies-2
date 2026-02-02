@@ -209,6 +209,11 @@ object VSGameConfig {
         var preventFluidEscapingShip = true
 
         @ConfigEntry(
+            description = "If true, prevents vines from growing beyond the ship's bounding box."
+        )
+        var preventVinesEscapingShip = true
+
+        @ConfigEntry(
             description = "Blast force in newtons of a TNT explosion at the center of the explosion."
         )
         var explosionBlastForce = 500000.0
