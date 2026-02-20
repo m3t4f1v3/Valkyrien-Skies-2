@@ -18,6 +18,9 @@ import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.Component.translatable
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.level.block.Blocks
+import net.minecraft.world.level.block.LiquidBlockContainer
+import net.minecraft.world.level.block.SimpleWaterloggedBlock
+import net.minecraft.world.level.block.state.properties.BlockStateProperties
 import net.minecraft.world.level.material.Fluids
 import net.minecraft.world.phys.BlockHitResult
 import net.minecraftforge.common.ForgeConfigSpec
@@ -140,11 +143,7 @@ object VSCommands {
                     .then(argument("ship", ShipArgument.ships())
                         .executes {
                             dryShip(it, ShipArgument.getShip(it, "ship"))
-                        }.then(argument("allfluids", BoolArgumentType.bool())
-                            .executes {
-                                dryShip(it, ShipArgument.getShip(it, "ship"), BoolArgumentType.getBool(it, "allfluids"))
-                            }
-                        )
+                        }
                     )
                 ).then(literal("set-splitting")
                     .requires{ it.hasPermission(VSGameConfig.SERVER.Commands.deleteShipCommandPerms)}
@@ -676,7 +675,7 @@ object VSCommands {
         }*/
     }
 
-    fun dryShip(context: CommandContext<CommandSourceStack>, ship: Ship, allFluids: Boolean = false): Int {
+    fun dryShip(context: CommandContext<CommandSourceStack>, ship: Ship): Int {
         val level = context.source.level
 
         // Shouldn't ever happen, but just in case
@@ -688,12 +687,24 @@ object VSCommands {
         var dryCount = 0
 
         ship.shipAABB!!.forEach { x, y, z ->
-            var pos = BlockPos(x, y, z)
-            val state = level.getFluidState(pos)
-            // (isWater or isFlowingWater) or (allFluids and isFluid)
-            if ((state.`is`(Fluids.WATER) || state.`is`(Fluids.FLOWING_WATER)) ||(allFluids && !state.`is`(Fluids.EMPTY))) {
-                level.setBlock(pos, Blocks.AIR.defaultBlockState(), 2)
+            val pos = BlockPos(x, y, z)
+            val state = level.getBlockState(pos)
+
+            if (state.liquid()) {
+                level.setBlock(pos, Blocks.AIR.defaultBlockState(), 2);
                 dryCount += 1
+            } else {
+                if (state.block is LiquidBlockContainer && state.block !is SimpleWaterloggedBlock) {
+                    // Hack specifically for seagrass and nothing else
+                    level.destroyBlock(pos, true);
+                    level.setBlock(pos, Blocks.AIR.defaultBlockState(), 2);
+                    dryCount += 1
+                } else {
+                    if (state.hasProperty(BlockStateProperties.WATERLOGGED)) {
+                        level.setBlock(pos, state.setValue(BlockStateProperties.WATERLOGGED, false), 2);
+                        dryCount += 1
+                    }
+                }
             }
         }
 
