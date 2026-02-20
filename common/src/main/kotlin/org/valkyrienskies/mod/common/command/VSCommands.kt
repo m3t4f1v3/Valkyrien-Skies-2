@@ -6,7 +6,6 @@ import com.mojang.brigadier.arguments.DoubleArgumentType
 import com.mojang.brigadier.arguments.IntegerArgumentType
 import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.context.CommandContext
-import com.sun.org.apache.xpath.internal.operations.Bool
 import net.minecraft.commands.CommandRuntimeException
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands.argument
@@ -21,7 +20,6 @@ import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.block.LiquidBlockContainer
 import net.minecraft.world.level.block.SimpleWaterloggedBlock
 import net.minecraft.world.level.block.state.properties.BlockStateProperties
-import net.minecraft.world.level.material.Fluids
 import net.minecraft.world.phys.BlockHitResult
 import net.minecraftforge.common.ForgeConfigSpec
 import org.joml.Quaterniond
@@ -39,7 +37,8 @@ import org.valkyrienskies.core.impl.config.VSCoreConfig
 import org.valkyrienskies.core.internal.ShipTeleportData
 import org.valkyrienskies.mod.common.BlockStateInfo
 import org.valkyrienskies.mod.common.assembly.ShipAssembler
-import org.valkyrienskies.mod.common.command.ShipArgument
+import org.valkyrienskies.mod.common.command.arguments.RelativeVector3Argument
+import org.valkyrienskies.mod.common.command.arguments.ShipArgument
 import org.valkyrienskies.mod.common.config.VSConfigUpdater
 import org.valkyrienskies.mod.common.config.VSGameConfig
 import org.valkyrienskies.mod.common.dimensionId
@@ -145,7 +144,7 @@ object VSCommands {
                             dryShip(it, ShipArgument.getShip(it, "ship"))
                         }
                     )
-                ).then(literal("set-splitting")
+                ).then(literal("splitting")
                     .requires{ it.hasPermission(VSGameConfig.SERVER.Commands.deleteShipCommandPerms)}
                     .then(argument("ships", ShipArgument.ships())
                         .then(argument("enable", BoolArgumentType.bool())
