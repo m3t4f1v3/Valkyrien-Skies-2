@@ -29,6 +29,7 @@ import org.valkyrienskies.core.internal.ships.VsiServerShip
 import org.valkyrienskies.mod.common.config.VSGameConfig
 import org.valkyrienskies.mod.common.dimensionId
 import org.valkyrienskies.mod.common.executeIf
+import org.valkyrienskies.mod.common.forEach
 import org.valkyrienskies.mod.common.getLoadedShipManagingPos
 import org.valkyrienskies.mod.common.getShipManagingPos
 import org.valkyrienskies.mod.common.inAssemblyBlacklist
@@ -351,6 +352,7 @@ object ShipAssembler {
         return assembleToShip(level as ServerLevel, blocks.toSet(), scale)
     }
 
+    @Suppress("unused")
     fun isValidShipBlock(state: BlockState?) : Boolean {
         if (state == null) return false
         if (state.isAir) return false
@@ -366,17 +368,12 @@ object ShipAssembler {
         }
         if (deleteBlocks) {
             val aabb = ship.shipAABB ?: return 0
-            // There has to be a better way to do this...
-            for (x in aabb.minX()..aabb.maxX()) {
-                for (y in aabb.minY()..aabb.maxY()) {
-                    for (z in aabb.minZ()..aabb.maxZ()) {
-                        // Not sure if 2 is what we want, but its what /fill uses
-                        if (dropBlocks)
-                            level.destroyBlock(BlockPos(x, y, z), true)
-                        else
-                            level.setBlock(BlockPos(x, y, z), Blocks.AIR.defaultBlockState(), 2)
-                    }
-                }
+            aabb.forEach { x, y, z ->
+                if (dropBlocks)
+                    level.destroyBlock(BlockPos(x, y, z), true)
+                else
+                    // Not sure if 2 is what we want, but it's what /fill uses
+                    level.setBlock(BlockPos(x, y, z), Blocks.AIR.defaultBlockState(), 2)
             }
         }
 

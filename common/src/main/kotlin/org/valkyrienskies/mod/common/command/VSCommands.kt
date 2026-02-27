@@ -12,9 +12,14 @@ import net.minecraft.commands.Commands.argument
 import net.minecraft.commands.Commands.literal
 import net.minecraft.commands.SharedSuggestionProvider
 import net.minecraft.commands.arguments.coordinates.Vec3Argument
+import net.minecraft.core.BlockPos
 import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.Component.translatable
 import net.minecraft.world.entity.Entity
+import net.minecraft.world.level.block.Blocks
+import net.minecraft.world.level.block.LiquidBlockContainer
+import net.minecraft.world.level.block.SimpleWaterloggedBlock
+import net.minecraft.world.level.block.state.properties.BlockStateProperties
 import net.minecraft.world.phys.BlockHitResult
 import net.minecraftforge.common.ForgeConfigSpec
 import org.joml.Quaterniond
@@ -23,6 +28,7 @@ import org.joml.Vector3d
 import org.joml.Vector3dc
 import org.valkyrienskies.core.api.ships.LoadedServerShip
 import org.valkyrienskies.core.api.ships.ServerShip
+import org.valkyrienskies.core.api.ships.Ship
 import org.valkyrienskies.core.api.world.ServerShipWorld
 import org.valkyrienskies.core.api.world.ShipWorld
 import org.valkyrienskies.core.api.world.properties.DimensionId
@@ -31,9 +37,12 @@ import org.valkyrienskies.core.impl.config.VSCoreConfig
 import org.valkyrienskies.core.internal.ShipTeleportData
 import org.valkyrienskies.mod.common.BlockStateInfo
 import org.valkyrienskies.mod.common.assembly.ShipAssembler
+import org.valkyrienskies.mod.common.command.arguments.RelativeVector3Argument
+import org.valkyrienskies.mod.common.command.arguments.ShipArgument
 import org.valkyrienskies.mod.common.config.VSConfigUpdater
 import org.valkyrienskies.mod.common.config.VSGameConfig
 import org.valkyrienskies.mod.common.dimensionId
+import org.valkyrienskies.mod.common.forEach
 import org.valkyrienskies.mod.common.getShipManagingPos
 import org.valkyrienskies.mod.common.shipObjectWorld
 import org.valkyrienskies.mod.common.util.SplittingDisablerAttachment
@@ -67,6 +76,8 @@ object VSCommands {
     private const val AIR_VALUES_PRESSURE_MESSAGE = "command.valkyrienskies.air_values.pressure"
     private const val GET_GRAVITY_MESSAGE = "command.valkyrienskies.get_gravity"
     private const val SET_SPLITTING_MESSAGE = "command.valkyrienskies.set_splitting"
+    private const val DRY_SHIP_NO_BLOCKS_MESSAGE = "command.valkyrienskies.dry.no_blocks"
+    private const val DRY_SHIP_SUCCESS_MESSAGE = "command.valkyrienskies.dry.success"
 
     private const val GET_SHIP_SUCCESS_MESSAGE = "command.valkyrienskies.get_ship.success"
     private const val GET_SHIP_FAIL_MESSAGE = "command.valkyrienskies.get_ship.fail"
@@ -119,14 +130,21 @@ object VSCommands {
                 .requires{ it.hasPermission(VSGameConfig.SERVER.Commands.deleteShipCommandPerms)}
                     .then(argument("ships", ShipArgument.ships())
                         .executes {
-                            deleteShip(it)
+                            deleteShip(it, ShipArgument.getShips(it, "ships").toList() as List<ServerShip>)
                         }.then(argument("deleteBlocks", BoolArgumentType.bool())
                             .executes {
-                                deleteShip(it, BoolArgumentType.getBool(it, "deleteBlocks"))
+                                deleteShip(it, ShipArgument.getShips(it, "ships").toList() as List<ServerShip>, BoolArgumentType.getBool(it, "deleteBlocks"))
                             }
                         )
                     )
-                ).then(literal("set-splitting")
+                ).then(literal("dry")
+                    .requires{ it.hasPermission(VSGameConfig.SERVER.Commands.dryShipCommandPerms)}
+                    .then(argument("ship", ShipArgument.ships())
+                        .executes {
+                            dryShip(it, ShipArgument.getShip(it, "ship"))
+                        }
+                    )
+                ).then(literal("splitting")
                     .requires{ it.hasPermission(VSGameConfig.SERVER.Commands.deleteShipCommandPerms)}
                     .then(argument("ships", ShipArgument.ships())
                         .then(argument("enable", BoolArgumentType.bool())
@@ -656,9 +674,48 @@ object VSCommands {
         }*/
     }
 
-    fun deleteShip(context: CommandContext<CommandSourceStack>, deleteBlocks: Boolean = false): Int {
-        val r = ShipArgument.getShips(context, "ships").toList() as List<ServerShip>
+    fun dryShip(context: CommandContext<CommandSourceStack>, ship: Ship): Int {
+        val level = context.source.level
 
+        // Shouldn't ever happen, but just in case
+        if (ship.shipAABB == null) {
+            context.source.sendFailure(Component.translatable(DRY_SHIP_NO_BLOCKS_MESSAGE))
+            return 0
+        }
+
+        var dryCount = 0
+
+        ship.shipAABB!!.forEach { x, y, z ->
+            val pos = BlockPos(x, y, z)
+            val state = level.getBlockState(pos)
+
+            if (state.liquid()) {
+                level.setBlock(pos, Blocks.AIR.defaultBlockState(), 2);
+                dryCount += 1
+            } else {
+                if (state.block is LiquidBlockContainer && state.block !is SimpleWaterloggedBlock) {
+                    // Hack specifically for seagrass and nothing else
+                    level.destroyBlock(pos, true);
+                    level.setBlock(pos, Blocks.AIR.defaultBlockState(), 2);
+                    dryCount += 1
+                } else {
+                    if (state.hasProperty(BlockStateProperties.WATERLOGGED)) {
+                        level.setBlock(pos, state.setValue(BlockStateProperties.WATERLOGGED, false), 2);
+                        dryCount += 1
+                    }
+                }
+            }
+        }
+
+        context.source.sendSuccess({
+                Component.translatable(DRY_SHIP_SUCCESS_MESSAGE, dryCount)
+            }, true
+        )
+
+        return 1
+    }
+
+    fun deleteShip(context: CommandContext<CommandSourceStack>, r: List<ServerShip>, deleteBlocks: Boolean = false): Int {
         val deletedShips = r.map {
             ship -> ShipAssembler.deleteShip(context.source.level, ship, deleteBlocks, dropBlocks = false)
         }
