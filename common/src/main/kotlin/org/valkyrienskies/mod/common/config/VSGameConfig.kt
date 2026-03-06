@@ -326,6 +326,11 @@ object VSGameConfig {
 
     class Common {
 
+        @ConfigEntry(
+            description = "Enables ship air pockets. Must be enabled on both client and server."
+        )
+        var enableAirPockets = true
+
         @JvmField
         @ConfigCategory(title = "Advanced")
         val ADVANCED = Advanced()
