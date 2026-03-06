@@ -55,9 +55,12 @@ import org.lwjgl.opengl.GL30;
 import org.valkyrienskies.core.api.ships.ClientShip;
 import org.valkyrienskies.core.api.ships.LoadedShip;
 import org.valkyrienskies.core.api.ships.properties.ShipTransform;
-import org.valkyrienskies.mod.common.config.VSGameConfig;
-import org.valkyrienskies.mod.common.air_pockets.ShipWaterPocketManager;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
+import org.valkyrienskies.mod.common.air_pockets.ShipPocketAsyncRuntime;
+import org.valkyrienskies.mod.common.air_pockets.ShipPocketAsyncSubsystem;
+import org.valkyrienskies.mod.common.air_pockets.ShipWaterPocketAsyncCull;
+import org.valkyrienskies.mod.common.air_pockets.ShipWaterPocketManager;
+import org.valkyrienskies.mod.common.config.VSGameConfig;
 
 /**
  * Updates uniforms/samplers for the patched {@code rendertype_translucent} shader to cull *world* fluid surfaces inside
@@ -564,23 +567,23 @@ public final class ShipWaterPocketExternalWaterCull {
         handles.shipWaterTintLoc = GL20.glGetUniformLocation(programId, "ValkyrienAir_ShipWaterTint");
         handles.chunkWorldOriginLoc = GL20.glGetUniformLocation(programId, "ValkyrienAir_ChunkWorldOrigin");
 
-		        for (int i = 0; i < MAX_SHIPS; i++) {
-		            handles.shipAabbMinLoc[i] = GL20.glGetUniformLocation(programId, "ValkyrienAir_ShipAabbMin" + i);
-		            handles.shipAabbMaxLoc[i] = GL20.glGetUniformLocation(programId, "ValkyrienAir_ShipAabbMax" + i);
-		            handles.cameraShipPosLoc[i] = GL20.glGetUniformLocation(programId, "ValkyrienAir_CameraShipPos" + i);
-		            handles.gridMinLoc[i] = GL20.glGetUniformLocation(programId, "ValkyrienAir_GridMin" + i);
-		            handles.gridSizeLoc[i] = GL20.glGetUniformLocation(programId, "ValkyrienAir_GridSize" + i);
-		            handles.worldToShipLoc[i] = GL20.glGetUniformLocation(programId, "ValkyrienAir_WorldToShip" + i);
-		            handles.maskLoc[i] = GL20.glGetUniformLocation(programId, "ValkyrienAir_Mask" + i);
+        for (int i = 0; i < MAX_SHIPS; i++) {
+            handles.shipAabbMinLoc[i] = GL20.glGetUniformLocation(programId, "ValkyrienAir_ShipAabbMin" + i);
+            handles.shipAabbMaxLoc[i] = GL20.glGetUniformLocation(programId, "ValkyrienAir_ShipAabbMax" + i);
+            handles.cameraShipPosLoc[i] = GL20.glGetUniformLocation(programId, "ValkyrienAir_CameraShipPos" + i);
+            handles.gridMinLoc[i] = GL20.glGetUniformLocation(programId, "ValkyrienAir_GridMin" + i);
+            handles.gridSizeLoc[i] = GL20.glGetUniformLocation(programId, "ValkyrienAir_GridSize" + i);
+            handles.worldToShipLoc[i] = GL20.glGetUniformLocation(programId, "ValkyrienAir_WorldToShip" + i);
+            handles.maskLoc[i] = GL20.glGetUniformLocation(programId, "ValkyrienAir_Mask" + i);
 
-		            handles.shipSlotSupported[i] =
-		                i < handles.maxMaskSlots &&
-		                    handles.shipAabbMinLoc[i] >= 0 &&
-		                    handles.shipAabbMaxLoc[i] >= 0 &&
-		                    handles.gridSizeLoc[i] >= 0 &&
-		                    handles.worldToShipLoc[i] >= 0 &&
-		                    handles.maskLoc[i] >= 0;
-		        }
+            handles.shipSlotSupported[i] =
+                i < handles.maxMaskSlots &&
+                    handles.shipAabbMinLoc[i] >= 0 &&
+                    handles.shipAabbMaxLoc[i] >= 0 &&
+                    handles.gridSizeLoc[i] >= 0 &&
+                    handles.worldToShipLoc[i] >= 0 &&
+                    handles.maskLoc[i] >= 0;
+        }
 
         final boolean requiredOk =
             looksLikeEmbeddiumChunkProgram &&
@@ -707,7 +710,7 @@ public final class ShipWaterPocketExternalWaterCull {
             final Class<?> handlerClass = Class.forName("net.fabricmc.fabric.api.client.render.fluid.v1.FluidRenderHandler");
             fabricHandlerGetSprites = handlerClass.getMethod(
                 "getFluidSprites",
-                BlockAndTintGetter.class,
+                net.minecraft.world.level.BlockAndTintGetter.class,
                 BlockPos.class,
                 FluidState.class
             );
@@ -1081,16 +1084,7 @@ public final class ShipWaterPocketExternalWaterCull {
         if (masks.lastMaskUploadRevision == geometryRevision && masks.maskTexId != 0) return;
         if (masks.pendingMaskWordsFuture != null && masks.pendingMaskBuildRevision == geometryRevision) return;
 
-        final int capacity = MASK_TEX_WIDTH * height;
-        if (masks.occData == null || masks.occData.length != capacity) {
-            masks.occData = new int[capacity];
-            masks.occBuffer = BufferUtils.createIntBuffer(capacity);
-        } else {
-            java.util.Arrays.fill(masks.occData, 0);
-        }
-
         final VoxelShape[] shapeSnapshot = new VoxelShape[volume];
-
         final BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
         int idx = 0;
         for (int lz = 0; lz < sizeZ; lz++) {
@@ -1111,7 +1105,8 @@ public final class ShipWaterPocketExternalWaterCull {
             snapshot.getInterior() == null ? new BitSet() : (BitSet) snapshot.getInterior().clone();
 
         final Supplier<int[]> task = () -> {
-            final int[] occWords = ShipWaterPocketAsyncCull.buildOccMaskWords(shapeSnapshot, sizeX, sizeY, sizeZ, SUB);
+            final int[] occWords =
+                ShipWaterPocketAsyncCull.buildOccMaskWords(shapeSnapshot, sizeX, sizeY, sizeZ, SUB);
             final int[] airWords = ShipWaterPocketAsyncCull.buildAirMaskWords(interiorSnapshot, volume);
             final int[] out = new int[occWords.length + airWords.length];
             System.arraycopy(occWords, 0, out, 0, occWords.length);
@@ -1155,27 +1150,20 @@ public final class ShipWaterPocketExternalWaterCull {
         masks.maskTexHeight = height;
         newOrResized |= (prevId == 0 && masks.maskTexId != 0);
 
-        final int capacity = MASK_TEX_WIDTH * height;
-        if (masks.airData == null || masks.airData.length != capacity) {
-            masks.airData = new int[capacity];
-            masks.airBuffer = BufferUtils.createIntBuffer(capacity);
-        } else {
-            java.util.Arrays.fill(masks.airData, 0);
-            // Clear newly allocated storage to avoid undefined sampler reads during async rebuild.
-            if (newOrResized && masks.maskTexId != 0) {
-                final int capacity = MASK_TEX_WIDTH * height;
-                if (masks.maskData == null || masks.maskData.length != capacity) {
-                    masks.maskData = new int[capacity];
-                    masks.maskBuffer = BufferUtils.createIntBuffer(capacity);
-                } else {
-                    Arrays.fill(masks.maskData, 0);
-                }
-                masks.maskBuffer.clear();
-                masks.maskBuffer.put(masks.maskData);
-                masks.maskBuffer.flip();
-                uploadIntTexture(masks.maskTexId, MASK_TEX_WIDTH, height, masks.maskBuffer);
-                masks.lastMaskUploadRevision = Long.MIN_VALUE;
+        // Clear newly allocated storage to avoid undefined sampler reads during async rebuild.
+        if (newOrResized && masks.maskTexId != 0) {
+            final int capacity = MASK_TEX_WIDTH * height;
+            if (masks.maskData == null || masks.maskData.length != capacity) {
+                masks.maskData = new int[capacity];
+                masks.maskBuffer = BufferUtils.createIntBuffer(capacity);
+            } else {
+                Arrays.fill(masks.maskData, 0);
             }
+            masks.maskBuffer.clear();
+            masks.maskBuffer.put(masks.maskData);
+            masks.maskBuffer.flip();
+            uploadIntTexture(masks.maskTexId, MASK_TEX_WIDTH, height, masks.maskBuffer);
+            masks.lastMaskUploadRevision = Long.MIN_VALUE;
         }
     }
 
@@ -1472,7 +1460,7 @@ public final class ShipWaterPocketExternalWaterCull {
 
             GL11.glPixelStorei(GL11.GL_UNPACK_ALIGNMENT, 1);
             GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL30.GL_R8, width, height, 0, GL11.GL_RED, GL11.GL_UNSIGNED_BYTE,
-                (ByteBuffer) null);
+                (java.nio.ByteBuffer) null);
 
             return id;
         } finally {
@@ -1481,7 +1469,7 @@ public final class ShipWaterPocketExternalWaterCull {
         }
     }
 
-    private static void uploadByteTexture(final int texId, final int width, final int height, final ByteBuffer data) {
+    private static void uploadByteTexture(final int texId, final int width, final int height, final java.nio.ByteBuffer data) {
         final int prevBinding = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
         final int prevUnpackAlignment = GL11.glGetInteger(GL11.GL_UNPACK_ALIGNMENT);
         try {

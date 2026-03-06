@@ -8,7 +8,7 @@ import net.minecraft.world.phys.AABB
 import org.joml.Vector3d
 import kotlin.math.abs
 
-private const val POINT_QUERY_EPS: Double = 1e-5
+const val POINT_QUERY_EPS: Double = 1e-5
 
 internal fun findOpenShipBlockPosForPoint(
     level: Level,

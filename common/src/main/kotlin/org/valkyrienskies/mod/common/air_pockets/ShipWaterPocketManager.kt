@@ -22,6 +22,8 @@ import net.minecraft.world.level.material.Fluids
 import net.minecraft.world.level.material.FlowingFluid
 import net.minecraft.world.level.material.FluidState
 import net.minecraft.world.phys.Vec3
+import net.minecraft.world.phys.shapes.BooleanOp
+import net.minecraft.world.phys.shapes.Shapes
 import org.apache.logging.log4j.LogManager
 import org.joml.Vector3d
 import org.joml.primitives.AABBd
@@ -602,7 +604,7 @@ object ShipWaterPocketManager {
         shipPos: BlockPos,
         fluid: Fluid,
     ) {
-        if (!ValkyrienAirConfig.enableShipWaterPockets) return
+        if (!VSGameConfig.COMMON.enableAirPockets) return
         if (level.isClientSide) return
         if (fluid == Fluids.EMPTY) return
 
@@ -2605,7 +2607,7 @@ object ShipWaterPocketManager {
         val exterior = state.outsideVoid
         val simulationDomain = state.simulationDomain
         val particle = leakParticleForFluid(state.floodFluid)
-        val particleSpeedMultiplier = ValkyrienAirConfig.shipPocketParticleSpeedMultiplier.coerceIn(0.1, 5.0)
+        val particleSpeedMultiplier = VSGameConfig.COMMON.shipPocketParticleSpeedMultiplier.coerceIn(0.1, 5.0)
 
         var budget = 8
         for (idx in addedIndices) {
@@ -2822,7 +2824,7 @@ object ShipWaterPocketManager {
         if (chosenCount == 0) return
 
         val leakParticle = leakParticleForFluid(state.floodFluid)
-        val particleSpeedMultiplier = ValkyrienAirConfig.shipPocketParticleSpeedMultiplier.coerceIn(0.1, 5.0)
+        val particleSpeedMultiplier = VSGameConfig.COMMON.shipPocketParticleSpeedMultiplier.coerceIn(0.1, 5.0)
         for (iHole in 0 until chosenCount) {
             val holeIdx = chosenHoleIdx[iHole]
             val outDirCode = chosenOutDirCode[iHole]
@@ -2951,21 +2953,12 @@ object ShipWaterPocketManager {
 
     @JvmStatic
     fun overrideWaterFluidState(level: Level, worldBlockPos: BlockPos, original: FluidState): FluidState {
-        if (!VSGameConfig.COMMON.enableAirPockets) return original
-        if (level.isBlockInShipyard(worldBlockPos)) return original
-
-        val queryAabb = tmpQueryAabb.get().apply {
-            minX = worldBlockPos.x.toDouble()
-            minY = worldBlockPos.y.toDouble()
-            minZ = worldBlockPos.z.toDouble()
-            maxX = (worldBlockPos.x + 1).toDouble()
-            maxY = (worldBlockPos.y + 1).toDouble()
-            maxZ = (worldBlockPos.z + 1).toDouble()
-        }
-        val worldPos = tmpWorldPos.get().set(
-            worldBlockPos.x + 0.5,
-            worldBlockPos.y + 0.5,
-            worldBlockPos.z + 0.5
+        return overrideWaterFluidState(
+            level = level,
+            worldX = worldBlockPos.x + 0.5,
+            worldY = worldBlockPos.y + 0.5,
+            worldZ = worldBlockPos.z + 0.5,
+            original = original,
         )
     }
 
@@ -2981,7 +2974,7 @@ object ShipWaterPocketManager {
         if (level.isBlockInShipyard(worldX, worldY, worldZ)) return original
 
         val worldBlockPos = BlockPos.containing(worldX, worldY, worldZ)
-        val queryAabb = tmpQueryAabb.get().apply {
+        val queryAabb = ShipWaterPocketManager.tmpQueryAabb.get().apply {
             minX = worldBlockPos.x.toDouble()
             minY = worldBlockPos.y.toDouble()
             minZ = worldBlockPos.z.toDouble()
@@ -2989,13 +2982,20 @@ object ShipWaterPocketManager {
             maxY = (worldBlockPos.y + 1).toDouble()
             maxZ = (worldBlockPos.z + 1).toDouble()
         }
-        val worldPos = tmpWorldPos.get().set(worldX, worldY, worldZ)
-        val shipPosTmp = tmpShipPos.get()
-        val shipBlockPosTmp = tmpShipBlockPos.get()
+        val worldPos = ShipWaterPocketManager.tmpWorldPos.get().set(worldX, worldY, worldZ)
+        val shipPosTmp = ShipWaterPocketManager.tmpShipPos.get()
+        val shipBlockPosTmp = ShipWaterPocketManager.tmpShipBlockPos.get()
 
-        for (ship in getIntersectingShipsCached(level, worldBlockPos, queryAabb)) {
-            val state = getState(level, ship.id) ?: continue
-            val shipTransform = getQueryTransform(ship)
+        for (ship in ShipWaterPocketManager.getIntersectingShipsCached(
+            level, worldBlockPos, queryAabb
+        )) {
+            val state = ShipWaterPocketManager.getState(
+                level, ship.id
+            ) ?: continue
+            val shipTransform =
+                ShipWaterPocketManager.getQueryTransform(
+                    ship
+                )
 
             shipTransform.worldToShip.transformPosition(worldPos, shipPosTmp)
             val classification = classifyShipPointWithEpsilon(
@@ -3011,9 +3011,14 @@ object ShipWaterPocketManager {
 
             val shipFluid = findShipFluidAtShipPoint(level, shipPosTmp, shipBlockPosTmp)
             if (!shipFluid.isEmpty) return shipFluid
-            if (!original.isEmpty && isSuppressionClassification(state, classification)) {
-                val count = worldSuppressionHits.incrementAndGet()
-                logThrottledDiag(count, "Suppressed world fluid query in ship simulation-domain suppression zone")
+            if (!original.isEmpty && ShipWaterPocketManager.isSuppressionClassification(
+                    state, classification
+                )
+            ) {
+                val count = ShipWaterPocketManager.worldSuppressionHits.incrementAndGet()
+                ShipWaterPocketManager.logThrottledDiag(
+                    count, "Suppressed world fluid query in ship simulation-domain suppression zone"
+                )
                 return Fluids.EMPTY.defaultFluidState()
             }
         }
@@ -3141,7 +3146,7 @@ object ShipWaterPocketManager {
 
     @JvmStatic
     fun isWorldPosInShipWorldFluidSuppressionZone(level: Level, worldX: Double, worldY: Double, worldZ: Double): Boolean {
-        if (!ValkyrienAirConfig.enableShipWaterPockets) return false
+        if (!VSGameConfig.COMMON.enableAirPockets) return false
         if (level.isBlockInShipyard(worldX, worldY, worldZ)) return false
 
         val worldBlockPos = BlockPos.containing(worldX, worldY, worldZ)
@@ -4999,7 +5004,7 @@ object ShipWaterPocketManager {
                     if (!targetPlane.isFinite()) return
 
                     val oldPlane = if (state.floodPlaneByComponent.containsKey(rep)) state.floodPlaneByComponent.get(rep) else minY
-                    val floodRateMultiplier = ValkyrienAirConfig.shipPocketFloodRateMultiplier
+                    val floodRateMultiplier = VSGameConfig.COMMON.shipPocketFloodRateMultiplier
                         .coerceIn(0.05, 5.0)
                     val rise = ((FLOOD_RISE_PER_TICK_BASE +
                         submergedHoleFaces.coerceAtLeast(1).toDouble() * FLOOD_RISE_PER_TICK_PER_HOLE_FACE)
@@ -5146,7 +5151,7 @@ object ShipWaterPocketManager {
 
             val particle = leakParticleForFluid(state.floodFluid)
             val particleCount = (2 + conductance / 12).coerceIn(2, 10)
-            val particleSpeedMultiplier = ValkyrienAirConfig.shipPocketParticleSpeedMultiplier.coerceIn(0.1, 5.0)
+            val particleSpeedMultiplier = VSGameConfig.COMMON.shipPocketParticleSpeedMultiplier.coerceIn(0.1, 5.0)
             val speed = ((0.10 + conductance * 0.00035).coerceIn(0.10, 0.18)) * particleSpeedMultiplier
             emitDirectionalLeakParticles(
                 level = level,
@@ -5312,7 +5317,7 @@ object ShipWaterPocketManager {
                 if (state.floodPlaneByComponent.containsKey(rep)) state.floodPlaneByComponent.get(rep) else currentTop
 
             // Draining speed matches flooding speed profile (same conductance scaling + same config multiplier).
-            val floodRateMultiplier = ValkyrienAirConfig.shipPocketFloodRateMultiplier.coerceIn(0.05, 5.0)
+            val floodRateMultiplier = VSGameConfig.COMMON.shipPocketFloodRateMultiplier.coerceIn(0.05, 5.0)
             val drainRate = ((FLOOD_RISE_PER_TICK_BASE +
                 drainFaces.toDouble() * FLOOD_RISE_PER_TICK_PER_HOLE_FACE)
                 .coerceAtMost(FLOOD_RISE_MAX_PER_TICK)) * floodRateMultiplier

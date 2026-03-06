@@ -13,8 +13,8 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.valkyrienskies.core.api.ships.Ship;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
-import org.valkyrienskies.valkyrienair.config.ValkyrienAirConfig;
-import org.valkyrienskies.valkyrienair.feature.ship_water_pockets.ShipWaterPocketManager;
+import org.valkyrienskies.mod.common.air_pockets.ShipWaterPocketManager;
+import org.valkyrienskies.mod.common.config.VSGameConfig;
 
 @Mixin(LevelChunk.class)
 public abstract class MixinLevelChunk {
@@ -26,7 +26,7 @@ public abstract class MixinLevelChunk {
     @Inject(method = "setBlockState", at = @At("TAIL"))
     private void vs$markShipWaterPocketDirtyOnChunkSetBlock(final BlockPos pos, final BlockState state,
         final boolean isMoving, final CallbackInfoReturnable<BlockState> cir) {
-        if (!ValkyrienAirConfig.getEnableShipWaterPockets()) return;
+        if (!VSGameConfig.COMMON.getEnableAirPockets()) return;
         if (level.isClientSide) return;
         if (ShipWaterPocketManager.isApplyingInternalUpdates()) return;
 
