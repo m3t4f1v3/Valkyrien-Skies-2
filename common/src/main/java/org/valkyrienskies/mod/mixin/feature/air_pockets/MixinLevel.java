@@ -1,4 +1,4 @@
-package org.valkyrienskies.mod.mixin.feature.air_pockets.feature.ship_water_pockets;
+package org.valkyrienskies.mod.mixin.feature.air_pockets;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;

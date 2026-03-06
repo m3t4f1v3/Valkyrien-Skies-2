@@ -1,4 +1,4 @@
-package org.valkyrienskies.valkyrienair.feature.ship_water_pockets
+package org.valkyrienskies.mod.common.air_pockets
 
 import net.minecraft.core.BlockPos
 import net.minecraft.world.level.Level
@@ -9,6 +9,7 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties
 import net.minecraft.world.level.material.FlowingFluid
 import net.minecraft.world.level.material.Fluid
 import net.minecraft.world.level.material.Fluids
+import java.lang.Double
 import java.util.BitSet
 
 internal data class GeometryAsyncSnapshot(
@@ -89,12 +90,12 @@ private fun geometryStateHash(blockState: BlockState, geom: ShapeWaterGeometry, 
     h = mixHash64(h, if (geom.refined) 0xBEEFL else 0x0L)
     h = mixHash64(h, geom.boxes.size.toLong())
     for (box in geom.boxes) {
-        h = mixHash64(h, java.lang.Double.doubleToLongBits(box.minX))
-        h = mixHash64(h, java.lang.Double.doubleToLongBits(box.minY))
-        h = mixHash64(h, java.lang.Double.doubleToLongBits(box.minZ))
-        h = mixHash64(h, java.lang.Double.doubleToLongBits(box.maxX))
-        h = mixHash64(h, java.lang.Double.doubleToLongBits(box.maxY))
-        h = mixHash64(h, java.lang.Double.doubleToLongBits(box.maxZ))
+        h = mixHash64(h, Double.doubleToLongBits(box.minX))
+        h = mixHash64(h, Double.doubleToLongBits(box.minY))
+        h = mixHash64(h, Double.doubleToLongBits(box.minZ))
+        h = mixHash64(h, Double.doubleToLongBits(box.maxX))
+        h = mixHash64(h, Double.doubleToLongBits(box.maxY))
+        h = mixHash64(h, Double.doubleToLongBits(box.maxZ))
     }
     return h
 }
@@ -131,12 +132,12 @@ private class ShapeTemplateKey(
             val bits = LongArray(geom.boxes.size * 6)
             var i = 0
             for (box in geom.boxes) {
-                bits[i++] = java.lang.Double.doubleToLongBits(box.minX)
-                bits[i++] = java.lang.Double.doubleToLongBits(box.minY)
-                bits[i++] = java.lang.Double.doubleToLongBits(box.minZ)
-                bits[i++] = java.lang.Double.doubleToLongBits(box.maxX)
-                bits[i++] = java.lang.Double.doubleToLongBits(box.maxY)
-                bits[i++] = java.lang.Double.doubleToLongBits(box.maxZ)
+                bits[i++] = Double.doubleToLongBits(box.minX)
+                bits[i++] = Double.doubleToLongBits(box.minY)
+                bits[i++] = Double.doubleToLongBits(box.minZ)
+                bits[i++] = Double.doubleToLongBits(box.maxX)
+                bits[i++] = Double.doubleToLongBits(box.maxY)
+                bits[i++] = Double.doubleToLongBits(box.maxZ)
             }
             return ShapeTemplateKey(
                 fullSolid = geom.fullSolid,

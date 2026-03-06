@@ -10,6 +10,9 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
+import org.valkyrienskies.mod.common.air_pockets.MIN_OPENING_CONDUCTANCE
+import org.valkyrienskies.mod.common.air_pockets.PersistedShipPocketState
+import org.valkyrienskies.mod.common.air_pockets.ShipPocketSavedData
 import java.util.BitSet
 
 class ShipWaterPocketPersistenceTest {

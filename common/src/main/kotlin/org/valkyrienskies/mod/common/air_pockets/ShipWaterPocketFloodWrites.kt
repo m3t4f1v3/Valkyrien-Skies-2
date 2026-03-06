@@ -1,4 +1,4 @@
-package org.valkyrienskies.valkyrienair.feature.ship_water_pockets
+package org.valkyrienskies.mod.common.air_pockets
 
 import net.minecraft.core.BlockPos
 import net.minecraft.server.level.ServerLevel

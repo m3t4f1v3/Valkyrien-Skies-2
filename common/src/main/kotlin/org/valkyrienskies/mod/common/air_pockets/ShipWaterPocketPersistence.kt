@@ -1,4 +1,4 @@
-package org.valkyrienskies.valkyrienair.feature.ship_water_pockets
+package org.valkyrienskies.mod.common.air_pockets
 
 import it.unimi.dsi.fastutil.ints.Int2DoubleOpenHashMap
 import net.minecraft.core.registries.BuiltInRegistries
@@ -13,11 +13,13 @@ import net.minecraft.world.level.material.FlowingFluid
 import net.minecraft.world.level.saveddata.SavedData
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.lang.Double
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.BitSet
 import java.util.zip.DeflaterOutputStream
 import java.util.zip.InflaterInputStream
+import kotlin.collections.iterator
 
 internal data class PersistedShipPocketState(
     val minX: Int,
@@ -108,7 +110,7 @@ internal class ShipPocketSavedData : SavedData() {
             while (it.hasNext()) {
                 val entry = it.next()
                 planeKeys[i] = entry.intKey
-                planeValues[i] = java.lang.Double.doubleToLongBits(entry.doubleValue)
+                planeValues[i] = Double.doubleToLongBits(entry.doubleValue)
                 i++
             }
             shipTag.putIntArray(TAG_FLOOD_PLANE_KEYS, planeKeys)
@@ -184,7 +186,7 @@ internal class ShipPocketSavedData : SavedData() {
                 val planeValues = shipTag.getLongArray(TAG_FLOOD_PLANE_VALUES)
                 val planeCount = minOf(planeKeys.size, planeValues.size)
                 for (planeIdx in 0 until planeCount) {
-                    floodPlanes.put(planeKeys[planeIdx], java.lang.Double.longBitsToDouble(planeValues[planeIdx]))
+                    floodPlanes.put(planeKeys[planeIdx], Double.longBitsToDouble(planeValues[planeIdx]))
                 }
 
                 val open = decodeBitSet(shipTag.getByteArray(TAG_OPEN))

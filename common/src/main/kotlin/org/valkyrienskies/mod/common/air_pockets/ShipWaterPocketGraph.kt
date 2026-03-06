@@ -1,4 +1,4 @@
-package org.valkyrienskies.valkyrienair.feature.ship_water_pockets
+package org.valkyrienskies.mod.common.air_pockets
 
 import java.util.BitSet
 

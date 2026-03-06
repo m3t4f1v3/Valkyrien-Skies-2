@@ -1,4 +1,4 @@
-package org.valkyrienskies.mod.mixin.feature.air_pockets.feature.ship_water_pockets;
+package org.valkyrienskies.mod.mixin.feature.air_pockets;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;

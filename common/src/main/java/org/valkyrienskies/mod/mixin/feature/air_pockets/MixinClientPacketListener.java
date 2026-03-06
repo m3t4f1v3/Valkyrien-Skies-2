@@ -1,4 +1,4 @@
-package org.valkyrienskies.mod.mixin.feature.air_pockets.feature.ship_water_pockets;
+package org.valkyrienskies.mod.mixin.feature.air_pockets;
 
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.multiplayer.ClientPacketListener;

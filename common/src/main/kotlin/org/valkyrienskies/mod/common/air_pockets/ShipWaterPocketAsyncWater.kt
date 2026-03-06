@@ -1,5 +1,6 @@
-package org.valkyrienskies.valkyrienair.feature.ship_water_pockets
+package org.valkyrienskies.mod.common.air_pockets
 
+import it.unimi.dsi.fastutil.ints.Int2DoubleOpenHashMap
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap
 import net.minecraft.world.level.material.Fluid
 import java.util.BitSet
@@ -51,8 +52,8 @@ internal data class WaterSolveSnapshot(
 internal data class FloodPlanResult(
     val toAdd: BitSet = BitSet(),
     val toRemove: BitSet = BitSet(),
-    val newPlanes: it.unimi.dsi.fastutil.ints.Int2DoubleOpenHashMap =
-        it.unimi.dsi.fastutil.ints.Int2DoubleOpenHashMap(),
+    val newPlanes: Int2DoubleOpenHashMap =
+        Int2DoubleOpenHashMap(),
 )
 
 internal data class WaterSolveResult(

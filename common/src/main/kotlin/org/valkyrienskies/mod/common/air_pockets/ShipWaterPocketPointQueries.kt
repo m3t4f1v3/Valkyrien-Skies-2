@@ -1,4 +1,4 @@
-package org.valkyrienskies.valkyrienair.feature.ship_water_pockets
+package org.valkyrienskies.mod.common.air_pockets
 
 import net.minecraft.core.BlockPos
 import net.minecraft.util.Mth
@@ -6,6 +6,7 @@ import net.minecraft.world.level.Level
 import net.minecraft.world.level.material.FluidState
 import net.minecraft.world.phys.AABB
 import org.joml.Vector3d
+import kotlin.math.abs
 
 private const val POINT_QUERY_EPS: Double = 1e-5
 
@@ -144,7 +145,7 @@ internal fun findOpenShipBlockPosForPoint(
                 if (!isOpen(state, tmp)) continue
 
                 if (baseIdx >= 0) {
-                    val manhattan = kotlin.math.abs(dx) + kotlin.math.abs(dy) + kotlin.math.abs(dz)
+                    val manhattan = abs(dx) + abs(dy) + abs(dz)
                     if (manhattan == 1) {
                         val dirCode = when {
                             dx < 0 -> 0

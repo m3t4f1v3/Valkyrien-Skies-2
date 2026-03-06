@@ -3,6 +3,8 @@ package org.valkyrienskies.valkyrienair.feature.ship_water_pockets
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.valkyrienskies.mod.common.air_pockets.MIN_OPENING_CONDUCTANCE
+import org.valkyrienskies.mod.common.air_pockets.computeOutsideVoidFromGeometry
 import java.util.BitSet
 
 class ShipWaterPocketDomainTest {

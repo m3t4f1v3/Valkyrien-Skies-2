@@ -1,4 +1,4 @@
-package org.valkyrienskies.valkyrienair.feature.ship_water_pockets
+package org.valkyrienskies.mod.common.air_pockets
 
 import net.minecraft.util.Mth
 import net.minecraft.world.phys.shapes.VoxelShape

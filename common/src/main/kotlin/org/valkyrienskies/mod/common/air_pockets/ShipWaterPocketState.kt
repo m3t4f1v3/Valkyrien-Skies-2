@@ -1,4 +1,4 @@
-package org.valkyrienskies.valkyrienair.feature.ship_water_pockets
+package org.valkyrienskies.mod.common.air_pockets
 
 import it.unimi.dsi.fastutil.ints.Int2DoubleOpenHashMap
 import net.minecraft.core.Direction
