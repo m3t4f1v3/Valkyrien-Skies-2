@@ -120,7 +120,7 @@ public abstract class MixinEntity implements ShipWaterPocketEntityDuck {
 
     @Unique
     private static boolean vs$isAirPocketAtPoint(final Level level, final double x, final double y, final double z) {
-        return ShipWaterPocketManager.isWorldPosInShipAirPocket(level, x, y, z);
+        return ShipWaterPocketManager.isWorldPosInShipWorldFluidSuppressionZone(level, x, y, z);
     }
 
     @Unique

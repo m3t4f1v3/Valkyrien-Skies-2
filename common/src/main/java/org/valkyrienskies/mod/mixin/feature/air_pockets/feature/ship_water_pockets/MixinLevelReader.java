@@ -26,9 +26,8 @@ public interface MixinLevelReader {
         if (!(((Object) this) instanceof final Level level)) return;
         if (VSGameUtilsKt.isBlockInShipyard(level, pos)) return;
 
-        if (ShipWaterPocketManager.isWorldPosInShipAirPocket(level, pos)) {
+        if (ShipWaterPocketManager.isWorldPosInShipWorldFluidSuppressionZone(level, pos)) {
             cir.setReturnValue(false);
         }
     }
 }
-
