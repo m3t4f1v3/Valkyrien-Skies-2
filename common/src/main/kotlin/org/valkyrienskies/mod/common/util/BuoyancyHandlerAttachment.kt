@@ -16,28 +16,8 @@ class BuoyancyHandlerAttachment : ShipPhysicsListener {
     val buoyancyData = BuoyancyData()
     val LOGGER = LogManager.getLogger("[Valkyrien Skies] Float factory")
 
-    fun getDisplacedVolume(): Double {
-        return buoyancyData.displacedVolume
-    }
-
     fun setDisplacedVolume(volume: Double) {
         buoyancyData.displacedVolume = volume
-    }
-
-    fun hasPocketCenter(): Boolean {
-        return buoyancyData.hasPocketCenter
-    }
-
-    fun getPocketCenterX(): Double {
-        return buoyancyData.pocketCenterX
-    }
-
-    fun getPocketCenterY(): Double {
-        return buoyancyData.pocketCenterY
-    }
-
-    fun getPocketCenterZ(): Double {
-        return buoyancyData.pocketCenterZ
     }
 
     fun setPocketCenter(x: Double, y: Double, z: Double) {
@@ -45,14 +25,6 @@ class BuoyancyHandlerAttachment : ShipPhysicsListener {
         buoyancyData.pocketCenterY = y
         buoyancyData.pocketCenterZ = z
         buoyancyData.hasPocketCenter = true
-    }
-
-    fun getBuoyancyFluidDensity(): Double {
-        return buoyancyData.buoyancyFluidDensity
-    }
-
-    fun getBuoyancyFluidViscosity(): Double {
-        return buoyancyData.buoyancyFluidViscosity
     }
 
     fun setBuoyancyFluidDensity(density: Double) {
@@ -94,7 +66,7 @@ class BuoyancyHandlerAttachment : ShipPhysicsListener {
         companion object {
             const val WATER_DENSITY = 1000.0
             const val GRAVITY_MAGNITUDE = 10.0
-            const val MAX_POCKET_BUOYANCY_WEIGHT_MULT = 1.0
+            const val MAX_POCKET_BUOYANCY_WEIGHT_MULT = 10.0
             const val DEFAULT_FLUID_VISCOSITY = 1000.0
             const val OVERLAP_EPS = 1.0e-6
             const val SMOOTH_DISPLACED_ALPHA = 0.35
