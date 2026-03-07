@@ -66,7 +66,7 @@ class BuoyancyHandlerAttachment : ShipPhysicsListener {
         companion object {
             const val WATER_DENSITY = 1000.0
             const val GRAVITY_MAGNITUDE = 10.0
-            const val MAX_POCKET_BUOYANCY_WEIGHT_MULT = 10.0
+            const val MAX_POCKET_BUOYANCY_WEIGHT_MULT = 1.0
             const val DEFAULT_FLUID_VISCOSITY = 1000.0
             const val OVERLAP_EPS = 1.0e-6
             const val SMOOTH_DISPLACED_ALPHA = 0.35
