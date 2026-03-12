@@ -2977,10 +2977,6 @@ object ShipWaterPocketManager {
         if (maxBlockY < minBlockY) maxBlockY = minBlockY
         if (maxBlockZ < minBlockZ) maxBlockZ = minBlockZ
 
-        if (maxBlockY < level.minBuildHeight || minBlockY >= level.maxBuildHeight) return false
-        minBlockY = minBlockY.coerceAtLeast(level.minBuildHeight)
-        maxBlockY = maxBlockY.coerceAtMost(level.maxBuildHeight - 1)
-
         return level.hasChunksAt(
             BlockPos(minBlockX, minBlockY, minBlockZ),
             BlockPos(maxBlockX, maxBlockY, maxBlockZ),
