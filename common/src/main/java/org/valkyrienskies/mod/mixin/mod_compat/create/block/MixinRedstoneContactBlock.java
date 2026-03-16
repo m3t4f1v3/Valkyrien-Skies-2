@@ -115,6 +115,9 @@ public abstract class MixinRedstoneContactBlock extends WrenchableDirectionalBlo
         if (cir.getReturnValueZ()) {
             return;
         }
+
+        if (!(world instanceof Level)) return;
+
         final Level level = (Level) (world);
         final BlockPos detectPos = pos.relative(direction);
         final BlockState facingState = world.getBlockState(detectPos);
