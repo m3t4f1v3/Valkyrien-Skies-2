@@ -57,6 +57,7 @@ private enum class AssemblyPhase {
     REPLAY_BLOCK_UPDATES,
     FINALIZE_SERVER_EFFECTS,
     LIGHTING,
+    WAIT_FOR_PACKET_SETTLE,
     REFRESH_CHUNKS,
     RESUME_CHUNK_UPDATES,
     COMPLETE,
@@ -85,6 +86,7 @@ internal class TransferAssemblyJob<R>(
         private const val MUTATIONS_PER_TICK = 1024
         private const val REPLAYS_PER_TICK = 2048
         private const val CHUNK_REFRESHES_PER_TICK = 16
+        private const val PACKET_SETTLE_TICKS = 2L
     }
 
     val level: ServerLevel = plan.level
@@ -100,6 +102,11 @@ internal class TransferAssemblyJob<R>(
         .mapTo(LinkedHashSet()) { ChunkPos(it.destPos) }
     private val sourceChunks = plan.transfers
         .mapTo(LinkedHashSet()) { ChunkPos(it.sourcePos) }
+    private val retainedChunks = LinkedHashSet<ChunkPos>().apply {
+        addAll(sourceChunks)
+        addAll(forcedDestinationChunks)
+    }
+    private val stalledChunksJoml = retainedChunks.mapTo(ArrayList()) { it.toJOML() }
 
     private var phase = AssemblyPhase.SNAPSHOT
     private var snapshotIndex = 0
@@ -109,22 +116,35 @@ internal class TransferAssemblyJob<R>(
     private var refreshIndex = 0
     private var pauseSent = false
     private var releasedForcedChunks = false
+    private var packetSettleUntilGameTime = Long.MIN_VALUE
 
     private val changedChunksList: MutableList<ChunkPos> = ArrayList()
-    private val changedChunksJoml = ArrayList<org.joml.Vector2i>()
     private val changedPositionsList: MutableList<BlockPos> = ArrayList()
 
     init {
-        AssemblyScheduler.retainForcedChunks(level, forcedDestinationChunks)
-        requestChunkLoads(sourceChunks)
-        requestChunkLoads(forcedDestinationChunks)
+        AssemblyScheduler.retainForcedChunks(level, retainedChunks)
+        if (plan.stallChunkUpdates && stalledChunksJoml.isNotEmpty()) {
+            plan.level.players().forEach { player ->
+                with(vsCore.simplePacketNetworking) {
+                    PacketStopChunkUpdates(stalledChunksJoml).sendToClient(player.playerWrapper)
+                }
+            }
+            pauseSent = true
+        }
+        requestChunkLoads(retainedChunks)
     }
 
     internal fun hasSnapshots(): Boolean = snapshots.isNotEmpty()
 
     private fun getChunkNow(pos: BlockPos): LevelChunk? {
         val chunkKey = ChunkPos.asLong(pos.x shr 4, pos.z shr 4)
-        return chunkCache[chunkKey] ?: ShipAssembler.getLoadedChunk(plan.level, pos)?.also { chunkCache[chunkKey] = it }
+        val chunk = ShipAssembler.getLoadedChunk(plan.level, pos)
+        if (chunk == null) {
+            chunkCache.remove(chunkKey)
+            return null
+        }
+        chunkCache[chunkKey] = chunk
+        return chunk
     }
 
     private fun requestChunkLoads(chunks: Iterable<ChunkPos>) {
@@ -132,20 +152,36 @@ internal class TransferAssemblyJob<R>(
     }
 
     private fun requestChunkLoad(chunkPos: ChunkPos) {
-        requestedChunkLoads.getOrPut(chunkPos) {
+        if (plan.level.chunkSource.getChunkNow(chunkPos.x, chunkPos.z) != null) {
+            requestedChunkLoads.remove(chunkPos)
+            return
+        }
+
+        val existing = requestedChunkLoads[chunkPos]
+        if (existing != null && !existing.isDone) {
+            return
+        }
+
+        requestedChunkLoads[chunkPos] =
             (plan.level.chunkSource as ServerChunkCacheAccessor)
                 .callGetChunkFutureMainThread(chunkPos.x, chunkPos.z, ChunkStatus.FULL, true)
-        }
     }
 
     private fun waitForRequestedChunks() {
-        for ((chunkPos, future) in requestedChunkLoads) {
+        val iterator = requestedChunkLoads.entries.iterator()
+        while (iterator.hasNext()) {
+            val (chunkPos, future) = iterator.next()
             if (future.isCompletedExceptionally) {
                 future.join()
             }
             if (plan.level.chunkSource.getChunkNow(chunkPos.x, chunkPos.z) == null) {
+                if (future.isDone) {
+                    iterator.remove()
+                    requestChunkLoad(chunkPos)
+                }
                 return
             }
+            iterator.remove()
         }
         phase = AssemblyPhase.PAUSE_CHUNK_UPDATES
     }
@@ -166,6 +202,7 @@ internal class TransferAssemblyJob<R>(
                     AssemblyPhase.REPLAY_BLOCK_UPDATES -> replayStep(startNanos, budgetNanos)
                     AssemblyPhase.FINALIZE_SERVER_EFFECTS -> finalizeServerEffects()
                     AssemblyPhase.LIGHTING -> lightingStep(startNanos, budgetNanos, lightBudget)
+                    AssemblyPhase.WAIT_FOR_PACKET_SETTLE -> waitForPacketSettle(budgetNanos)
                     AssemblyPhase.REFRESH_CHUNKS -> refreshChunksStep(startNanos, budgetNanos)
                     AssemblyPhase.RESUME_CHUNK_UPDATES -> resumeChunkUpdates()
                     AssemblyPhase.COMPLETE -> completeSuccessfully()
@@ -245,17 +282,16 @@ internal class TransferAssemblyJob<R>(
                 return
             }
             changedChunksList += changedChunks
-            changedChunksJoml += changedChunksList.map(ChunkPos::toJOML)
             changedPositionsList += changedBlockPositions
             phase = AssemblyPhase.WAIT_FOR_CHUNKS
         }
     }
 
     private fun pauseChunkUpdates() {
-        if (plan.stallChunkUpdates && !pauseSent && changedChunksJoml.isNotEmpty()) {
+        if (plan.stallChunkUpdates && !pauseSent && stalledChunksJoml.isNotEmpty()) {
             plan.level.players().forEach { player ->
                 with(vsCore.simplePacketNetworking) {
-                    PacketStopChunkUpdates(changedChunksJoml).sendToClient(player.playerWrapper)
+                    PacketStopChunkUpdates(stalledChunksJoml).sendToClient(player.playerWrapper)
                 }
             }
             pauseSent = true
@@ -373,6 +409,13 @@ internal class TransferAssemblyJob<R>(
             refreshedThisTick++
         }
         if (lightIndex >= changedPositionsList.size) {
+            packetSettleUntilGameTime = plan.level.gameTime + PACKET_SETTLE_TICKS
+            phase = AssemblyPhase.WAIT_FOR_PACKET_SETTLE
+        }
+    }
+
+    private fun waitForPacketSettle(budgetNanos: Long) {
+        if (budgetNanos == Long.MAX_VALUE || plan.level.gameTime >= packetSettleUntilGameTime) {
             phase = AssemblyPhase.REFRESH_CHUNKS
         }
     }
@@ -399,10 +442,10 @@ internal class TransferAssemblyJob<R>(
     }
 
     private fun resumeChunkUpdates() {
-        if (plan.stallChunkUpdates && pauseSent && changedChunksJoml.isNotEmpty()) {
+        if (plan.stallChunkUpdates && pauseSent && stalledChunksJoml.isNotEmpty()) {
             plan.level.players().forEach { player ->
                 with(vsCore.simplePacketNetworking) {
-                    PacketRestartChunkUpdates(changedChunksJoml).sendToClient(player.playerWrapper)
+                    PacketRestartChunkUpdates(stalledChunksJoml).sendToClient(player.playerWrapper)
                 }
             }
         }
@@ -436,10 +479,10 @@ internal class TransferAssemblyJob<R>(
     private fun fail(t: Throwable) {
         logger.error("Queued ship assembly failed in phase $phase", t)
         restoreSourceBlocks()
-        if (plan.stallChunkUpdates && pauseSent && changedChunksJoml.isNotEmpty()) {
+        if (plan.stallChunkUpdates && pauseSent && stalledChunksJoml.isNotEmpty()) {
             plan.level.players().forEach { player ->
                 with(vsCore.simplePacketNetworking) {
-                    PacketRestartChunkUpdates(changedChunksJoml).sendToClient(player.playerWrapper)
+                    PacketRestartChunkUpdates(stalledChunksJoml).sendToClient(player.playerWrapper)
                 }
             }
         }
@@ -506,7 +549,7 @@ internal class TransferAssemblyJob<R>(
             return
         }
         releasedForcedChunks = true
-        AssemblyScheduler.releaseForcedChunks(level, forcedDestinationChunks)
+        AssemblyScheduler.releaseForcedChunks(level, retainedChunks)
     }
 
     private fun hasExceededBudget(startNanos: Long, budgetNanos: Long): Boolean {
