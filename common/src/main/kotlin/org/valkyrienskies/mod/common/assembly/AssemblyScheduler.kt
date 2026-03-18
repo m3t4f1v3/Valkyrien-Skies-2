@@ -14,6 +14,7 @@ import org.valkyrienskies.core.api.ships.LoadedServerShip
 import org.valkyrienskies.core.api.ships.ServerShip
 import org.valkyrienskies.mod.common.BlockStateInfo
 import org.valkyrienskies.mod.common.config.VSGameConfig
+import org.valkyrienskies.mod.common.inAssemblyBlacklist
 import org.valkyrienskies.mod.mixin.accessors.server.level.ServerChunkCacheAccessor
 import org.valkyrienskies.mod.common.networking.PacketRestartChunkUpdates
 import org.valkyrienskies.mod.common.networking.PacketStopChunkUpdates
@@ -76,6 +77,7 @@ internal class TransferAssemblyJob<R>(
     private val resultFactory: () -> R,
     private val successCallback: (() -> Unit)? = null,
     private val failureCleanup: (() -> Unit)? = null,
+    private val failIfNoSnapshots: Boolean = false,
 ) {
     companion object {
         private val logger by logger("Assembly Scheduler")
@@ -96,6 +98,8 @@ internal class TransferAssemblyJob<R>(
     private val requestedChunkLoads = LinkedHashMap<ChunkPos, CompletableFuture<*>>()
     private val forcedDestinationChunks = plan.transfers
         .mapTo(LinkedHashSet()) { ChunkPos(it.destPos) }
+    private val sourceChunks = plan.transfers
+        .mapTo(LinkedHashSet()) { ChunkPos(it.sourcePos) }
 
     private var phase = AssemblyPhase.SNAPSHOT
     private var snapshotIndex = 0
@@ -112,8 +116,11 @@ internal class TransferAssemblyJob<R>(
 
     init {
         AssemblyScheduler.retainForcedChunks(level, forcedDestinationChunks)
+        requestChunkLoads(sourceChunks)
         requestChunkLoads(forcedDestinationChunks)
     }
+
+    internal fun hasSnapshots(): Boolean = snapshots.isNotEmpty()
 
     private fun getChunkNow(pos: BlockPos): LevelChunk? {
         val chunkKey = ChunkPos.asLong(pos.x shr 4, pos.z shr 4)
@@ -194,8 +201,17 @@ internal class TransferAssemblyJob<R>(
             !hasExceededBudget(startNanos, budgetNanos)
         ) {
             val transfer = plan.transfers[snapshotIndex]
-            val sourceChunk = getChunkNow(transfer.sourcePos) ?: return
+            val sourceChunk = getChunkNow(transfer.sourcePos) ?: run {
+                requestChunkLoad(ChunkPos(transfer.sourcePos))
+                phase = AssemblyPhase.WAIT_FOR_CHUNKS
+                return
+            }
             val state = sourceChunk.getBlockState(transfer.sourcePos)
+            if (state.isAir || state.inAssemblyBlacklist()) {
+                snapshotIndex++
+                processed++
+                continue
+            }
             val tag = ShipAssembler.copyBlockTag(
                 plan.level,
                 transfer.sourcePos,
@@ -221,6 +237,13 @@ internal class TransferAssemblyJob<R>(
         }
 
         if (snapshotIndex >= plan.transfers.size) {
+            if (snapshots.isEmpty()) {
+                if (failIfNoSnapshots) {
+                    error("Assembly function received no valid blocks")
+                }
+                phase = AssemblyPhase.COMPLETE
+                return
+            }
             changedChunksList += changedChunks
             changedChunksJoml += changedChunksList.map(ChunkPos::toJOML)
             changedPositionsList += changedBlockPositions

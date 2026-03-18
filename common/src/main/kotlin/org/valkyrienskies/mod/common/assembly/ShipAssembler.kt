@@ -48,6 +48,7 @@ import org.valkyrienskies.mod.common.util.toJOML
 import org.valkyrienskies.mod.common.util.toJOMLD
 import org.valkyrienskies.mod.common.vsCore
 import org.valkyrienskies.mod.common.yRange
+import org.valkyrienskies.mod.mixin.accessors.server.level.ServerChunkCacheAccessor
 import org.valkyrienskies.mod.util.AIR
 import org.valkyrienskies.mod.util.logger
 import java.util.concurrent.CompletableFuture
@@ -149,6 +150,17 @@ object ShipAssembler {
 
     internal fun getLoadedChunk(level: ServerLevel, pos: BlockPos): LevelChunk? =
         level.chunkSource.getChunkNow(pos.x shr 4, pos.z shr 4)
+
+    @JvmStatic
+    fun requestChunks(level: ServerLevel, chunks: Collection<ChunkPos>): CompletableFuture<Void>? {
+        val futures = ArrayList<CompletableFuture<*>>(chunks.size)
+        val chunkSource = level.chunkSource as ServerChunkCacheAccessor
+        for (chunkPos in chunks) {
+            if (level.chunkSource.getChunkNow(chunkPos.x, chunkPos.z) != null) continue
+            futures += chunkSource.callGetChunkFutureMainThread(chunkPos.x, chunkPos.z, net.minecraft.world.level.chunk.ChunkStatus.FULL, true)
+        }
+        return if (futures.isEmpty()) null else CompletableFuture.allOf(*futures.toTypedArray())
+    }
 
     @Suppress("NULL_FOR_NONNULL_TYPE")
     internal fun clearSourceBlockEntity(level: ServerLevel, pos: BlockPos, chunk: LevelChunk? = getLoadedChunk(level, pos)) {
@@ -333,7 +345,8 @@ object ShipAssembler {
         level: ServerLevel,
         blocks: Set<BlockPos>,
         scale: Double,
-        stallChunkUpdates: Boolean = false
+        stallChunkUpdates: Boolean = false,
+        allowBlockingPreflight: Boolean = true
     ): TransferAssemblyJob<AssembleContext> {
         if (blocks.isEmpty()) {
             val error = RuntimeException("Assembly function received an empty set of blocks")
@@ -341,7 +354,7 @@ object ShipAssembler {
             throw error
         }
 
-        val filteredBlocks = blocks.filter { level.getBlockState(it).let { state -> !state.isAir && !state.inAssemblyBlacklist() } }.toSet()
+        val filteredBlocks = filterBlocksForAssembly(level, blocks, allowBlockingPreflight)
         if (filteredBlocks.isEmpty()) {
             val error = RuntimeException("Assembly function received no valid blocks")
             ASSEMBLY_LOGGER.error(error)
@@ -433,7 +446,56 @@ object ShipAssembler {
             level.shipObjectWorld.deleteShip(toShip)
         }
 
-        return TransferAssemblyJob(plan, future, { AssembleContext(toShip, fromCenter, centerOfShip) }, successCallback, failureCleanup)
+        return TransferAssemblyJob(
+            plan,
+            future,
+            { AssembleContext(toShip, fromCenter, centerOfShip) },
+            successCallback,
+            failureCleanup,
+            failIfNoSnapshots = true
+        )
+    }
+
+    private fun filterBlocksForAssembly(
+        level: ServerLevel,
+        blocks: Collection<BlockPos>,
+        allowBlocking: Boolean
+    ): Set<BlockPos> {
+        val filteredBlocks = LinkedHashSet<BlockPos>(blocks.size)
+        for (pos in blocks) {
+            val state = if (allowBlocking) {
+                level.getBlockState(pos)
+            } else {
+                getLoadedChunk(level, pos)?.getBlockState(pos)
+            }
+
+            when {
+                state == null -> filteredBlocks += pos
+                !state.isAir && !state.inAssemblyBlacklist() -> filteredBlocks += pos
+            }
+        }
+        return filteredBlocks
+    }
+
+    private fun filterTransfersForQueue(
+        level: ServerLevel,
+        transfers: Collection<BlockTransfer>,
+        allowBlocking: Boolean
+    ): List<BlockTransfer> {
+        val filteredTransfers = ArrayList<BlockTransfer>(transfers.size)
+        for (transfer in transfers) {
+            val state = if (allowBlocking) {
+                level.getBlockState(transfer.sourcePos)
+            } else {
+                getLoadedChunk(level, transfer.sourcePos)?.getBlockState(transfer.sourcePos)
+            }
+
+            when {
+                state == null -> filteredTransfers += transfer
+                !state.isAir && !state.inAssemblyBlacklist() -> filteredTransfers += transfer
+            }
+        }
+        return filteredTransfers
     }
 
     private fun createMappedTransferJob(
@@ -449,9 +511,7 @@ object ShipAssembler {
         emitAssemblyEvents: Boolean,
         stallChunkUpdates: Boolean
     ): TransferAssemblyJob<MoveContext> {
-        val filteredTransfers = transfers.filter { transfer ->
-            level.getBlockState(transfer.sourcePos).let { state -> !state.isAir && !state.inAssemblyBlacklist() }
-        }
+        val filteredTransfers = transfers.toList()
 
         val fromId = fromShip?.id ?: -1L
         val wasSplittingEnabled = disableSplittingIfNeeded(fromShip)
@@ -482,11 +542,13 @@ object ShipAssembler {
             stallChunkUpdates = stallChunkUpdates,
         )
 
-        return TransferAssemblyJob(
+        lateinit var job: TransferAssemblyJob<MoveContext>
+        job = TransferAssemblyJob(
             plan,
             CompletableFuture(),
-            { MoveContext(true, Vector3d(fromCenter), Vector3d(toCenter)) }
+            { MoveContext(job.hasSnapshots(), Vector3d(fromCenter), Vector3d(toCenter)) }
         )
+        return job
     }
 
     @JvmStatic
@@ -502,9 +564,7 @@ object ShipAssembler {
         removeOriginal: Boolean = true,
         emitAssemblyEvents: Boolean = true
     ): CompletableFuture<MoveContext> {
-        val filteredTransfers = transfers.filter { transfer ->
-            level.getBlockState(transfer.sourcePos).let { state -> !state.isAir && !state.inAssemblyBlacklist() }
-        }
+        val filteredTransfers = filterTransfersForQueue(level, transfers, false)
         if (filteredTransfers.isEmpty()) {
             return CompletableFuture.completedFuture(failedMove)
         }
@@ -538,9 +598,7 @@ object ShipAssembler {
         removeOriginal: Boolean = true,
         emitAssemblyEvents: Boolean = true
     ): MoveContext {
-        val filteredTransfers = transfers.filter { transfer ->
-            level.getBlockState(transfer.sourcePos).let { state -> !state.isAir && !state.inAssemblyBlacklist() }
-        }
+        val filteredTransfers = filterTransfersForQueue(level, transfers, true)
         if (filteredTransfers.isEmpty()) {
             return failedMove
         }
@@ -564,7 +622,7 @@ object ShipAssembler {
     @JvmStatic
     fun queueAssembleToShipFull(level: ServerLevel, blocks: Set<BlockPos>, scale: Double = 1.0): CompletableFuture<AssembleContext> {
         return try {
-            AssemblyScheduler.enqueue(createAssembleJob(level, blocks, scale))
+            AssemblyScheduler.enqueue(createAssembleJob(level, blocks, scale, allowBlockingPreflight = false))
         } catch (t: Throwable) {
             failedFuture(t)
         }
@@ -578,7 +636,7 @@ object ShipAssembler {
     @JvmStatic
     @OptIn(GameTickOnly::class)
     fun assembleToShipFull(level: ServerLevel, blocks: Set<BlockPos>, scale: Double = 1.0): AssembleContext {
-        return AssemblyScheduler.runNow(createAssembleJob(level, blocks, scale, true))
+        return AssemblyScheduler.runNow(createAssembleJob(level, blocks, scale, stallChunkUpdates = true, allowBlockingPreflight = true))
     }
 
     data class MoveContext(val wasSuccessful: Boolean, val fromCenter: Vector3d, val toCenter: Vector3d)
