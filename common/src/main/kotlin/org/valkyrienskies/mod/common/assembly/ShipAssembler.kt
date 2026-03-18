@@ -56,7 +56,7 @@ import java.util.concurrent.CompletableFuture
 object ShipAssembler {
     private const val QUEUED_ASSEMBLY_PLACEHOLDER_MASS = 1.0e-4
 
-    val ASSEMBLY_LOGGER = logger("Sandwich Factory").logger
+    val ASSEMBLY_LOGGER = logger("(Valkyrien Skies) Sandwich Factory").logger
     internal val airBlockState: BlockState
         get() = AIR
 

@@ -378,8 +378,15 @@ object MassDatapackResolver : BlockStateInfoProvider {
         blockStateInfoCache.clear()
 
         // Get the id of the fluid state/create a new fluid state if necessary
+        // Get the id of the fluid state/create a new fluid state if necessary
         fun getFluidState(fluidState: FluidState, blockStateInfo: VSBlockStateInfo?, isLiquid: Boolean = false): LiquidState {
-            val maxY = ((fluidState.ownHeight * 16.0).roundToInt() - 1).coerceIn(0, 15)
+            // Treat source fluids as full blocks in VS physics registration.
+            val maxY = if (fluidState.isSource) {
+                15
+            } else {
+                ((fluidState.ownHeight * 16.0).roundToInt() - 1).coerceIn(0, 15)
+            }
+
             val densityAndDrag = if (fluidState.type in liquidMaterialToDensityMap) {
                 liquidMaterialToDensityMap[fluidState.type]!!
             } else if (isLiquid) {
@@ -397,10 +404,13 @@ object MassDatapackResolver : BlockStateInfoProvider {
                 java.lang.Double.doubleToLongBits(densityAndDrag.first),
                 java.lang.Double.doubleToLongBits(densityAndDrag.second)
             )
+
             val cached = fluidShapeCache[cacheKey]
             if (cached != null) return cached
+
             val fluidBox = AABBi(0, 0, 0, 15, maxY, 15)
             val (density, dragCoefficient) = densityAndDrag
+
             return vsCore.newLiquidStateBuilder()
                 .boxShape(fluidBox)
                 .density(density)
