@@ -128,10 +128,8 @@ object MassDatapackResolver : BlockStateInfoProvider {
     private val fluidShapeCache = HashMap<FluidCacheKey, LiquidState>()
 
     private fun invalidateCaches() {
-        if (!registeredWithVsCore) {
-            registeredBlocks = false
-            mcBlockStateToVs.clear()
-        }
+        registeredBlocks = false
+        mcBlockStateToVs.clear()
         blockStateInfoCache.clear()
         fluidShapeCache.clear()
         liquidMaterialToDensityMap = newLiquidMaterialDensityMap()
@@ -167,14 +165,6 @@ object MassDatapackResolver : BlockStateInfoProvider {
 
     var registeredBlocks = false
         private set
-
-    var registeredWithVsCore = false
-        private set
-
-    fun markRegisteredWithVsCore() {
-        registeredWithVsCore = true
-        registeredBlocks = true
-    }
 
     class VSMassDataLoader : SimpleJsonResourceReloadListener(Gson(), "vs_mass") {
         private val tags = mutableListOf<VSBlockStateInfo>()

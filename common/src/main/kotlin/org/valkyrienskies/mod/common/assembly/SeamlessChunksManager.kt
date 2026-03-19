@@ -11,7 +11,6 @@ import net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket
 import net.minecraft.world.level.ChunkPos
 import org.valkyrienskies.core.api.ships.ClientShip
 import org.valkyrienskies.core.api.ships.properties.ChunkClaim
-import org.valkyrienskies.core.api.event.RegisteredListener
 import org.valkyrienskies.core.util.pollUntilEmpty
 import org.valkyrienskies.mod.api.vsApi
 import org.valkyrienskies.mod.common.getShipManagingPos
@@ -43,22 +42,20 @@ class SeamlessChunksManager(private val listener: ClientPacketListener) {
     private val shipQueuedUpdates = ConcurrentHashMap<ChunkClaim, ConcurrentLinkedQueue<Packet<*>>>()
     private val queuedUpdates = ConcurrentHashMap<ChunkPos, ConcurrentLinkedQueue<Packet<*>>>()
     private val stalledChunks = LongOpenHashSet()
-    private val listeners = ArrayList<RegisteredListener>(3)
-    private var cleanedUp = false
 
     init {
         with(vsCore.simplePacketNetworking) {
-            listeners += PacketStopChunkUpdates::class.registerClientHandler { (chunks) ->
+            PacketStopChunkUpdates::class.registerClientHandler { (chunks) ->
                 chunks.forEach { stalledChunks.add(it.toMinecraft().toLong()) }
             }
-            listeners += PacketRestartChunkUpdates::class.registerClientHandler { packet ->
+            PacketRestartChunkUpdates::class.registerClientHandler { packet ->
                 Minecraft.getInstance().execute {
                     onRestartUpdates(packet)
                 }
             }
         }
 
-        listeners += vsApi.shipLoadEventClient.on { ev, _ ->
+        vsApi.shipLoadEventClient.on { ev ->
             onShipLoad(ev.ship)
         }
     }
@@ -101,12 +98,6 @@ class SeamlessChunksManager(private val listener: ClientPacketListener) {
     }
 
     fun cleanup() {
-        if (cleanedUp) {
-            return
-        }
-        cleanedUp = true
-        listeners.forEach(RegisteredListener::unregister)
-        listeners.clear()
         stalledChunks.clear()
         queuedUpdates.clear()
         shipQueuedUpdates.clear()
