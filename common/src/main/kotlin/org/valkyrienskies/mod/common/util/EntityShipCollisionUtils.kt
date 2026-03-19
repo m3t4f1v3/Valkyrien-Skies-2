@@ -66,13 +66,14 @@ object EntityShipCollisionUtils {
 
             val aabb = entity.boundingBox.toJOML()
             return getAllShipsIntersectingEvenIfNotYetFullyLoaded(level, aabb)
-                .anyMatch { ship ->
+                .allMatch { ship ->
                     if (entity is PlayerKnownShipsDuck && !entity.vs_isKnownShip(ship.id)) {
-                        return@anyMatch false
+                        return@allMatch false
                     }
                     val aabbInShip = AABBd(aabb).transform(ship.worldToShip)
-                    !areAllChunksLoaded(ship, aabbInShip, level)
+                    areAllChunksLoaded(ship, aabbInShip, level)
                 }
+                .not()
         }
 
         return false
@@ -87,7 +88,7 @@ object EntityShipCollisionUtils {
         for (chunkX in minX..maxX) {
             for (chunkZ in minZ..maxZ) {
                 if (ship.activeChunksSet.contains(chunkX, chunkZ) &&
-                    level.chunkSource.getChunkNow(chunkX, chunkZ) == null
+                    level.getChunkForCollisions(chunkX, chunkZ) == null
                 ) {
                     return false
                 }

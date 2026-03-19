@@ -176,65 +176,64 @@ public abstract class MixinServerLevel implements IShipObjectWorldServerProvider
     private void vs$loadChunk(@NotNull final ChunkAccess worldChunk, final List<VsiTerrainUpdate> voxelShapeUpdates) {
         // Remove the chunk pos from vs$chunksToUnload if its present
         vs$chunksToUnload.remove(worldChunk.getPos().toLong());
-        if (vs$knownChunks.containsKey(worldChunk.getPos())) {
-            return;
-        }
+        if (!vs$knownChunks.containsKey(worldChunk.getPos())) {
+            final List<Vector3ic> voxelChunkPositions = new ArrayList<>();
 
-        final List<Vector3ic> voxelChunkPositions = new ArrayList<>();
+            final int chunkX = worldChunk.getPos().x;
+            final int chunkZ = worldChunk.getPos().z;
 
-        final int chunkX = worldChunk.getPos().x;
-        final int chunkZ = worldChunk.getPos().z;
+            final LevelChunkSection[] chunkSections = worldChunk.getSections();
 
-        final LevelChunkSection[] chunkSections = worldChunk.getSections();
+            for (int sectionY = 0; sectionY < chunkSections.length; sectionY++) {
+                final LevelChunkSection chunkSection = chunkSections[sectionY];
+                final Vector3ic chunkPos =
+                    new Vector3i(chunkX, worldChunk.getSectionYFromSectionIndex(sectionY), chunkZ);
+                voxelChunkPositions.add(chunkPos);
 
-        for (int sectionY = 0; sectionY < chunkSections.length; sectionY++) {
-            final LevelChunkSection chunkSection = chunkSections[sectionY];
-            final Vector3ic chunkPos =
-                new Vector3i(chunkX, worldChunk.getSectionYFromSectionIndex(sectionY), chunkZ);
-            voxelChunkPositions.add(chunkPos);
+                if (chunkSection != null && !chunkSection.hasOnlyAir()) {
+                    // Add this chunk to the ground rigid body
+                    final VsiTerrainUpdate voxelShapeUpdate =
+                        VSGameUtilsKt.toDenseVoxelUpdate(chunkSection, chunkPos);
+                    voxelShapeUpdates.add(voxelShapeUpdate);
 
-            if (chunkSection != null && !chunkSection.hasOnlyAir()) {
-                // Add this chunk to the ground rigid body
-                final VsiTerrainUpdate voxelShapeUpdate =
-                    VSGameUtilsKt.toDenseVoxelUpdate(chunkSection, chunkPos);
-                voxelShapeUpdates.add(voxelShapeUpdate);
-
-                // region Detect wings
-                final ServerLevel thisAsLevel = ServerLevel.class.cast(this);
-                final LoadedServerShip ship = VSGameUtilsKt.getLoadedShipManagingPos(thisAsLevel, chunkX, chunkZ);
-                if (ship != null) {
-                    // Sussy cast, but I don't want to expose this directly through the vs-core api
-                    final WingManager shipAsWingManager = ship.getWingManager();
-                    final MutableBlockPos mutableBlockPos = new MutableBlockPos();
-                    for (int x = 0; x < 16; x++) {
-                        for (int y = 0; y < 16; y++) {
-                            for (int z = 0; z < 16; z++) {
-                                final BlockState blockState = chunkSection.getBlockState(x, y, z);
-                                final int posX = (chunkX << 4) + x;
-                                final int posY = worldChunk.getMinBuildHeight() + (sectionY << 4) + y;
-                                final int posZ = (chunkZ << 4) + z;
-                                if (blockState.getBlock() instanceof WingBlock) {
-                                    mutableBlockPos.set(posX, posY, posZ);
-                                    final Wing wing =
-                                        ((WingBlock) blockState.getBlock()).getWing(thisAsLevel,
-                                            mutableBlockPos, blockState);
-                                    if (wing != null) {
-                                        shipAsWingManager.setWing(shipAsWingManager.getFirstWingGroupId(),
-                                            posX, posY, posZ, wing);
+                    // region Detect wings
+                    final ServerLevel thisAsLevel = ServerLevel.class.cast(this);
+                    final LoadedServerShip
+                        ship = VSGameUtilsKt.getLoadedShipManagingPos(thisAsLevel, chunkX, chunkZ);
+                    if (ship != null) {
+                        // Sussy cast, but I don't want to expose this directly through the vs-core api
+                        final WingManager shipAsWingManager = ship.getWingManager();
+                        final MutableBlockPos mutableBlockPos = new MutableBlockPos();
+                        for (int x = 0; x < 16; x++) {
+                            for (int y = 0; y < 16; y++) {
+                                for (int z = 0; z < 16; z++) {
+                                    final BlockState blockState = chunkSection.getBlockState(x, y, z);
+                                    final int posX = (chunkX << 4) + x;
+                                    final int posY = worldChunk.getMinBuildHeight() + (sectionY << 4) + y;
+                                    final int posZ = (chunkZ << 4) + z;
+                                    if (blockState.getBlock() instanceof WingBlock) {
+                                        mutableBlockPos.set(posX, posY, posZ);
+                                        final Wing wing =
+                                            ((WingBlock) blockState.getBlock()).getWing(thisAsLevel,
+                                                mutableBlockPos, blockState);
+                                        if (wing != null) {
+                                            shipAsWingManager.setWing(shipAsWingManager.getFirstWingGroupId(),
+                                                posX, posY, posZ, wing);
+                                        }
                                     }
                                 }
                             }
                         }
                     }
+                    // endregion
+                } else {
+                    final VsiTerrainUpdate emptyVoxelShapeUpdate = getVsCore()
+                        .newEmptyVoxelShapeUpdate(chunkPos.x(), chunkPos.y(), chunkPos.z(), true);
+                    voxelShapeUpdates.add(emptyVoxelShapeUpdate);
                 }
-                // endregion
-            } else {
-                final VsiTerrainUpdate emptyVoxelShapeUpdate = getVsCore()
-                    .newEmptyVoxelShapeUpdate(chunkPos.x(), chunkPos.y(), chunkPos.z(), true);
-                voxelShapeUpdates.add(emptyVoxelShapeUpdate);
             }
+            vs$knownChunks.put(worldChunk.getPos(), voxelChunkPositions);
         }
-        vs$knownChunks.put(worldChunk.getPos(), voxelChunkPositions);
     }
 
     @Inject(method = "tick", at = @At("TAIL"))

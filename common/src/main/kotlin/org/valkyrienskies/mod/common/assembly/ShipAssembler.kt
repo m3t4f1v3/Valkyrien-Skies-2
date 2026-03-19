@@ -1,8 +1,6 @@
 package org.valkyrienskies.mod.common.assembly
 
 import net.minecraft.core.BlockPos
-import net.minecraft.core.SectionPos
-import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket
 import net.minecraft.nbt.CompoundTag
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.Clearable
@@ -12,11 +10,8 @@ import net.minecraft.world.level.LevelReader
 import net.minecraft.world.level.ServerLevelAccessor
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.block.Block
-import net.minecraft.world.level.block.EntityBlock
 import net.minecraft.world.level.block.entity.BlockEntity
-import net.minecraft.world.level.block.entity.RandomizableContainerBlockEntity
 import net.minecraft.world.level.block.state.BlockState
-import net.minecraft.world.level.chunk.LevelChunk
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlaceSettings
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureProcessor
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureProcessorType
@@ -29,11 +24,11 @@ import org.valkyrienskies.core.api.ships.LoadedServerShip
 import org.valkyrienskies.core.api.ships.ServerShip
 import org.valkyrienskies.core.api.ships.properties.ShipId
 import org.valkyrienskies.core.api.util.GameTickOnly
+import org.valkyrienskies.core.impl.config.VSCoreConfig
 import org.valkyrienskies.core.internal.ships.VsiServerShip
-import org.valkyrienskies.core.internal.world.chunks.VsiBlockType
-import org.valkyrienskies.mod.common.BlockStateInfo
 import org.valkyrienskies.mod.common.config.VSGameConfig
 import org.valkyrienskies.mod.common.dimensionId
+import org.valkyrienskies.mod.common.executeIf
 import org.valkyrienskies.mod.common.forEach
 import org.valkyrienskies.mod.common.getLoadedShipManagingPos
 import org.valkyrienskies.mod.common.getShipManagingPos
@@ -43,22 +38,19 @@ import org.valkyrienskies.mod.common.networking.PacketRestartChunkUpdates
 import org.valkyrienskies.mod.common.networking.PacketStopChunkUpdates
 import org.valkyrienskies.mod.common.playerWrapper
 import org.valkyrienskies.mod.common.shipObjectWorld
+import org.valkyrienskies.mod.common.toDenseVoxelUpdate
 import org.valkyrienskies.mod.common.util.SplittingDisablerAttachment
 import org.valkyrienskies.mod.common.util.toJOML
 import org.valkyrienskies.mod.common.util.toJOMLD
 import org.valkyrienskies.mod.common.vsCore
 import org.valkyrienskies.mod.common.yRange
-import org.valkyrienskies.mod.mixin.accessors.server.level.ServerChunkCacheAccessor
 import org.valkyrienskies.mod.util.AIR
+import org.valkyrienskies.mod.util.StructureTemplateFillFromVoxelSet
 import org.valkyrienskies.mod.util.logger
-import java.util.concurrent.CompletableFuture
 
 object ShipAssembler {
-    private const val QUEUED_ASSEMBLY_PLACEHOLDER_MASS = 1.0e-4
 
     val ASSEMBLY_LOGGER = logger("(Valkyrien Skies) Sandwich Factory").logger
-    internal val airBlockState: BlockState
-        get() = AIR
 
     class SingleItemMap<K, V>(val mkey: K, val mvalue: V, val default: V, val defaultFn: ((K) -> V)? = null): Map<K, V> {
         override val size: Int = 1
@@ -104,266 +96,21 @@ object ShipAssembler {
         return chunkSet
     }
 
-    private data class AssemblyBlockSnapshot(
-        val sourcePos: BlockPos,
-        val destPos: BlockPos,
-        val state: BlockState,
-        val tag: CompoundTag?
-    )
-
-    private data class AssemblySnapshotResult(
-        val blocks: List<AssemblyBlockSnapshot>,
-        val changedBlockPositions: Set<BlockPos>,
-        val changedChunks: Set<ChunkPos>,
-        val changedSections: Set<Vector3i>
-    )
-
-    private fun phaseStart(): Long = System.nanoTime()
-
-    private fun logPhase(name: String, startNanos: Long) {
-        ASSEMBLY_LOGGER.debug("{} took {} ms", name, (System.nanoTime() - startNanos) / 1_000_000.0)
-    }
-
-    internal fun copyBlockTag(
-        level: ServerLevel,
-        pos: BlockPos,
-        state: BlockState,
-        blockEntity: BlockEntity?,
-        shipsBeingCopied: List<ServerShip>,
-        centerPositions: Map<Long, Vector3d>
-    ): CompoundTag? {
-        val customTag = if (state.block is ICopyableBlock) {
-            (state.block as ICopyableBlock).onCopy(level, pos, state, blockEntity, shipsBeingCopied, centerPositions)
-        } else {
-            null
-        }
-        return customTag ?: blockEntity?.saveWithId()
-    }
-
-    internal fun retargetBlockEntityTag(tag: CompoundTag?, pos: BlockPos): CompoundTag? {
-        return tag?.copy()?.also {
-            it.putInt("x", pos.x)
-            it.putInt("y", pos.y)
-            it.putInt("z", pos.z)
-        }
-    }
-
-    internal fun getLoadedChunk(level: ServerLevel, pos: BlockPos): LevelChunk? =
-        level.chunkSource.getChunkNow(pos.x shr 4, pos.z shr 4)
-
-    @JvmStatic
-    fun requestChunks(level: ServerLevel, chunks: Collection<ChunkPos>): CompletableFuture<Void>? {
-        val futures = ArrayList<CompletableFuture<*>>(chunks.size)
-        val chunkSource = level.chunkSource as ServerChunkCacheAccessor
-        for (chunkPos in chunks) {
-            if (level.chunkSource.getChunkNow(chunkPos.x, chunkPos.z) != null) continue
-            futures += chunkSource.callGetChunkFutureMainThread(chunkPos.x, chunkPos.z, net.minecraft.world.level.chunk.ChunkStatus.FULL, true)
-        }
-        return if (futures.isEmpty()) null else CompletableFuture.allOf(*futures.toTypedArray())
-    }
-
-    @Suppress("NULL_FOR_NONNULL_TYPE")
-    internal fun clearSourceBlockEntity(level: ServerLevel, pos: BlockPos, chunk: LevelChunk? = getLoadedChunk(level, pos)) {
-        chunk?.getBlockEntity(pos)?.let {
-            if (it is Clearable) {
-                Clearable.tryClear(it)
-            } else {
-                it.load(CompoundTag())
-            }
-            if (it is RandomizableContainerBlockEntity) {
-                it.setLootTable(null, 0)
-            }
-            chunk.removeBlockEntity(pos)
-        }
-    }
-
-    internal fun ensureBlockEntity(
-        level: ServerLevel,
-        pos: BlockPos,
-        state: BlockState,
-        chunk: LevelChunk? = getLoadedChunk(level, pos)
-    ): BlockEntity? {
-        val targetChunk = chunk ?: return null
-        val existing = targetChunk.getBlockEntity(pos)
-        if (existing != null) {
-            return existing
-        }
-        val block = state.block
-        if (block is EntityBlock) {
-            val created = block.newBlockEntity(pos, state)
-            if (created != null) {
-                targetChunk.setBlockEntity(created)
-                return created
-            }
-        }
-        return null
-    }
-
-    private fun buildAssemblySnapshot(
-        level: ServerLevel,
-        blocks: Set<BlockPos>,
-        minStructurePos: BlockPos,
-        cornerOfShip: BlockPos,
-        shipsBeingCopied: List<ServerShip>,
-        centerPositions: Map<Long, Vector3d>
-    ): AssemblySnapshotResult {
-        val snapshots = ArrayList<AssemblyBlockSnapshot>(blocks.size)
-        val changedPositions = LinkedHashSet<BlockPos>(blocks.size * 2)
-        val changedChunks = LinkedHashSet<ChunkPos>()
-        val changedSections = LinkedHashSet<Vector3i>()
-
-        for (sourcePos in blocks) {
-            val relativePos = sourcePos.subtract(minStructurePos)
-            val destPos = cornerOfShip.offset(relativePos)
-            val sourceChunk = getLoadedChunk(level, sourcePos) ?: level.getChunk(sourcePos.x shr 4, sourcePos.z shr 4)
-            val state = sourceChunk.getBlockState(sourcePos)
-            val tag = copyBlockTag(level, sourcePos, state, sourceChunk.getBlockEntity(sourcePos), shipsBeingCopied, centerPositions)
-            snapshots += AssemblyBlockSnapshot(sourcePos, destPos, state, tag)
-
-            changedPositions += sourcePos
-            changedPositions += destPos
-            changedChunks += ChunkPos(sourcePos)
-            changedChunks += ChunkPos(destPos)
-
-            changedSections += Vector3i(
-                SectionPos.blockToSectionCoord(sourcePos.x),
-                SectionPos.blockToSectionCoord(sourcePos.y),
-                SectionPos.blockToSectionCoord(sourcePos.z)
-            )
-            changedSections += Vector3i(
-                SectionPos.blockToSectionCoord(destPos.x),
-                SectionPos.blockToSectionCoord(destPos.y),
-                SectionPos.blockToSectionCoord(destPos.z)
-            )
-        }
-
-        return AssemblySnapshotResult(snapshots, changedPositions, changedChunks, changedSections)
-    }
-
-    private fun applyAssemblySnapshot(
-        level: ServerLevel,
-        snapshot: AssemblySnapshotResult,
-        oldShipIdToNewShipId: Map<Long, Long>,
-        centerPositions: Map<Long, Pair<Vector3d, Vector3d>>,
-        removeOriginal: Boolean
-    ) {
-        val chunkCache = HashMap<Long, LevelChunk>()
-        fun getChunk(pos: BlockPos) =
-            chunkCache.getOrPut(ChunkPos.asLong(pos.x shr 4, pos.z shr 4)) { level.getChunk(pos.x shr 4, pos.z shr 4) }
-
-        if (removeOriginal) {
-            for (entry in snapshot.blocks) {
-                val sourceChunk = getChunk(entry.sourcePos)
-                clearSourceBlockEntity(level, entry.sourcePos, sourceChunk)
-                sourceChunk.setBlockState(entry.sourcePos, AIR, false)
-            }
-        }
-
-        for (entry in snapshot.blocks) {
-            val destChunk = getChunk(entry.destPos)
-            destChunk.removeBlockEntity(entry.destPos)
-            destChunk.setBlockState(entry.destPos, entry.state, false)
-
-            val block = entry.state.block
-            val finalTag = if (block is ICopyableBlock) {
-                block.onPaste(level, entry.destPos, entry.state, oldShipIdToNewShipId, centerPositions, entry.tag)
-            } else {
-                entry.tag
-            } ?: entry.tag
-
-            if (entry.state.hasBlockEntity() && finalTag != null) {
-                val blockEntity = ensureBlockEntity(level, entry.destPos, entry.state, destChunk)
-                val retargetedTag = retargetBlockEntityTag(finalTag, entry.destPos)
-                if (blockEntity != null && retargetedTag != null) {
-                    blockEntity.load(retargetedTag)
-                    blockEntity.setChanged()
-                }
-            }
-        }
-    }
-
-    internal fun sendChunkRefreshPacket(level: ServerLevel, chunkPos: ChunkPos): Boolean {
-        val chunkMap = level.chunkSource.chunkMap
-        val lightEngine = level.chunkSource.lightEngine
-        val players = chunkMap.getPlayers(chunkPos, false)
-        if (players.isEmpty()) return true
-
-        val chunk = level.chunkSource.getChunkNow(chunkPos.x, chunkPos.z) ?: return false
-        val packet = ClientboundLevelChunkWithLightPacket(chunk, lightEngine, null, null)
-        players.forEach { player -> player.connection.send(packet) }
-        return true
-    }
-
     data class AssembleContext(val ship: ServerShip, val fromCenter: Vector3d, val toCenter: Vector3d)
 
-    private fun disableSplittingIfNeeded(fromShip: ServerShip?): Boolean {
-        if (fromShip !is LoadedServerShip) {
-            return true
-        }
-        val splittingDisabler = fromShip.getAttachment(SplittingDisablerAttachment::class.java)
-        val wasSplittingEnabled = splittingDisabler?.canSplit() != false
-        splittingDisabler?.disableSplitting()
-        return wasSplittingEnabled
-    }
-
-    private fun <T> failedFuture(throwable: Throwable): CompletableFuture<T> =
-        CompletableFuture<T>().also { it.completeExceptionally(throwable) }
-
-    private fun requireAirBlockType(): VsiBlockType =
-        BlockStateInfo.get(airBlockState)?.second
-            ?: error("Failed to resolve Valkyrien Skies air block type for queued assembly")
-
-    private fun applyQueuedAssemblyPlaceholderMass(level: ServerLevel, placeholderPos: Vector3i) {
-        val airType = requireAirBlockType()
-        level.shipObjectWorld.onSetBlock(
-            placeholderPos.x(),
-            placeholderPos.y(),
-            placeholderPos.z(),
-            level.dimensionId,
-            airType,
-            airType,
-            0.0,
-            QUEUED_ASSEMBLY_PLACEHOLDER_MASS
-        )
-    }
-
-    private fun clearQueuedAssemblyPlaceholderMass(level: ServerLevel, placeholderPos: Vector3i) {
-        val airType = requireAirBlockType()
-        level.shipObjectWorld.onSetBlock(
-            placeholderPos.x(),
-            placeholderPos.y(),
-            placeholderPos.z(),
-            level.dimensionId,
-            airType,
-            airType,
-            QUEUED_ASSEMBLY_PLACEHOLDER_MASS,
-            0.0
-        )
-    }
-
-    private fun createAssembleJob(
-        level: ServerLevel,
-        blocks: Set<BlockPos>,
-        scale: Double,
-        stallChunkUpdates: Boolean = false,
-        allowBlockingPreflight: Boolean = true
-    ): TransferAssemblyJob<AssembleContext> {
+    @JvmStatic
+    @OptIn(GameTickOnly::class)
+    fun assembleToShipFull(level: ServerLevel, blocks: Set<BlockPos>, scale: Double = 1.0): AssembleContext {
         if (blocks.isEmpty()) {
             val error = RuntimeException("Assembly function received an empty set of blocks")
             ASSEMBLY_LOGGER.error(error)
             throw error
         }
 
-        val filteredBlocks = filterBlocksForAssembly(level, blocks, allowBlockingPreflight)
-        if (filteredBlocks.isEmpty()) {
-            val error = RuntimeException("Assembly function received no valid blocks")
-            ASSEMBLY_LOGGER.error(error)
-            throw error
-        }
-
-        val (minB, maxB) = findMinAndMax(filteredBlocks)
+        val (minB, maxB) = findMinAndMax(blocks)
         val oldMin = minB.toJOMLD()
         val oldMax = maxB.toJOMLD()
+        //offset to center from corner of structure
         val offset = oldMax.get(Vector3d())
             .sub(oldMin)
             .add(1.0, 1.0, 1.0)
@@ -374,269 +121,36 @@ object ShipAssembler {
         val oldScale = fromShip?.transform?.scaling?.x() ?: 1.0
         val worldOldCenter = fromShip?.shipToWorld?.transformPosition(fromCenter.get(Vector3d())) ?: fromCenter.get(Vector3d())
 
-        val toShip = level.shipObjectWorld.createNewShipAtBlock(
-            Vector3i(worldOldCenter, RoundingMode.FLOOR),
-            false,
-            scale * oldScale,
-            level.dimensionId
-        )
+        val toShip = level.shipObjectWorld.createNewShipAtBlock(Vector3i(worldOldCenter, RoundingMode.FLOOR), false, scale * oldScale, level.dimensionId)
         toShip.isStatic = fromShip == null || fromShip.isStatic
 
-        val targetClaimCenter = toShip.chunkClaim.getCenterBlockCoordinates(level.yRange, Vector3i())
-        applyQueuedAssemblyPlaceholderMass(level, targetClaimCenter)
-        val cornerOfShip = Vector3d(targetClaimCenter)
-            .sub(offset)
-            .ceil()
-            .let { BlockPos(it.x.toInt(), it.y.toInt(), it.z.toInt()) }
-        val centerOfShip = cornerOfShip.toJOMLD().add(offset)
-        val fromId = fromShip?.id ?: -1L
-        val wasSplittingEnabled = disableSplittingIfNeeded(fromShip)
+        val (wasSuccessful, _, toCenter) = moveBlocksFromTo(level, blocks, fromShip, toShip, minB, maxB, toShip.chunkClaim.getCenterBlockCoordinates(level.yRange, Vector3i()))
 
-        val transfers = filteredBlocks.map { sourcePos ->
-            val relativePos = sourcePos.subtract(minB)
-            BlockTransfer(sourcePos, cornerOfShip.offset(relativePos))
+        if (!wasSuccessful) {
+            level.shipObjectWorld.deleteShip(toShip)
+            val error = AssertionError("Couldn't move blocks")
+            ASSEMBLY_LOGGER.error(error)
+            throw error
         }
 
-        val plan = AssemblyTransferPlan(
-            level = level,
-            transfers = transfers,
-            fromShip = fromShip,
-            toShip = toShip,
-            fromCenter = fromCenter,
-            toCenter = centerOfShip,
-            minPos = oldMin,
-            maxPos = oldMax,
-            beforeCopyBlockPositions = filteredBlocks,
-            oldShipIdToNewShipId = SingleItemMap(fromId, toShip.id, -1L) { it },
-            centerPositionMap = SingleItemMap(
-                fromId,
-                fromCenter to Vector3d(centerOfShip),
-                Vector3d() to Vector3d()
-            ),
-            copyCenterMap = SingleItemMap(fromId, fromCenter, Vector3d()),
-            shipsBeingCopied = fromShip?.let { listOf(it) } ?: emptyList(),
-            removeOriginal = true,
-            emitAssemblyEvents = true,
-            wasSplittingEnabled = wasSplittingEnabled,
-            stallChunkUpdates = stallChunkUpdates,
-        )
-
-        val future = CompletableFuture<AssembleContext>()
-        val successCallback = {
-            clearQueuedAssemblyPlaceholderMass(level, targetClaimCenter)
-            val posOffset = Vector3d(toShip.inertiaData.centerOfMass)
-                .sub(Vector3d(centerOfShip))
+        //teleport fn uses COM as center of ship, so it calculates such offset that centerOfShip will be "center" instead
+        val posOffset =
+            Vector3d(toShip.inertiaData.centerOfMass)
+                .sub(Vector3d(toCenter))
                 .let { fromShip?.shipToWorld?.transformDirection(it) ?: it }
 
-            (toShip as VsiServerShip).unsafeSetKinematics(
-                vsCore.newBodyKinematics(
-                    fromShip?.velocity ?: Vector3d(),
-                    fromShip?.angularVelocity ?: Vector3d(),
-                    vsCore.newBodyTransform(
-                        (fromShip?.shipToWorld?.transformPosition(Vector3d(fromCenter)) ?: fromCenter).add(posOffset),
-                        fromShip?.transform?.shipToWorldRotation ?: Quaterniond(),
-                        Vector3d(scale * oldScale, scale * oldScale, scale * oldScale),
-                        centerOfShip
-                    )
-                )
+        (toShip as VsiServerShip).unsafeSetKinematics(vsCore.newBodyKinematics(
+            fromShip?.velocity ?: Vector3d(),
+            fromShip?.angularVelocity ?: Vector3d(),
+            vsCore.newBodyTransform(
+                (fromShip?.shipToWorld?.transformPosition(Vector3d(fromCenter)) ?: fromCenter).add(posOffset),
+                fromShip?.transform?.shipToWorldRotation ?: Quaterniond(),
+                Vector3d(scale * oldScale, scale * oldScale, scale * oldScale),
+                toCenter
             )
-            toShip.isStatic = false
-        }
-        val failureCleanup = {
-            level.shipObjectWorld.deleteShip(toShip)
-        }
-
-        return TransferAssemblyJob(
-            plan,
-            future,
-            { AssembleContext(toShip, fromCenter, centerOfShip) },
-            successCallback,
-            failureCleanup,
-            failIfNoSnapshots = true
-        )
-    }
-
-    private fun filterBlocksForAssembly(
-        level: ServerLevel,
-        blocks: Collection<BlockPos>,
-        allowBlocking: Boolean
-    ): Set<BlockPos> {
-        val filteredBlocks = LinkedHashSet<BlockPos>(blocks.size)
-        for (pos in blocks) {
-            val state = if (allowBlocking) {
-                level.getBlockState(pos)
-            } else {
-                getLoadedChunk(level, pos)?.getBlockState(pos)
-            }
-
-            when {
-                state == null -> filteredBlocks += pos
-                !state.isAir && !state.inAssemblyBlacklist() -> filteredBlocks += pos
-            }
-        }
-        return filteredBlocks
-    }
-
-    private fun filterTransfersForQueue(
-        level: ServerLevel,
-        transfers: Collection<BlockTransfer>,
-        allowBlocking: Boolean
-    ): List<BlockTransfer> {
-        val filteredTransfers = ArrayList<BlockTransfer>(transfers.size)
-        for (transfer in transfers) {
-            val state = if (allowBlocking) {
-                level.getBlockState(transfer.sourcePos)
-            } else {
-                getLoadedChunk(level, transfer.sourcePos)?.getBlockState(transfer.sourcePos)
-            }
-
-            when {
-                state == null -> filteredTransfers += transfer
-                !state.isAir && !state.inAssemblyBlacklist() -> filteredTransfers += transfer
-            }
-        }
-        return filteredTransfers
-    }
-
-    private fun createMappedTransferJob(
-        level: ServerLevel,
-        transfers: Collection<BlockTransfer>,
-        fromShip: ServerShip?,
-        toShip: ServerShip?,
-        fromCenter: Vector3d,
-        toCenter: Vector3d,
-        minStructurePos: BlockPos,
-        maxStructurePos: BlockPos,
-        removeOriginal: Boolean,
-        emitAssemblyEvents: Boolean,
-        stallChunkUpdates: Boolean
-    ): TransferAssemblyJob<MoveContext> {
-        val filteredTransfers = transfers.toList()
-
-        val fromId = fromShip?.id ?: -1L
-        val wasSplittingEnabled = disableSplittingIfNeeded(fromShip)
-        val plan = AssemblyTransferPlan(
-            level = level,
-            transfers = filteredTransfers,
-            fromShip = fromShip,
-            toShip = toShip,
-            fromCenter = Vector3d(fromCenter),
-            toCenter = Vector3d(toCenter),
-            minPos = minStructurePos.toJOMLD(),
-            maxPos = maxStructurePos.toJOMLD(),
-            beforeCopyBlockPositions = filteredTransfers.mapTo(LinkedHashSet(filteredTransfers.size)) { it.sourcePos },
-            oldShipIdToNewShipId = SingleItemMap(fromId, toShip?.id ?: -1L, -1L) { it },
-            centerPositionMap = SingleItemMap(
-                fromId,
-                Vector3d(fromCenter) to Vector3d(toCenter),
-                Vector3d() to Vector3d()
-            ),
-            copyCenterMap = SingleItemMap(fromId, Vector3d(fromCenter), Vector3d()),
-            shipsBeingCopied = buildList {
-                if (fromShip != null) add(fromShip)
-                if (toShip != null && toShip.id != fromShip?.id) add(toShip)
-            },
-            removeOriginal = removeOriginal,
-            emitAssemblyEvents = emitAssemblyEvents,
-            wasSplittingEnabled = wasSplittingEnabled,
-            stallChunkUpdates = stallChunkUpdates,
-        )
-
-        lateinit var job: TransferAssemblyJob<MoveContext>
-        job = TransferAssemblyJob(
-            plan,
-            CompletableFuture(),
-            { MoveContext(job.hasSnapshots(), Vector3d(fromCenter), Vector3d(toCenter)) }
-        )
-        return job
-    }
-
-    @JvmStatic
-    fun queueTransferBlocks(
-        level: ServerLevel,
-        transfers: Collection<BlockTransfer>,
-        fromShip: ServerShip?,
-        toShip: ServerShip?,
-        fromCenter: Vector3d,
-        toCenter: Vector3d,
-        minStructurePos: BlockPos,
-        maxStructurePos: BlockPos,
-        removeOriginal: Boolean = true,
-        emitAssemblyEvents: Boolean = true
-    ): CompletableFuture<MoveContext> {
-        val filteredTransfers = filterTransfersForQueue(level, transfers, false)
-        if (filteredTransfers.isEmpty()) {
-            return CompletableFuture.completedFuture(failedMove)
-        }
-        return AssemblyScheduler.enqueue(
-            createMappedTransferJob(
-                level,
-                filteredTransfers,
-                fromShip,
-                toShip,
-                fromCenter,
-                toCenter,
-                minStructurePos,
-                maxStructurePos,
-                removeOriginal,
-                emitAssemblyEvents,
-                false
-            )
-        )
-    }
-
-    @JvmStatic
-    fun transferBlocksNow(
-        level: ServerLevel,
-        transfers: Collection<BlockTransfer>,
-        fromShip: ServerShip?,
-        toShip: ServerShip?,
-        fromCenter: Vector3d,
-        toCenter: Vector3d,
-        minStructurePos: BlockPos,
-        maxStructurePos: BlockPos,
-        removeOriginal: Boolean = true,
-        emitAssemblyEvents: Boolean = true
-    ): MoveContext {
-        val filteredTransfers = filterTransfersForQueue(level, transfers, true)
-        if (filteredTransfers.isEmpty()) {
-            return failedMove
-        }
-        return AssemblyScheduler.runNow(
-            createMappedTransferJob(
-                level,
-                filteredTransfers,
-                fromShip,
-                toShip,
-                fromCenter,
-                toCenter,
-                minStructurePos,
-                maxStructurePos,
-                removeOriginal,
-                emitAssemblyEvents,
-                true
-            )
-        )
-    }
-
-    @JvmStatic
-    fun queueAssembleToShipFull(level: ServerLevel, blocks: Set<BlockPos>, scale: Double = 1.0): CompletableFuture<AssembleContext> {
-        return try {
-            AssemblyScheduler.enqueue(createAssembleJob(level, blocks, scale, allowBlockingPreflight = false))
-        } catch (t: Throwable) {
-            failedFuture(t)
-        }
-    }
-
-    @JvmStatic
-    fun queueAssembleToShip(level: ServerLevel, blocks: Set<BlockPos>, scale: Double = 1.0): CompletableFuture<ServerShip> {
-        return queueAssembleToShipFull(level, blocks, scale).thenApply { it.ship }
-    }
-
-    @JvmStatic
-    @OptIn(GameTickOnly::class)
-    fun assembleToShipFull(level: ServerLevel, blocks: Set<BlockPos>, scale: Double = 1.0): AssembleContext {
-        return AssemblyScheduler.runNow(createAssembleJob(level, blocks, scale, stallChunkUpdates = true, allowBlockingPreflight = true))
+        ))
+        toShip.isStatic = false
+        return AssembleContext(toShip, fromCenter, toCenter)
     }
 
     data class MoveContext(val wasSuccessful: Boolean, val fromCenter: Vector3d, val toCenter: Vector3d)
@@ -652,40 +166,179 @@ object ShipAssembler {
         toCenter: Vector3i,
         removeOriginal: Boolean = true)
     : MoveContext {
+        val blocks = blocks.filter { level.getBlockState(it).let{!it.isAir && !it.inAssemblyBlacklist()} }.toSet()
+        if (blocks.isEmpty()) return failedMove
+
+        val fromId = fromShip?.id ?: -1L
+        val eventData = mutableMapOf<String, CompoundTag>()
+
         val oldMin = minStructurePos.toJOMLD()
         val oldMax = maxStructurePos.toJOMLD()
+        //offset to center from corner of structure
         val offset = oldMax.get(Vector3d())
             .sub(oldMin)
             .add(1.0, 1.0, 1.0)
             .div(2.0)
         val fromCenter = offset.get(Vector3d()).add(oldMin)
+
+        var wasSplittingEnabled = true
+        if (fromShip is LoadedServerShip) {
+            val splittingDisabler = fromShip.getAttachment(SplittingDisablerAttachment::class.java)
+            wasSplittingEnabled = splittingDisabler?.canSplit() != false
+            splittingDisabler?.disableSplitting()
+        }
+
+        // ========== Copy Blocks
+        VSAssemblyEvents.beforeCopy.emit(VSAssemblyEvents.BeforeCopy(level, oldMin, oldMax, fromCenter, fromShip, blocks, eventData))
+
+        val template = StructureTemplate()
+        template as StructureTemplateFillFromVoxelSet
+        template.`vs$fillFromVoxelSet`(
+            level, blocks,
+            fromShip?.let { listOf(it) } ?: emptyList(),
+            SingleItemMap(fromId, fromCenter, Vector3d()),
+            minStructurePos, maxStructurePos
+        )
+
+        // ========== Pause Chunk Updates
+
+        val toChunkCenter = ChunkPos(toCenter.x.toInt() shr 4, toCenter.z.toInt() shr 4)
+
+        val fromChunkX = ((minStructurePos.x + maxStructurePos.x) / 2) shr 4
+        val fromChunkZ = ((minStructurePos.z + maxStructurePos.z) / 2) shr 4
+
+        val deltaX = fromChunkX - toChunkCenter.x
+        val deltaZ = fromChunkZ - toChunkCenter.z
+
+        val chunksToBeUpdated = mutableMapOf<ChunkPos, Pair<ChunkPos, ChunkPos>>()
+        getDistinctChunksFromBlockPosSet(blocks).forEach { sourcePos ->
+            val destPos = ChunkPos(sourcePos.x - deltaX, sourcePos.z - deltaZ)
+            chunksToBeUpdated[sourcePos] = Pair(sourcePos, destPos)
+        }
+        val chunkPairs = chunksToBeUpdated.values.toList()
+        val chunkPoses = chunkPairs.flatMap { it.toList() }
+        val chunkPosesJOML = chunkPoses.map { it.toJOML() }
+
+        level.players().forEach { player ->
+            ASSEMBLY_LOGGER.debug("Pausing chunk updates for ${player.name}")
+            with(vsCore.simplePacketNetworking) {
+                PacketStopChunkUpdates(chunkPosesJOML).sendToClient(player.playerWrapper)
+            }
+        }
+
+        // ========== Removing Old Blocks
+        if (removeOriginal) {
+            for (pos in blocks) {
+                level.getBlockEntity(pos)?.let {
+                    if (it is Clearable) {
+                        Clearable.tryClear(it)
+                    } else {
+                        // Clear all NBT if it doesn't implement IClearable
+                        it.load(CompoundTag())
+                    }
+                    // Without this, copycats still drop their items
+                    level.removeBlockEntity(pos)
+                }
+
+                level.setBlock(pos, Blocks.BARRIER.defaultBlockState(), Block.UPDATE_CLIENTS)
+            }
+            for (pos in blocks) {
+                val block = level.getBlockState(pos)
+                level.removeBlock(pos, false)
+                // 75 = flag 1 (block update) & flag 2 (send to clients) + flag 8 (force rerenders)
+                val flags = 11 or Block.UPDATE_MOVE_BY_PISTON or Block.UPDATE_SUPPRESS_DROPS
+
+                //updateNeighbourShapes recurses through nearby blocks, recursionLeft is the limit
+                val recursionLeft = 511
+
+                level.setBlocksDirty(pos, block, AIR)
+                level.sendBlockUpdated(pos, block, AIR, flags)
+                level.blockUpdated(pos, AIR.block)
+                // This handles the update for neighboring blocks in worldspace
+                AIR.updateIndirectNeighbourShapes(level, pos, flags, recursionLeft - 1)
+                AIR.updateNeighbourShapes(level, pos, flags, recursionLeft)
+                AIR.updateIndirectNeighbourShapes(level, pos, flags, recursionLeft)
+                //This updates lighting for blocks in worldspace
+                level.chunkSource.lightEngine.checkBlock(pos)
+            }
+        }
+        // ========== Placing New Blocks
+
+        //structure template builds from a corner, so offset center of plot so that structure's center and center of
+        //plot roughly align
         val cornerOfShip = Vector3d(toCenter)
             .sub(offset)
             .ceil()
-            .let {
-                BlockPos(
-                    it.x.toInt(),
-                    it.y.toInt(),
-                    it.z.toInt(),
-                )
-            }
+            .let { BlockPos(
+                it.x.toInt(),
+                it.y.toInt(),
+                it.z.toInt(),
+            ) }
+
         val centerOfShip = cornerOfShip.toJOMLD().add(offset)
-        val transfers = blocks.map { sourcePos ->
-            val relativePos = sourcePos.subtract(minStructurePos)
-            BlockTransfer(sourcePos, cornerOfShip.offset(relativePos))
-        }
-        return transferBlocksNow(
-            level,
-            transfers,
-            fromShip,
-            toShip,
-            fromCenter,
-            centerOfShip,
-            minStructurePos,
-            maxStructurePos,
-            removeOriginal,
-            true
+
+        val structureSettings = StructurePlaceSettings().addProcessor(
+            ICopyableProcessor(
+                SingleItemMap(fromId, toShip?.id ?: -1L, -1L) {it},
+                SingleItemMap(fromId, Pair(fromCenter, Vector3d(centerOfShip)), Pair(Vector3d(), Vector3d()))
+            )
         )
+
+        structureSettings.rotationPivot = cornerOfShip
+
+        VSAssemblyEvents.onPasteBeforeBlocksAreLoaded.emit(VSAssemblyEvents.OnPasteBeforeBlocksAreLoaded(level, fromShip, toShip, Pair(fromCenter, centerOfShip), eventData))
+        template.placeInWorld(level, cornerOfShip, cornerOfShip, structureSettings, level.random, Block.UPDATE_CLIENTS)
+
+        // ========== Resume Chunk Updates
+        val timeAtExecution = level.server.tickCount
+        level.server.executeIf(
+            // This condition will return true if all modified chunks have been both loaded AND
+            // chunk update packets were sent to players
+            { chunkPoses.all(level::isTickingChunk) || level.server.tickCount - timeAtExecution > 60 }
+        ) {
+            if (level.server.tickCount - timeAtExecution > 60) {
+                ASSEMBLY_LOGGER.warn("Timed out waiting for chunks to start ticking after assembly! Forcibly resuming...")
+                ASSEMBLY_LOGGER.warn("All chunks involved in assembly: $chunkPoses")
+                ASSEMBLY_LOGGER.warn("Chunks that were supposed to be ticking: ${chunkPoses.filterNot { level.isTickingChunk(it) }}")
+            }
+            // Once all the chunk updates are sent to players, we can tell them to restart chunk updates
+            level.players().forEach { player ->
+                ASSEMBLY_LOGGER.debug("Resuming chunk updates for ${player.name}")
+                with (vsCore.simplePacketNetworking) {
+                    PacketRestartChunkUpdates(chunkPosesJOML).sendToClient(player.playerWrapper)
+                }
+            }
+            VSAssemblyEvents.onPasteAfterBlocksAreLoaded.emit(VSAssemblyEvents.OnPasteAfterBlocksAreLoaded(level, fromShip, toShip, Pair(fromCenter, centerOfShip), eventData))
+            //force update connectivity because this new assemblyslop doesn't update it :(
+            if (VSCoreConfig.SERVER.sp.enableConnectivity) {
+                for (pos in chunkPoses) {
+                    val worldChunk = level.getChunk(pos.x, pos.z) ?: continue
+                    val chunkSections = worldChunk.sections ?: continue
+                    for (sectionY in 0 until worldChunk.sectionsCount) {
+                        val sectionPos = Vector3i(pos.x, worldChunk.getSectionYFromSectionIndex(sectionY), pos.z)
+                        val section = chunkSections[sectionY] ?: continue
+                        if (section.hasOnlyAir()) continue
+                        val update = section.toDenseVoxelUpdate(sectionPos)
+                        level.shipObjectWorld.forceUpdateConnectivityChunk(
+                            level.dimensionId,
+                            sectionPos.x,
+                            sectionPos.y,
+                            sectionPos.z,
+                            update
+                        )
+                    }
+                }
+            }
+
+            if (fromShip is LoadedServerShip) {
+                val splittingDisabler = fromShip.getAttachment(SplittingDisablerAttachment::class.java)
+                if (wasSplittingEnabled) {
+                    splittingDisabler?.enableSplitting()
+                }
+            }
+        }
+
+        return MoveContext(true, fromCenter, centerOfShip)
     }
 
     @JvmStatic
