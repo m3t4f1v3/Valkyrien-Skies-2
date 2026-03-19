@@ -139,10 +139,7 @@ public abstract class MixinMinecraftServer implements IShipObjectWorldServerProv
             final List<BlockState> blockStateList = new ArrayList<>(Block.BLOCK_STATE_REGISTRY.size());
             Block.BLOCK_STATE_REGISTRY.forEach((blockStateList::add));
             MassDatapackResolver.INSTANCE.registerAllBlockStates(blockStateList);
-        }
-        if (!MassDatapackResolver.INSTANCE.getRegisteredWithVsCore()) {
             ValkyrienSkiesMod.getVsCore().registerBlockStates(MassDatapackResolver.INSTANCE.getBlockStateData());
-            MassDatapackResolver.INSTANCE.markRegisteredWithVsCore();
         }
 
         // Load ship data from the world storage
