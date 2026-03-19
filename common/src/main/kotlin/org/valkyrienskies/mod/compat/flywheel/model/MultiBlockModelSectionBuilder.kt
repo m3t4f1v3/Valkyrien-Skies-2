@@ -6,6 +6,7 @@ import dev.engine_room.flywheel.lib.model.baked.BlockModelBuilder
 import dev.engine_room.flywheel.lib.task.ForEachPlan
 import net.minecraft.client.multiplayer.ClientLevel
 import net.minecraft.core.BlockPos
+import net.minecraft.core.BlockPos.MutableBlockPos
 import net.minecraft.core.Direction
 import net.minecraft.core.SectionPos
 import net.minecraft.core.Vec3i
@@ -63,31 +64,34 @@ class MultiBlockModelSectionBuilder : FlywheelSectionModelBuilder {
         override fun iterator(): Iterator<BlockPos> = MyIterator()
 
         private class MyIterator : Iterator<BlockPos> {
-            private var x = -1
-            private var y = 0
-            private var z = 0
+            private val pos = MutableBlockPos()
+            init {
+                pos.x = -1
+                pos.y = 0
+                pos.z = 0
+            }
 
             override fun hasNext(): Boolean =
-                x < 15 || y < 15 || z < 15
+                pos.x < 15 || pos.y < 15 || pos.z < 15
 
             override fun next(): BlockPos {
-                x++
+                pos.x++
 
-                if (x > 15) {
-                    x = 0
-                    y++
+                if (pos.x > 15) {
+                    pos.x = 0
+                    pos.y++
 
-                    if (y > 15) {
-                        y = 0
-                        z++
+                    if (pos.y > 15) {
+                        pos.y = 0
+                        pos.z++
 
-                        if (z > 15) {
+                        if (pos.z > 15) {
                             throw NoSuchElementException()
                         }
                     }
                 }
 
-                return BlockPos(x, y, z)
+                return pos
             }
         }
     }
