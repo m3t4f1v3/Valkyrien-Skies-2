@@ -174,7 +174,7 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider 
             target = "Lnet/minecraft/world/entity/Entity;setDeltaMovement(DDD)V"
         )
     )
-    private void CancelsetDeltaMovement(Entity instance, double d, double e, double f) {}
+    private void cancelSetDeltaMovement(Entity instance, double d, double e, double f) {}
 
 
     // region Block standing on friction and sprinting particles mixins
