@@ -166,7 +166,7 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider 
     }
     // endregion
 
-    // this cancels the actual setDeltaMovement. We can't cancel it in the @Inject, that cancels the entire move function
+    // This cancels the actual setDeltaMovement. We can't cancel it in the @Inject, that cancels the entire move function. Somehow this doesn't interfere with the @Inject, crazy.
     @Redirect(
         method = "move",
         at = @At(
