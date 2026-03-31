@@ -28,6 +28,10 @@ internal data class ShipPocketState(
     var floodFluid: Fluid = Fluids.WATER,
     var flooded: BitSet = BitSet(),
     var materializedWater: BitSet = BitSet(),
+    var brokenByFlood: BitSet = BitSet(),
+    // Cells currently above an active drain plane. While set, shipyard fluid placement back into the cell
+    // should be blocked so vanilla flow doesn't immediately undo drain progress.
+    var drainSuppressed: BitSet = BitSet(),
     var waterReachable: BitSet = BitSet(),
     var unreachableVoid: BitSet = BitSet(),
     // Face conductance masks (shape-aware connectivity), stored on positive axes only.
@@ -56,6 +60,10 @@ internal data class ShipPocketState(
     var appliedWaterSolveGeneration: Long = 0,
     var lastWaterSolveSubmitTick: Long = Long.MIN_VALUE,
     var lastWaterSolveApplyTick: Long = Long.MIN_VALUE,
+    var lastClientDemandTick: Long = Long.MIN_VALUE,
+    var lastClientWaterSolveSubmittedTransformKey: Long = Long.MIN_VALUE,
+    var lastClientWaterSolveAppliedTransformKey: Long = Long.MIN_VALUE,
+    var lastClientWaterSolveApplyTick: Long = Long.MIN_VALUE,
     var consecutiveWaterSolveDiscards: Int = 0,
     var waterSolveJobInFlight: Boolean = false,
     var waterSolveLastComputeNanos: Long = 0,
@@ -66,6 +74,7 @@ internal data class ShipPocketState(
     var queuedFloodRemoves: BitSet = BitSet(),
     var queuedFloodAddOrder: IntArrayList = IntArrayList(),
     var activeFloodIngressPoints: Int = 1,
+    var activeFloodIngressConductanceUnits: Int = 1,
     var nextQueuedAddOrderIdx: Int = 0,
     var nextQueuedAddIdx: Int = 0,
     var nextQueuedRemoveIdx: Int = 0,

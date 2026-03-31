@@ -270,8 +270,19 @@ internal fun computeTemplateAxisConductance(
 private fun isGameplaySealedState(state: BlockState): Boolean {
     val block = state.block
     return when (block) {
-        is DoorBlock -> !state.getValue(BlockStateProperties.OPEN)
         is FenceGateBlock -> !state.getValue(BlockStateProperties.OPEN)
+        else -> false
+    }
+}
+
+private fun isOpenThinBarrierState(state: BlockState): Boolean {
+    if (!state.hasProperty(BlockStateProperties.OPEN) || !state.getValue(BlockStateProperties.OPEN)) {
+        return false
+    }
+    return when (state.block) {
+        is DoorBlock,
+        is TrapDoorBlock,
+        -> true
         else -> false
     }
 }
@@ -334,7 +345,7 @@ private fun snapFacePlaneCoord(value: Double): Double {
     return if (abs(clamped - snapped16) <= GEOMETRY_BOUNDARY_SNAP_EPS) snapped16.coerceIn(0.0, 1.0) else clamped
 }
 
-private fun stabilizeOpenTrapdoorFacePlane(box: AABB): AABB {
+private fun stabilizeOpenThinBarrierFacePlane(box: AABB): AABB {
     var minX = snapFacePlaneCoord(box.minX)
     var minY = snapFacePlaneCoord(box.minY)
     var minZ = snapFacePlaneCoord(box.minZ)
@@ -417,8 +428,8 @@ internal fun computeShapeWaterGeometry(level: Level, pos: BlockPos, state: Block
         .map(::snapFluidBoundaryBox)
         .filter { it.maxX - it.minX > 1e-9 && it.maxY - it.minY > 1e-9 && it.maxZ - it.minZ > 1e-9 }
         .toList()
-    val forceRefined = state.block is TrapDoorBlock && state.hasProperty(BlockStateProperties.OPEN) && state.getValue(BlockStateProperties.OPEN)
-    val boxes = if (forceRefined) rawBoxes.map(::stabilizeOpenTrapdoorFacePlane) else rawBoxes
+    val forceRefined = isOpenThinBarrierState(state)
+    val boxes = if (forceRefined) rawBoxes.map(::stabilizeOpenThinBarrierFacePlane) else rawBoxes
     if (boxes.isEmpty()) {
         return ShapeWaterGeometry(fullSolid = false, refined = false, boxes = emptyList())
     }
@@ -784,4 +795,19 @@ internal fun computeInteriorMaskHeuristic(open: BitSet, sizeX: Int, sizeY: Int, 
     }
 
     return interior
+}
+
+object ShipWaterPocketClientCullBridge {
+    @JvmStatic
+    fun buildCullVoxelShape(level: Level, pos: BlockPos, state: BlockState): VoxelShape {
+        val geom = computeShapeWaterGeometry(level, pos, state)
+        if (geom.fullSolid) return Shapes.block()
+        if (geom.boxes.isEmpty()) return Shapes.empty()
+
+        var shape: VoxelShape = Shapes.empty()
+        for (box in geom.boxes) {
+            shape = Shapes.or(shape, Shapes.create(box))
+        }
+        return shape
+    }
 }
