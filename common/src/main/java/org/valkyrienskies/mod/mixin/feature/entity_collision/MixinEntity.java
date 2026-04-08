@@ -166,7 +166,7 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider 
     }
     // endregion
 
-    // this cancels the actual setDeltaMovement. We can't cancel it in the @Inject, that cancels the entire move function
+    // This cancels the actual setDeltaMovement. We can't cancel it in the @Inject, that cancels the entire move function. Somehow this doesn't interfere with the @Inject, crazy.
     @Redirect(
         method = "move",
         at = @At(
@@ -174,7 +174,7 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider 
             target = "Lnet/minecraft/world/entity/Entity;setDeltaMovement(DDD)V"
         )
     )
-    private void CancelsetDeltaMovement(Entity instance, double d, double e, double f) {}
+    private void cancelSetDeltaMovement(Entity instance, double d, double e, double f) {}
 
 
     // region Block standing on friction and sprinting particles mixins
