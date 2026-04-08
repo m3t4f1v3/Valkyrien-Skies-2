@@ -25,7 +25,6 @@ import kotlin.math.asin
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
-import kotlin.math.sqrt
 
 object EntityDragger {
     // How much we decay the addedMovement each tick after player hasn't collided with a ship for at least 10 ticks.
@@ -311,8 +310,7 @@ object EntityDragger {
             }
         }
 
-        val motionLength = sqrt(d * d + e * e + f * f)
-        return ship.shipToWorld.transformDirection(Vector3d(d, e, f)).normalize().mul(motionLength).toMinecraft()
+        return ship.shipToWorld.transformDirection(Vector3d(d, e, f)).toMinecraft()
     }
 
     private fun isValidWalkablePosition(
