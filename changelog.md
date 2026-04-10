@@ -12,6 +12,7 @@ Bug fixes galore
 - Fixed `transformFromWorldToNearbyShipsAndWorld` util function
 - Added `getAllConnectedShips` to GTPA
 - Added liquid overlap to GTPA
+- Added `.serialized()` method to `VSJoint`, allowing for addons to opt-in to automatic joint saving/loading handled by VS core
 - Moved command related classes (aka `ShipArgument` and others). 
   **Breaking change**, but only imports will need changing
 
@@ -24,3 +25,4 @@ Bug fixes galore
 - Fixed CBC autocannons breaking on VS ships
 - Fixed a crash with Create: Hypertubes (sorry it took so long Rok!)
 - Fixed visual artifacts with the ship AABB when at large coordinates
+- Fixed visual artifacts with create flywheels when at large coordinates
