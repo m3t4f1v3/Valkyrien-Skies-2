@@ -24,11 +24,19 @@ public interface ChunkMapAccessor {
         MutableObject<ClientboundLevelChunkWithLightPacket> packets,
         boolean withinMaxWatchDistance, boolean withinViewDistance);
 
+    @Invoker("playerLoadedChunk")
+    void callPlayerLoadedChunk(ServerPlayer player,
+        MutableObject<ClientboundLevelChunkWithLightPacket> packets,
+        net.minecraft.world.level.chunk.LevelChunk chunk);
+
     @Invoker("getChunks")
     Iterable<ChunkHolder> callGetChunks();
 
     @Invoker("getVisibleChunkIfPresent")
     ChunkHolder callGetVisibleChunkIfPresent(long l);
+
+    @Invoker("getUpdatingChunkIfPresent")
+    ChunkHolder callGetUpdatingChunkIfPresent(long l);
 
     @Invoker("save")
     boolean callSave(ChunkAccess chunkAccess);
@@ -47,6 +55,9 @@ public interface ChunkMapAccessor {
 
     @Accessor("distanceManager")
     DistanceManager getDistanceManager();
+
+    @Invoker("getChunkQueueLevel")
+    java.util.function.IntSupplier callGetChunkQueueLevel(long chunkPosLong);
 
     @Accessor("entityMap")
     Int2ObjectMap<ChunkMap.TrackedEntity> getEntityMap();
