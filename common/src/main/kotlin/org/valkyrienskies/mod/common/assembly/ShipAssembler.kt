@@ -247,7 +247,7 @@ object ShipAssembler {
                     if (it is Clearable) {
                         Clearable.tryClear(it)
                     } else {
-                        it.load(CompoundTag())
+                        it.loadWithComponents(CompoundTag(), level.registryAccess())
                     }
                     level.removeBlockEntity(pos)
                 }
@@ -471,8 +471,6 @@ object ShipAssembler {
         // ChunkHolders and starting their pipelines. Then getChunk blocks on each
         // one — but since all pipelines are already running concurrently on the worker
         // thread pool, most will complete quickly.
-        (chunkSource as org.valkyrienskies.mod.mixin.accessors.server.level.ServerChunkCacheAccessor)
-            .callRunDistanceManagerUpdates()
         for (cp in allDestChunkPoses) {
             level.getChunk(cp.x, cp.z)
         }
@@ -534,7 +532,7 @@ object ShipAssembler {
             if (filteredBlocksWithState.size <= 8) {
                 val destPositions = ArrayList<BlockPos>(filteredBlocksWithState.size)
                 for ((srcPos, state) in filteredBlocksWithState) {
-                    val beTag = level.getBlockEntity(srcPos)?.saveWithFullMetadata()
+                    val beTag = level.getBlockEntity(srcPos)?.saveWithFullMetadata(level.registryAccess())
                     val dx = srcPos.x - pending.minB.x
                     val dy = srcPos.y - pending.minB.y
                     val dz = srcPos.z - pending.minB.z
@@ -545,7 +543,7 @@ object ShipAssembler {
                     // neighbor update machinery. Skip sendBlockUpdated since source chunks
                     // are stalled by PacketStopChunkUpdates.
                     level.getBlockEntity(srcPos)?.let {
-                        if (it is Clearable) Clearable.tryClear(it) else it.load(CompoundTag())
+                        if (it is Clearable) Clearable.tryClear(it) else it.loadWithComponents(CompoundTag(), level.registryAccess())
                         level.removeBlockEntity(srcPos)
                     }
                     val srcChunk = level.getChunkAt(srcPos)
@@ -561,7 +559,7 @@ object ShipAssembler {
                         tag.putInt("x", destPos.x)
                         tag.putInt("y", destPos.y)
                         tag.putInt("z", destPos.z)
-                        level.getBlockEntity(destPos)?.load(tag)
+                        level.getBlockEntity(destPos)?.loadWithComponents(tag, level.registryAccess())
                     }
                 }
 
@@ -579,7 +577,7 @@ object ShipAssembler {
 
                 for (pos in filteredBlocks) {
                     level.getBlockEntity(pos)?.let {
-                        if (it is Clearable) Clearable.tryClear(it) else it.load(CompoundTag())
+                        if (it is Clearable) Clearable.tryClear(it) else it.loadWithComponents(CompoundTag(), level.registryAccess())
                         level.removeBlockEntity(pos)
                     }
                     level.setBlock(pos, Blocks.AIR.defaultBlockState(), removeFlags)

@@ -2,8 +2,6 @@ package org.valkyrienskies.mod.forge.mixin;
 
 import java.util.List;
 import java.util.Set;
-import net.minecraftforge.fml.loading.FMLLoader;
-import org.apache.maven.artifact.versioning.DefaultArtifactVersion;
 import org.objectweb.asm.tree.ClassNode;
 import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
 import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
@@ -33,8 +31,6 @@ public class ValkyrienSkiesForgeMixinPlugin implements IMixinConfigPlugin {
     @Override
     public boolean shouldApplyMixin(final String s, final String mixinClassName) {
         final boolean isMixinBoosterLoaded = classExists("io.github.steelwoolmc.mixintransmog.MixinModlauncherRemapper");
-        final DefaultArtifactVersion forgeVersion = new DefaultArtifactVersion(FMLLoader.versionInfo().forgeVersion());
-        final DefaultArtifactVersion forgeNewer = new DefaultArtifactVersion("47.4.2");
 
         if (mixinClassName.contains("org.valkyrienskies.mod.forge.mixin.compat.mixinbooster")) {
             return isMixinBoosterLoaded; // Load only if mixinbooster is enabled
@@ -43,13 +39,13 @@ public class ValkyrienSkiesForgeMixinPlugin implements IMixinConfigPlugin {
             return !isMixinBoosterLoaded; // Load only if mixinbooster is not enabled
         }
         if (mixinClassName.contains("MixinIForge2Player")) {
-            return forgeVersion.compareTo(forgeNewer) >= 0;
+            return false;
         }
         if (mixinClassName.contains("MixinIForgePlayer")) {
-            return forgeVersion.compareTo(forgeNewer) < 0;
+            return true;
         }
         if (mixinClassName.contains("org.valkyrienskies.mod.forge.mixin.compat.old_create")) {
-            return LoadedMods.getOldCreate();
+            return false;
         }
 
         return true;

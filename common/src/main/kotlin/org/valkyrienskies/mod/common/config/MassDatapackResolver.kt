@@ -150,12 +150,12 @@ object MassDatapackResolver : BlockStateInfoProvider {
             val overrideNoCollision = element.asJsonObject["no_collision"]?.asBoolean
 
             if (tag != null) {
-                addToBeAddedTags(VSBlockStateInfo(ResourceLocation(tag), priority, weight, friction, elasticity, null, overrideNoCollision))
+                addToBeAddedTags(VSBlockStateInfo(ResourceLocation.parse(tag), priority, weight, friction, elasticity, null, overrideNoCollision))
             } else {
                 val block = element.asJsonObject["block"]?.asString
                     ?: throw IllegalArgumentException("No block or tag in file $origin")
 
-                add(VSBlockStateInfo(ResourceLocation(block), priority, weight, friction, elasticity, null, overrideNoCollision))
+                add(VSBlockStateInfo(ResourceLocation.parse(block), priority, weight, friction, elasticity, null, overrideNoCollision))
             }
         }
     }

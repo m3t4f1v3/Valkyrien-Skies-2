@@ -23,7 +23,9 @@ public class MixinBezierTrackVisual {
         @Local(argsOnly = true) BezierConnection bc, @Local SegmentAngles sa, @Local(name = "i") int i) {
         ClientShip ship = VSClientGameUtils.getClientShip(bc.bePositions.getFirst().getX(), bc.bePositions.getFirst().getY(), bc.bePositions.getFirst().getZ());
         if(ship != null) {
-            instance = (TransformedInstance) instance.light(LevelRenderer.getLightColor(Minecraft.getInstance().level, sa.lightPosition[i].offset(bc.bePositions.getFirst())));
+            instance = (TransformedInstance) instance.light(
+                LevelRenderer.getLightColor(Minecraft.getInstance().level, sa.lightPosition[i].offset(bc.bePositions.getFirst()))
+            );
         }
         original.call(instance);
     }

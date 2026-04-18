@@ -1,7 +1,7 @@
 package org.valkyrienskies.mod.forge.compat.dynmap
 
 import net.minecraft.server.level.ServerLevel
-import net.minecraftforge.event.TickEvent.LevelTickEvent
+import net.neoforged.neoforge.event.tick.LevelTickEvent
 import org.dynmap.forge_1_20.DynmapMod.plugin
 import org.dynmap.forge_1_20.ForgeWorld
 import org.dynmap.markers.MarkerIcon
@@ -29,7 +29,7 @@ class ForgeDynmapHandler : DynmapHandler() {
     companion object {
         var INSTANCE: ForgeDynmapHandler? = null
 
-        fun tick(event: LevelTickEvent) {
+        fun tick(event: LevelTickEvent.Post) {
             (event.level as? ServerLevel)?.let {
                 INSTANCE?.updateMarkers(it)
             }

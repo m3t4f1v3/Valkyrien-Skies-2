@@ -1,7 +1,6 @@
 package org.valkyrienskies.mod.common.command
 
 import com.mojang.brigadier.CommandDispatcher
-import net.minecraft.commands.CommandRuntimeException
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands.literal
 import net.minecraft.commands.SharedSuggestionProvider
@@ -96,7 +95,7 @@ val SharedSuggestionProvider.shipWorld: ShipWorld
                 return this.minecraft.level.shipObjectWorld
             } else {
                 // Shouldn't happen
-                throw CommandRuntimeException(Component.literal("Command source wasn't CommandSourceStack or ClientSuggestionProvider? Please report this as a bug"))
+                throw IllegalStateException("Command source wasn't CommandSourceStack or ClientSuggestionProvider")
             }
             )
     }

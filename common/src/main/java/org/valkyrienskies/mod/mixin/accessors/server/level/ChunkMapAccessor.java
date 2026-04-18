@@ -21,11 +21,6 @@ public interface ChunkMapAccessor {
     @Invoker("dropChunk")
     void callDropChunk(ServerPlayer serverPlayer, ChunkPos chunkPos);
 
-    @Invoker("playerLoadedChunk")
-    void callPlayerLoadedChunk(ServerPlayer player,
-        MutableObject<ClientboundLevelChunkWithLightPacket> packets,
-        net.minecraft.world.level.chunk.LevelChunk chunk);
-
     @Invoker("getChunks")
     Iterable<ChunkHolder> callGetChunks();
 

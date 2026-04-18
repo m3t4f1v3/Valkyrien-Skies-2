@@ -11,6 +11,7 @@ import com.simibubi.create.content.kinetics.deployer.DeployerHandler;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
@@ -129,7 +130,7 @@ public abstract class MixinDeployerHandler {
                                         vec.add(extensionVector.scale(5 / 2f - 1 / 64f))),
                                 ClipContext.Block.OUTLINE,
                                 ClipContext.Fluid.NONE,
-                                null
+                                (Entity) null
                         ),
                         false
                 );

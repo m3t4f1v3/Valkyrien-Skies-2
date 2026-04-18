@@ -40,7 +40,7 @@ class VSPhysicsEntityRenderer<T : VSPhysicsEntity>(context: Context) :
     }
 
     override fun getTextureLocation(entity: T): ResourceLocation {
-        return ResourceLocation(ValkyrienSkiesMod.MOD_ID, "textures/test_sphere.png")
+        return ResourceLocation.fromNamespaceAndPath(ValkyrienSkiesMod.MOD_ID, "textures/test_sphere.png")
     }
 
 

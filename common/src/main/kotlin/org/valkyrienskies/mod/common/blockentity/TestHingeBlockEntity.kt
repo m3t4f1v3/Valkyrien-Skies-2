@@ -1,6 +1,7 @@
 package org.valkyrienskies.mod.common.blockentity
 
 import net.minecraft.core.BlockPos
+import net.minecraft.core.HolderLookup
 import net.minecraft.nbt.CompoundTag
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.level.block.entity.BlockEntity
@@ -28,7 +29,8 @@ class TestHingeBlockEntity(blockPos: BlockPos, blockState: BlockState) : BlockEn
 
     private var makeConstraint = false
 
-    override fun saveAdditional(tag: CompoundTag) {
+    override fun saveAdditional(tag: CompoundTag, provider: HolderLookup.Provider) {
+        super.saveAdditional(tag, provider)
         val h = hingeConstraint ?: return
 
         tag.putLong("shipId0", h.shipId0 ?: -1)
@@ -39,7 +41,8 @@ class TestHingeBlockEntity(blockPos: BlockPos, blockState: BlockState) : BlockEn
         tag.putQuatd("rot1", h.pose1.rot)
     }
 
-    override fun load(tag: CompoundTag) {
+    override fun loadAdditional(tag: CompoundTag, provider: HolderLookup.Provider) {
+        super.loadAdditional(tag, provider)
         hingeConstraint = VSRevoluteJoint(
             tag.getLong("shipId0"), VSJointPose(tag.getVector3d("pos0") ?: return, tag.getQuatd("rot0") ?: return),
             tag.getLong("shipId1"), VSJointPose(tag.getVector3d("pos1") ?: return, tag.getQuatd("rot1") ?: return),

@@ -567,8 +567,7 @@ fun getShipMountedToData(passenger: Entity, partialTicks: Float? = null): ShipMo
     }
     val shipObjectEntityMountedTo =
         passenger.level().getLoadedShipManagingPos(vehicle.position().toJOML()) ?: return null
-    val mountedPosInShip: Vector3dc = vehicle.getPosition(partialTicks ?: 0.0f)
-        .add(0.0, vehicle.passengersRidingOffset + passenger.myRidingOffset, 0.0).toJOML()
+    val mountedPosInShip: Vector3dc = vehicle.getPassengerRidingPosition(passenger).toJOML()
 
     return ShipMountedToData(shipObjectEntityMountedTo, mountedPosInShip)
 }

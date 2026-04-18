@@ -18,7 +18,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.valkyrienskies.core.api.ships.ClientShip;
 import org.valkyrienskies.core.api.ships.properties.ShipTransform;
-import org.valkyrienskies.core.apigame.world.ClientShipWorldCore;
+import org.valkyrienskies.core.internal.world.VsiClientShipWorld;
 import org.valkyrienskies.mod.common.VSClientGameUtils;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
@@ -35,7 +35,7 @@ public class MixinDebugRenderer {
     private void postRender(final PoseStack matrices, final MultiBufferSource.BufferSource bufferSource,
         final double cameraX, final double cameraY, final double cameraZ, final CallbackInfo ci) {
         final ClientLevel world = Minecraft.getInstance().level;
-        final ClientShipWorldCore shipObjectClientWorld = VSGameUtilsKt.getShipObjectWorld(world);
+        final VsiClientShipWorld shipObjectClientWorld = VSGameUtilsKt.getShipObjectWorld(world);
 
         if (Minecraft.getInstance().getEntityRenderDispatcher().shouldRenderHitBoxes()) {
             for (final ClientShip shipObjectClient : shipObjectClientWorld.getLoadedShips()) {

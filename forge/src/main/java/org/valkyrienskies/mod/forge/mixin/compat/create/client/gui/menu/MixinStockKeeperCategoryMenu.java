@@ -6,7 +6,7 @@ import com.simibubi.create.content.logistics.stockTicker.StockKeeperCategoryMenu
 import com.simibubi.create.content.logistics.stockTicker.StockTickerBlockEntity;
 import com.simibubi.create.foundation.gui.menu.MenuBase;
 import net.minecraft.core.Position;
-import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.phys.Vec3;
@@ -21,7 +21,7 @@ import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
 public abstract class MixinStockKeeperCategoryMenu extends MenuBase<StockTickerBlockEntity> {
 
     private MixinStockKeeperCategoryMenu(MenuType<?> type, int id,
-        Inventory inv, FriendlyByteBuf extraData) {
+        Inventory inv, RegistryFriendlyByteBuf extraData) {
         super(type, id, inv, extraData);
     }
 

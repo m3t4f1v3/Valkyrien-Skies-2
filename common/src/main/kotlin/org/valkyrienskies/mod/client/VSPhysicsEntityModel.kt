@@ -33,7 +33,7 @@ class VSPhysicsEntityModel<T : Mob>(root: ModelPart) :
     companion object {
         // This layer location should be baked with EntityRendererProvider.Context in the entity renderer and passed into this model's constructor
         val LAYER_LOCATION: ModelLayerLocation =
-            ModelLayerLocation(ResourceLocation(ValkyrienSkiesMod.MOD_ID, "test_sphere"), "main")
+            ModelLayerLocation(ResourceLocation.fromNamespaceAndPath(ValkyrienSkiesMod.MOD_ID, "test_sphere"), "main")
 
         fun createBodyLayer(): LayerDefinition {
             val meshdefinition = MeshDefinition()

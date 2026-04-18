@@ -24,14 +24,11 @@ import net.minecraft.world.item.BlockItem
 import net.minecraft.world.item.Item
 import net.minecraft.world.item.Item.Properties
 import net.minecraft.world.level.block.Block
-import org.valkyrienskies.core.apigame.VSCoreFactory
 import org.valkyrienskies.mod.client.EmptyRenderer
-import org.valkyrienskies.mod.client.VSPhysicsEntityRenderer
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod
 import org.valkyrienskies.mod.common.block.TestChairBlock
 import org.valkyrienskies.mod.common.block.TestFlapBlock
 import org.valkyrienskies.mod.common.block.TestHingeBlock
-import org.valkyrienskies.mod.common.block.TestSphereBlock
 import org.valkyrienskies.mod.common.block.TestWingBlock
 import org.valkyrienskies.mod.common.blockentity.TestHingeBlockEntity
 import org.valkyrienskies.mod.common.command.VSCommands
@@ -40,11 +37,7 @@ import org.valkyrienskies.mod.common.config.VSEntityHandlerDataLoader
 import org.valkyrienskies.mod.common.config.VSGameConfig
 import org.valkyrienskies.mod.common.config.VSKeyBindings
 import org.valkyrienskies.mod.common.entity.ShipMountingEntity
-import org.valkyrienskies.mod.common.entity.VSPhysicsEntity
 import org.valkyrienskies.mod.common.hooks.VSGameEvents
-import org.valkyrienskies.mod.common.item.AreaAssemblerItem
-import org.valkyrienskies.mod.common.item.ConnectionCheckerItem
-import org.valkyrienskies.mod.common.item.PhysicsEntityCreatorItem
 import org.valkyrienskies.mod.common.item.ShipAssemblerItem
 import org.valkyrienskies.mod.common.item.ShipCreatorItem
 import java.util.concurrent.CompletableFuture
@@ -61,32 +54,23 @@ class ValkyrienSkiesModFabric : ModInitializer {
         if (hasInitialized.getAndSet(true)) return
 
         ValkyrienSkiesMod.TEST_CHAIR = TestChairBlock()
-        ValkyrienSkiesMod.TEST_HINGE = TestHingeBlock()
+        ValkyrienSkiesMod.TEST_HINGE = TestHingeBlock
         ValkyrienSkiesMod.TEST_FLAP = TestFlapBlock()
         ValkyrienSkiesMod.TEST_WING = TestWingBlock()
-        ValkyrienSkiesMod.TEST_SPHERE = TestSphereBlock
-        ValkyrienSkiesMod.CONNECTION_CHECKER_ITEM = ConnectionCheckerItem(
-            Properties(),
-            { 1.0 },
-            { VSGameConfig.SERVER.minScaling }
-        )
+        ValkyrienSkiesMod.CONNECTION_CHECKER_ITEM = Item(Properties())
         ValkyrienSkiesMod.SHIP_CREATOR_ITEM = ShipCreatorItem(
             Properties(),
             { 1.0 },
             { VSGameConfig.SERVER.minScaling }
         )
         ValkyrienSkiesMod.SHIP_ASSEMBLER_ITEM = ShipAssemblerItem(Properties())
-        ValkyrienSkiesMod.AREA_ASSEMBLER_ITEM = AreaAssemblerItem(
-            Properties(),
-            { 1.0 },
-            { VSGameConfig.SERVER.minScaling }
-        )
+        ValkyrienSkiesMod.AREA_ASSEMBLER_ITEM = Item(Properties())
         ValkyrienSkiesMod.SHIP_CREATOR_ITEM_SMALLER = ShipCreatorItem(
             Properties(),
             { VSGameConfig.SERVER.miniShipSize },
             { VSGameConfig.SERVER.minScaling }
         )
-        ValkyrienSkiesMod.PHYSICS_ENTITY_CREATOR_ITEM = PhysicsEntityCreatorItem(Properties())
+        ValkyrienSkiesMod.PHYSICS_ENTITY_CREATOR_ITEM = Item(Properties())
 
         ValkyrienSkiesMod.SHIP_MOUNTING_ENTITY_TYPE = EntityType.Builder.of(
             ::ShipMountingEntity,
@@ -94,38 +78,19 @@ class ValkyrienSkiesModFabric : ModInitializer {
         ).sized(.3f, .3f)
             .build(ResourceLocation.fromNamespaceAndPath(ValkyrienSkiesMod.MOD_ID, "ship_mounting_entity").toString())
 
-        ValkyrienSkiesMod.PHYSICS_ENTITY_TYPE = EntityType.Builder.of(
-            ::VSPhysicsEntity,
-            MobCategory.MISC
-        ).sized(.3f, .3f)
-            .updateInterval(1)
-            .clientTrackingRange(10)
-            .build(ResourceLocation.fromNamespaceAndPath(ValkyrienSkiesMod.MOD_ID, "vs_physics_entity").toString())
-
         ValkyrienSkiesMod.TEST_HINGE_BLOCK_ENTITY_TYPE =
             FabricBlockEntityTypeBuilder.create(::TestHingeBlockEntity, ValkyrienSkiesMod.TEST_HINGE).build()
 
         val isClient = FabricLoader.getInstance().environmentType == EnvType.CLIENT
-        val networking = VSFabricNetworking(isClient)
-        val hooks = FabricHooksImpl(networking)
-        val vsCore = if (isClient) {
-            VSCoreFactory.instance.newVsCoreClient(hooks)
-        } else {
-            VSCoreFactory.instance.newVsCoreServer(hooks)
-        }
-
-        networking.register(vsCore.hooks)
-
         if (isClient) onInitializeClient()
 
-        ValkyrienSkiesMod.init(vsCore)
+        ValkyrienSkiesMod.init()
         // VSEntityManager.registerContraptionHandler(ContraptionShipyardEntityHandlerFabric)
 
         registerBlockAndItem("test_chair", ValkyrienSkiesMod.TEST_CHAIR)
         registerBlockAndItem("test_hinge", ValkyrienSkiesMod.TEST_HINGE)
         registerBlockAndItem("test_flap", ValkyrienSkiesMod.TEST_FLAP)
         registerBlockAndItem("test_wing", ValkyrienSkiesMod.TEST_WING)
-        registerBlockAndItem("test_sphere", ValkyrienSkiesMod.TEST_SPHERE)
         Registry.register(
             BuiltInRegistries.ITEM, ResourceLocation.fromNamespaceAndPath(ValkyrienSkiesMod.MOD_ID, "connection_checker"),
             ValkyrienSkiesMod.CONNECTION_CHECKER_ITEM
@@ -153,10 +118,6 @@ class ValkyrienSkiesModFabric : ModInitializer {
         Registry.register(
             BuiltInRegistries.ENTITY_TYPE, ResourceLocation.fromNamespaceAndPath(ValkyrienSkiesMod.MOD_ID, "ship_mounting_entity"),
             ValkyrienSkiesMod.SHIP_MOUNTING_ENTITY_TYPE
-        )
-        Registry.register(
-            BuiltInRegistries.ENTITY_TYPE, ResourceLocation.fromNamespaceAndPath(ValkyrienSkiesMod.MOD_ID, "vs_physics_entity"),
-            ValkyrienSkiesMod.PHYSICS_ENTITY_TYPE
         )
         Registry.register(
             BuiltInRegistries.BLOCK_ENTITY_TYPE, ResourceLocation.fromNamespaceAndPath(ValkyrienSkiesMod.MOD_ID, "test_hinge_block_entity"),
@@ -220,15 +181,6 @@ class ValkyrienSkiesModFabric : ModInitializer {
                 context
             )
         }
-
-        EntityRendererRegistry.register(
-            ValkyrienSkiesMod.PHYSICS_ENTITY_TYPE
-        ) { context: Context ->
-            VSPhysicsEntityRenderer(
-                context
-            )
-        }
-
         VSKeyBindings.clientSetup {
             KeyBindingHelper.registerKeyBinding(it)
         }

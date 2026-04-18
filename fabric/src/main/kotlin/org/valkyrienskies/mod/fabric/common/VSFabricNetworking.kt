@@ -11,8 +11,8 @@ import net.minecraft.network.codec.StreamCodec
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload
 import net.minecraft.resources.ResourceLocation
 import net.minecraft.server.level.ServerPlayer
-import org.valkyrienskies.core.apigame.hooks.CoreHooksIn
-import org.valkyrienskies.core.apigame.world.IPlayer
+import org.valkyrienskies.core.internal.hooks.VsiCoreHooksIn
+import org.valkyrienskies.core.internal.world.VsiPlayer
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod
 import org.valkyrienskies.mod.common.playerWrapper
 import org.valkyrienskies.mod.common.util.MinecraftPlayer
@@ -25,7 +25,7 @@ import org.valkyrienskies.mod.fabric.common.VSPacket.Companion.VS_PACKET_TYPE
 class VSFabricNetworking(
     private val isClient: Boolean
 ) {
-    private fun registerClientNetworking(hooks: CoreHooksIn) {
+    private fun registerClientNetworking(hooks: VsiCoreHooksIn) {
         ClientPlayNetworking.registerGlobalReceiver(VS_PACKET_TYPE) { packet, context ->
             context.client().execute {
                 hooks.onReceiveClient(Unpooled.wrappedBuffer(packet.data))
@@ -33,7 +33,7 @@ class VSFabricNetworking(
         }
     }
 
-    fun register(hooks: CoreHooksIn) {
+    fun register(hooks: VsiCoreHooksIn) {
         PayloadTypeRegistry.playC2S().register(VS_PACKET_TYPE, VS_PACKET_CODEC)
         PayloadTypeRegistry.playS2C().register(VS_PACKET_TYPE, VS_PACKET_CODEC)
 
@@ -48,7 +48,7 @@ class VSFabricNetworking(
         }
     }
 
-    fun sendToClient(data: ByteBuf, player: IPlayer) {
+    fun sendToClient(data: ByteBuf, player: VsiPlayer) {
         val serverPlayer = (player as MinecraftPlayer).player as ServerPlayer
         ServerPlayNetworking.send(serverPlayer, VSPacket(data.copyToByteArray()))
     }

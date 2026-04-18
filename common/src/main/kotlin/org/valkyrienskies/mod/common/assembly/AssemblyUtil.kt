@@ -21,7 +21,7 @@ object AssemblyUtil {
         val section = chunk.getSection(chunk.getSectionIndex(pos.y))
         val oldState = level.getBlockState(pos)
         section.setBlockState(pos.x and 15, pos.y and 15, pos.z and 15, state)
-        ShipAssembler.triggerBlockChange(level, pos, oldState, state)
+        level.sendBlockUpdated(pos, oldState, state, Block.UPDATE_CLIENTS)
     }
 
     fun removeBlock(level: Level, pos: BlockPos) {

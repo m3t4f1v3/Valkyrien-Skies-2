@@ -1,6 +1,7 @@
 package org.valkyrienskies.mod.common
 
 import net.minecraft.nbt.CompoundTag
+import net.minecraft.core.HolderLookup
 import net.minecraft.world.level.saveddata.SavedData
 import org.valkyrienskies.core.internal.world.VsiPipeline
 
@@ -57,7 +58,7 @@ class ShipSavedData : SavedData() {
     var loadingException: Throwable? = null
         private set
 
-    override fun save(compoundTag: CompoundTag): CompoundTag {
+    override fun save(compoundTag: CompoundTag, provider: HolderLookup.Provider): CompoundTag {
         val logger = org.slf4j.LoggerFactory.getLogger("VS2")
         val bytes = vsCore.serializePipeline(pipeline)
         logger.info(" ShipSavedData.save(): pipeline bytes = {} KB", bytes.size / 1024)

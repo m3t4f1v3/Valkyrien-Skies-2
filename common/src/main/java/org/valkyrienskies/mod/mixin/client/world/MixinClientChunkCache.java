@@ -1,7 +1,7 @@
 package org.valkyrienskies.mod.mixin.client.world;
 
-import io.netty.util.collection.LongObjectHashMap;
-import io.netty.util.collection.LongObjectMap;
+import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import java.util.function.Consumer;
 import net.minecraft.client.multiplayer.ClientChunkCache;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -41,12 +41,12 @@ public abstract class MixinClientChunkCache implements ClientChunkCacheDuck {
     @Final
     ClientLevel level;
 
-    public LongObjectMap<LevelChunk> vs$getShipChunks() {
+    public Long2ObjectMap<LevelChunk> vs$getShipChunks() {
         return vs$shipChunks;
     }
 
     @Unique
-    private final LongObjectMap<LevelChunk> vs$shipChunks = new LongObjectHashMap<>();
+    private final Long2ObjectMap<LevelChunk> vs$shipChunks = new Long2ObjectOpenHashMap<>();
 
     @Inject(method = "replaceWithPacketData", at = @At("HEAD"), cancellable = true)
     private void preLoadChunkFromPacket(final int x, final int z,

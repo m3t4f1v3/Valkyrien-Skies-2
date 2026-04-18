@@ -1,5 +1,6 @@
 package org.valkyrienskies.mod.common.block
 
+import com.mojang.serialization.MapCodec
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
 import net.minecraft.server.level.ServerLevel
@@ -22,6 +23,7 @@ import org.valkyrienskies.mod.common.blockentity.TestThrusterBlockEntity
 import org.valkyrienskies.mod.common.getLoadedShipManagingPos
 
 object TestThrusterBlock : DirectionalBlock(Properties.of().strength(10.0f, 1200.0f).sound(SoundType.METAL)), EntityBlock {
+    private val CODEC: MapCodec<TestThrusterBlock> = simpleCodec { TestThrusterBlock }
 
     init {
         this.registerDefaultState(this.stateDefinition.any().setValue(BlockStateProperties.POWERED, false).setValue(FACING, Direction.NORTH))
@@ -69,4 +71,7 @@ object TestThrusterBlock : DirectionalBlock(Properties.of().strength(10.0f, 1200
     ): BlockEntity? {
         return TestThrusterBlockEntity(blockPos, blockState)
     }
+
+    override fun codec() = CODEC
+
 }

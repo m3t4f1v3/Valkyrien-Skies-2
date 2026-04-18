@@ -34,7 +34,6 @@ import org.valkyrienskies.mod.common.blockentity.TestAntigravBlockEntity
 import org.valkyrienskies.mod.common.blockentity.TestHingeBlockEntity
 import org.valkyrienskies.mod.common.blockentity.TestThrusterBlockEntity
 import org.valkyrienskies.mod.common.entity.ShipMountingEntity
-import org.valkyrienskies.mod.common.entity.VSPhysicsEntity
 import org.valkyrienskies.mod.common.jackson.BlockPosDeserializer
 import org.valkyrienskies.mod.common.jackson.BlockPosKeyDeserializer
 import org.valkyrienskies.mod.common.jackson.BlockPosKeySerializer
@@ -68,7 +67,7 @@ object ValkyrienSkiesMod {
     lateinit var AREA_ASSEMBLER_ITEM: Item
     lateinit var PHYSICS_ENTITY_CREATOR_ITEM: Item
     lateinit var SHIP_MOUNTING_ENTITY_TYPE: EntityType<ShipMountingEntity>
-    lateinit var PHYSICS_ENTITY_TYPE: EntityType<VSPhysicsEntity>
+    lateinit var PHYSICS_ENTITY_TYPE: EntityType<out Entity>
     lateinit var TEST_HINGE_BLOCK_ENTITY_TYPE: BlockEntityType<TestHingeBlockEntity>
     lateinit var BLOCK_POS_COMPONENT: DataComponentType<BlockPos>
     lateinit var TEST_THRUSTER_BLOCK_ENTITY_TYPE: BlockEntityType<TestThrusterBlockEntity>
@@ -79,7 +78,7 @@ object ValkyrienSkiesMod {
     val VS_CREATIVE_TAB = ResourceKey.create(Registries.CREATIVE_MODE_TAB, ResourceLocation.parse("valkyrienskies"))
 
     val ASSEMBLE_BLACKLIST: TagKey<Block> =
-        TagKey.create(Registries.BLOCK, ResourceLocation(MOD_ID, "assemble_blacklist"))
+        TagKey.create(Registries.BLOCK, ResourceLocation.fromNamespaceAndPath(MOD_ID, "assemble_blacklist"))
 
     @JvmStatic
     var currentServer: MinecraftServer? = null
@@ -176,6 +175,34 @@ object ValkyrienSkiesMod {
                 player.vs_removeKnownShip(event.ship.id)
             }
         }
+    }
+
+    fun createCreativeTab(): CreativeModeTab {
+        return CreativeModeTab.builder(CreativeModeTab.Row.TOP, 0)
+            .title(Component.translatable("itemGroup.valkyrienSkies"))
+            .icon {
+                when {
+                    ::SHIP_CREATOR_ITEM.isInitialized -> ItemStack(SHIP_CREATOR_ITEM)
+                    ::SHIP_ASSEMBLER_ITEM.isInitialized -> ItemStack(SHIP_ASSEMBLER_ITEM)
+                    ::CONNECTION_CHECKER_ITEM.isInitialized -> ItemStack(CONNECTION_CHECKER_ITEM)
+                    else -> ItemStack.EMPTY
+                }
+            }
+            .displayItems { _, output ->
+                if (::TEST_CHAIR.isInitialized) output.accept(TEST_CHAIR)
+                if (::TEST_HINGE.isInitialized) output.accept(TEST_HINGE)
+                if (::TEST_FLAP.isInitialized) output.accept(TEST_FLAP)
+                if (::TEST_WING.isInitialized) output.accept(TEST_WING)
+                if (::TEST_THRUSTER.isInitialized) output.accept(TEST_THRUSTER)
+                if (::TEST_ANTIGRAV.isInitialized) output.accept(TEST_ANTIGRAV)
+                if (::CONNECTION_CHECKER_ITEM.isInitialized) output.accept(CONNECTION_CHECKER_ITEM)
+                if (::SHIP_CREATOR_ITEM.isInitialized) output.accept(SHIP_CREATOR_ITEM)
+                if (::SHIP_ASSEMBLER_ITEM.isInitialized) output.accept(SHIP_ASSEMBLER_ITEM)
+                if (::SHIP_CREATOR_ITEM_SMALLER.isInitialized) output.accept(SHIP_CREATOR_ITEM_SMALLER)
+                if (::AREA_ASSEMBLER_ITEM.isInitialized) output.accept(AREA_ASSEMBLER_ITEM)
+                if (::PHYSICS_ENTITY_CREATOR_ITEM.isInitialized) output.accept(PHYSICS_ENTITY_CREATOR_ITEM)
+            }
+            .build()
     }
 
     @JvmStatic

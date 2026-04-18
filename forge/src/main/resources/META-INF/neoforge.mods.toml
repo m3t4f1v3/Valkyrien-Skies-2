@@ -21,28 +21,28 @@ config = "valkyrienskies-forge.mixins.json"
 
 [[dependencies.valkyrienskies]]
 modId = "neoforge"
-mandatory = true
-versionRange = "[21.1.125,)"
+type = "required"
+versionRange = "[21.1.206,)"
 ordering = "NONE"
 side = "BOTH"
 
 [[dependencies.valkyrienskies]]
 modId = "minecraft"
-mandatory = true
+type = "required"
 versionRange = "[1.21.1]"
 ordering = "NONE"
 side = "BOTH"
 
 [[dependencies.valkyrienskies]]
 modId = "create"
-mandatory = false
-versionRange = "[6.0.6, )"
+type = "optional"
+versionRange = "[6.0.9,6.1.0)"
 ordering = "NONE"
 side = "BOTH"
 
 [[dependencies.valkyrienskies]]
 modId = "computercraft"
-mandatory = false
+type = "optional"
 versionRange = "[1.115.1,)"
 ordering = "NONE"
 side = "BOTH"

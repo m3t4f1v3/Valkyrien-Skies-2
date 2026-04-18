@@ -143,7 +143,7 @@ public abstract class MixinClientLevel implements IShipObjectWorldClientProvider
         Player player = this.minecraft.player;
         assert player != null;
 
-        final double playerScale = player.getBbWidth() / Player.STANDING_DIMENSIONS.width;
+        final double playerScale = player.getBbWidth() / Player.STANDING_DIMENSIONS.width();
 
 
         // use more precise player position, since ship blocks aren't locked to the grid of integer coordinates in world space

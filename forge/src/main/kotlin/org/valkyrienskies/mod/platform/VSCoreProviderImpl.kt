@@ -1,7 +1,7 @@
 package org.valkyrienskies.mod.platform
 
 import com.mojang.logging.LogUtils
-import net.minecraftforge.fml.loading.FMLEnvironment
+import net.neoforged.fml.loading.FMLEnvironment
 import org.valkyrienskies.core.internal.VsiCore
 import org.valkyrienskies.core.internal.VsiCoreFactory
 import org.valkyrienskies.mod.common.VSCoreProvider
@@ -16,7 +16,7 @@ class VSCoreProviderImpl: VSCoreProvider {
             VsiCoreFactory.instance.newVsCoreServer(ForgeHooksImpl)
         }
         VSForgeNetworking.registerPacketHandlers(core.hooks)
-        LogUtils.getLogger().info("Initialized VSCore on Forge!")
+        LogUtils.getLogger().info("Initialized VSCore on NeoForge!")
         return core
     }
 }

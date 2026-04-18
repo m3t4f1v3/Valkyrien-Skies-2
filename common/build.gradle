@@ -43,17 +43,8 @@ dependencies {
     // Dynmap
     modCompileOnly("maven.modrinth:dynmap:${dynmap_version}")
 
-    // Hexcasting
-    modCompileOnly("at.petra-k.hexcasting:hexcasting-common-$minecraft_version:$hexcasting_version")
-
-    // HexTweaks
-    modCompileOnly("maven.modrinth:hextweaks:$hextweaks_version")
-
-    // Ephemera
-    modCompileOnly("maven.modrinth:ephemera:$ephemera_version")
-
-    // Hexal
-    modCompileOnly("ram.talia.hexal:hexal-fabric-$minecraft_version:$hexal_version") { transitive = false }
+    // Hexcasting-family compat from 1.20.1 does not currently resolve on 1.21.1.
+    // The related sources are excluded below until the 1.21.1 coordinates are restored.
 
     // Supplementaries (Moonlight Lib)
     modImplementation("maven.modrinth:moonlight:$moonlight_version")
@@ -95,6 +86,39 @@ architectury {
 
 loom {
     accessWidenerPath = file("src/main/resources/valkyrienskies-common.accesswidener")
+}
+
+sourceSets {
+    main {
+        java {
+            exclude "org/valkyrienskies/mod/mixin/mod_compat/hexcasting/**"
+            exclude "org/valkyrienskies/mod/mixin/mod_compat/flywheel/**"
+            exclude "org/valkyrienskies/mod/mixin/mod_compat/create_big_cannons/**"
+            exclude "org/valkyrienskies/mod/mixin/mod_compat/flywheel_renderer/**"
+            exclude "org/valkyrienskies/mod/mixin/mod_compat/sodium/**"
+            exclude "org/valkyrienskies/mod/compat/FlywheelEvents.java"
+            exclude "org/valkyrienskies/mod/compat/flywheel/**"
+            exclude "org/valkyrienskies/mod/mixin/accessors/client/render/chunk/**"
+            exclude "org/valkyrienskies/mod/mixin/accessors/server/level/ChunkHolderAccessor.java"
+            exclude "org/valkyrienskies/mod/mixin/accessors/server/level/ServerChunkCacheAccessor.java"
+            exclude "org/valkyrienskies/mod/mixin/feature/enchantment_table/**"
+            exclude "org/valkyrienskies/mod/mixin/feature/ai/node_evaluator/**"
+            exclude "org/valkyrienskies/mod/mixin/feature/sculk/**"
+            exclude "org/valkyrienskies/mod/mixin/server/world/MixinChunkMapShipyard.java"
+            exclude "org/valkyrienskies/mod/mixin/world/level/levelgen/MixinChunkStatus.java"
+            exclude "org/valkyrienskies/mod/mixin/mod_compat/alex_caves/**"
+        }
+        kotlin {
+            exclude "org/valkyrienskies/mod/compat/hexcasting/**"
+            exclude "org/valkyrienskies/mod/compat/flywheel/**"
+            exclude "org/valkyrienskies/mod/client/VSPhysicsEntityModel.kt"
+            exclude "org/valkyrienskies/mod/client/VSPhysicsEntityRenderer.kt"
+            exclude "org/valkyrienskies/mod/common/entity/VSPhysicsEntity.kt"
+            exclude "org/valkyrienskies/mod/common/item/AreaAssemblerItem.kt"
+            exclude "org/valkyrienskies/mod/common/item/ConnectionCheckerItem.kt"
+            exclude "org/valkyrienskies/mod/common/item/PhysicsEntityCreatorItem.kt"
+        }
+    }
 }
 
 jar {

@@ -69,7 +69,7 @@ public abstract class StructureTemplateMixin implements StructureTemplateFillFro
             if (customTag != null) {
                 blockInfo = new StructureTemplate.StructureBlockInfo(relativePos, blockState, customTag);
             } else if (blockEntity != null) {
-                blockInfo = new StructureTemplate.StructureBlockInfo(relativePos, blockState, blockEntity.saveWithId());
+                blockInfo = new StructureTemplate.StructureBlockInfo(relativePos, blockState, blockEntity.saveWithId(level.registryAccess()));
             } else {
                 blockInfo = new StructureTemplate.StructureBlockInfo(relativePos, blockState, null);
             }

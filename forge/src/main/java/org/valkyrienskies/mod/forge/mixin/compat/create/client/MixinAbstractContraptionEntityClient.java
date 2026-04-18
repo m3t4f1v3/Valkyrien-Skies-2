@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
-import org.valkyrienskies.mod.mixinducks.mod_compat.create.MixinAbstractContraptionEntityDuck;
+import org.valkyrienskies.mod.forge.mixinducks.mod_compat.create.MixinAbstractContraptionEntityDuck;
 
 /**
  * See {@link org.valkyrienskies.mod.mixin.mod_compat.create.entity.MixinAbstractContraptionEntity} for where

@@ -21,6 +21,34 @@ architectury {
 
 sourceSets {
     main {
+        java {
+            exclude "org/valkyrienskies/mod/forge/mixin/compat/hexcasting/**"
+            exclude "org/valkyrienskies/mod/forge/mixin/compat/connectiblechains/**"
+            exclude "org/valkyrienskies/mod/forge/mixin/compat/emf/**"
+            exclude "org/valkyrienskies/mod/forge/mixin/compat/sodium/**"
+            exclude "org/valkyrienskies/mod/forge/mixin/compat/create/client/MixinSuperGlueSelectionHandler66.java"
+            exclude "org/valkyrienskies/mod/forge/mixin/feature/forge_interact/MixinIForge2Player.java"
+            exclude "org/valkyrienskies/mod/forge/mixin/compat/create/MixinDeployerHandler.java"
+            exclude "org/valkyrienskies/mod/forge/mixin/compat/create/MixinLaunchedItem.java"
+            exclude "org/valkyrienskies/mod/forge/mixin/compat/create/MixinToolboxHandler.java"
+            exclude "org/valkyrienskies/mod/forge/mixin/compat/create/block/MixinITrackBlock.java"
+            exclude "org/valkyrienskies/mod/forge/mixin/compat/create/block/MixinTurntableBlock.java"
+            exclude "org/valkyrienskies/mod/forge/mixin/compat/create/blockentity/MixinChainConveyorBlockEntity.java"
+            exclude "org/valkyrienskies/mod/forge/mixin/compat/create/blockentity/MixinChainConveyorRidingHandler.java"
+            exclude "org/valkyrienskies/mod/forge/mixin/compat/create/blockentity/MixinFrogportBlockEntity.java"
+            exclude "org/valkyrienskies/mod/forge/mixin/compat/create/blockentity/MixinNozzleBlockEntity.java"
+            exclude "org/valkyrienskies/mod/forge/mixin/compat/create/blockentity/MixinSchematicannonBlockEntity.java"
+            exclude "org/valkyrienskies/mod/forge/mixin/compat/create/client/MixinCarriageSounds.java"
+            exclude "org/valkyrienskies/mod/forge/mixin/compat/create/client/MixinChainConveyorBlockEntity.java"
+            exclude "org/valkyrienskies/mod/forge/mixin/compat/create/client/MixinFrogportRenderer.java"
+            exclude "org/valkyrienskies/mod/forge/mixin/compat/create/client/MixinFrogportVisual.java"
+            exclude "org/valkyrienskies/mod/forge/mixin/compat/create/client/MixinSchematicannonRenderer.java"
+            exclude "org/valkyrienskies/mod/forge/mixin/compat/create/client/MixinToolboxHandlerClient.java"
+            exclude "org/valkyrienskies/mod/forge/mixin/compat/create/client/MixinTrackTargetingClient.java"
+        }
+        kotlin {
+            exclude "org/valkyrienskies/mod/forge/compat/hexcasting/**"
+        }
         resources {
             srcDir "$buildDir/generated/resources"
         }
@@ -69,14 +97,12 @@ dependencies {
     //modCompileOnly("curse.maven:rubidium-574856:4024781")
     modCompileOnly("maven.modrinth:embeddium:${embeddium_version}")
 
-    modRuntimeOnly("maven.modrinth:forge-config-screens:v8.0.2-1.20.1-Forge")
-
     // Twilight Forest
     // modImplementation("teamtwilight:twilightforest:${twilightforest_version}:universal")
 
     // Create Mod, see https://wiki.createmod.net/developers/depend-on-create/neoforge-1.21.1
     modImplementation("com.simibubi.create:create-${property("minecraft_version")}:${property("forge_create_version")}:slim") { transitive = false }
-    modImplementation("net.createmod.ponder:Ponder-NeoForge-${property("minecraft_version")}:${property("forge_ponder_version")}")
+    modImplementation("net.createmod.ponder:ponder-neoforge:${property("forge_ponder_version")}")
     modCompileOnly("dev.engine-room.flywheel:flywheel-neoforge-api-${property("minecraft_version")}:${property("forge_flywheel_version")}")
     modRuntimeOnly("dev.engine-room.flywheel:flywheel-neoforge-${property("minecraft_version")}:${property("forge_flywheel_version")}")
     modImplementation("com.tterrag.registrate:Registrate:${property("forge_registrate_version")}")
@@ -87,7 +113,7 @@ dependencies {
     // modImplementation("curse.maven:coroutil-237749:5096038")
 
     // CC Tweaked
-    modRuntimeOnly("cc.tweaked:cc-tweaked-${minecraft_version}-forge:${cc_tweaked_version}")
+    modCompileOnly("maven.modrinth:cc-tweaked:${cc_tweaked_version}")
 
     //modImplementation("curse.maven:vmp-forge-892037:4657678")
 
@@ -121,17 +147,7 @@ dependencies {
     // Dynmap
     modCompileOnly("maven.modrinth:dynmap:${dynmap_version}")
 
-    // Hexcasting
-    modCompileOnly("at.petra-k.hexcasting:hexcasting-forge-${minecraft_version}:${hexcasting_version}") { transitive = false }
-
-    // HexTweaks
-    modCompileOnly("maven.modrinth:hextweaks:$hextweaks_version")
-
-    // Ephemera
-    modCompileOnly("maven.modrinth:ephemera:$ephemera_version")
-
-    // Hexal
-    modCompileOnly("ram.talia.hexal:hexal-forge-$minecraft_version:$hexal_version") { transitive = false }
+    // Hexcasting-family compat from 1.20.1 is disabled on 1.21.1 until the platform coordinates are restored.
 
     // Integrated Dynamics
     // https://www.curseforge.com/minecraft/mc-mods/integrated-dynamics/files/all?page=1&pageSize=20&version=1.21.1

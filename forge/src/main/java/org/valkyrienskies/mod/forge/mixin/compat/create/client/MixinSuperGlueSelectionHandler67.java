@@ -4,6 +4,7 @@ import com.simibubi.create.content.contraptions.glue.SuperGlueSelectionHandler;
 import com.simibubi.create.foundation.utility.RaycastHelper;
 import java.util.Iterator;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.AABB;
@@ -21,15 +22,15 @@ import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
 
 @Mixin(SuperGlueSelectionHandler.class)
-public abstract class MixinSuperGlueSelectionHandler {
+public abstract class MixinSuperGlueSelectionHandler67 {
     @Unique
     private Vec3 newTarget;
 
-    @Redirect(method = "tick", at = @At(value = "INVOKE", target = "Lcom/simibubi/create/foundation/utility/RaycastHelper;getTraceOrigin(Lnet/minecraft/world/entity/player/Player;)Lnet/minecraft/world/phys/Vec3;"), remap = false)
-    private Vec3 redirectGetTraceOrigin(Player playerIn) {
+    @Redirect(method = "tick", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/player/LocalPlayer;getEyePosition()Lnet/minecraft/world/phys/Vec3;"))
+    private Vec3 redirectGetTraceOrigin(LocalPlayer playerIn) {
         Minecraft mc = Minecraft.getInstance();
         double range = playerIn.getAttribute(Attributes.BLOCK_INTERACTION_RANGE).getValue() + 1;
-        Vec3 origin = RaycastHelper.getTraceOrigin(playerIn);
+        Vec3 origin = playerIn.getEyePosition();
         Vec3 target = RaycastHelper.getTraceTarget(playerIn, range, origin);
 
 

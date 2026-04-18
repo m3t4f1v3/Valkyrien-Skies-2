@@ -129,7 +129,7 @@ object VSGamePackets {
 
                 if(entity !is LivingEntity) { // EntityLerper is called only if the entity is ai-controlled. In other cases lerp is manual.
                     entity.setPos(previousWorldPosition.x, previousWorldPosition.y, previousWorldPosition.z)
-                    entity.lerpTo(worldPosition.x, worldPosition.y, worldPosition.z, Math.toDegrees(setMotion.yRot).toFloat(), Math.toDegrees(setMotion.xRot).toFloat(), 3, true)
+                    entity.lerpTo(worldPosition.x, worldPosition.y, worldPosition.z, Math.toDegrees(setMotion.yRot).toFloat(), Math.toDegrees(setMotion.xRot).toFloat(), 3)
                 }
             }
         }

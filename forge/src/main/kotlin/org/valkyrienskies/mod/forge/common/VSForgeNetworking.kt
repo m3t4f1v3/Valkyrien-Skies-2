@@ -10,22 +10,22 @@ import net.neoforged.neoforge.network.handling.DirectionalPayloadHandler
 import net.neoforged.neoforge.network.handling.IPayloadContext
 import net.neoforged.neoforge.network.registration.HandlerThread
 import net.neoforged.neoforge.network.registration.PayloadRegistrar
-import org.valkyrienskies.core.apigame.hooks.CoreHooksIn
-import org.valkyrienskies.core.apigame.world.IPlayer
+import org.valkyrienskies.core.internal.hooks.VsiCoreHooksIn
+import org.valkyrienskies.core.internal.world.VsiPlayer
 import org.valkyrienskies.mod.common.mcPlayer
 import org.valkyrienskies.mod.mixinducks.world.entity.PlayerDuck
 import java.util.concurrent.CompletableFuture
 
 object VSForgeNetworking {
     lateinit var registrar: PayloadRegistrar
-    lateinit var hooks: CoreHooksIn
+    lateinit var hooks: VsiCoreHooksIn
 
-    fun registerPacketHandlers(hooks: CoreHooksIn) {
+    fun registerPacketHandlers(hooks: VsiCoreHooksIn) {
         // Loading this class registers the handlers
         this.hooks = hooks
     }
 
-    fun sendToClient(data: ByteBuf, player: IPlayer) {
+    fun sendToClient(data: ByteBuf, player: VsiPlayer) {
         PacketDistributor.sendToPlayer(player.mcPlayer as ServerPlayer, VSPacket(data.copyToByteArray()))
     }
 

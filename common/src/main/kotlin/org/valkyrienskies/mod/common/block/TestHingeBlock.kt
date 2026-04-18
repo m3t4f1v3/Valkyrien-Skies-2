@@ -1,5 +1,6 @@
 package org.valkyrienskies.mod.common.block
 
+import com.mojang.serialization.MapCodec
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction.DOWN
 import net.minecraft.core.Direction.EAST
@@ -60,6 +61,7 @@ object TestHingeBlock :
     private val NORTH_AABB = box(0.0, 0.0, 8.0, 16.0, 16.0, 16.0)
     private val UP_AABB =  box(0.0, 0.0, 0.0, 16.0, 8.0, 16.0)
     private val DOWN_AABB = box(0.0, 8.0, 0.0, 16.0, 16.0, 16.0)
+    private val CODEC: MapCodec<TestHingeBlock> = simpleCodec { TestHingeBlock }
 
     init {
         registerDefaultState(this.stateDefinition.any().setValue(FACING, UP))
@@ -91,12 +93,11 @@ object TestHingeBlock :
 
     @OptIn(GameTickOnly::class)
     @Deprecated("Deprecated in Java")
-    override fun use(
+    override fun useWithoutItem(
         state: BlockState,
         level: Level,
         pos: BlockPos,
         player: Player,
-        hand: InteractionHand,
         blockHitResult: BlockHitResult
     ): InteractionResult {
         if (level.isClientSide) return InteractionResult.SUCCESS
@@ -209,6 +210,8 @@ object TestHingeBlock :
 
     override fun newBlockEntity(blockPos: BlockPos, blockState: BlockState): TestHingeBlockEntity = TestHingeBlockEntity(blockPos, blockState)
 
+    override fun codec() = CODEC
+
     override fun onCopy(
         level: ServerLevel, pos: BlockPos,
         state: BlockState,
@@ -244,4 +247,5 @@ object TestHingeBlock :
             blockEntity.tick()
         }
     }
+
 }

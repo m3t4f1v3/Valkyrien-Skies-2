@@ -207,8 +207,10 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererVanillaD
     ) {
         renderChunkLayer.call(receiver, renderType, camX, camY, camZ, poseMatrix, projectionMatrix);
 
+        final PoseStack eventPoseStack = new PoseStack();
+        eventPoseStack.mulPose(poseMatrix);
         VSGameEvents.INSTANCE.getShipsStartRendering().emit(new VSGameEvents.ShipStartRenderEvent(
-            receiver, renderType, camX, camY, camZ, poseMatrix, projectionMatrix
+            receiver, renderType, eventPoseStack, camX, camY, camZ, projectionMatrix
         ));
 
         final PoseStack poseStack = new PoseStack();
@@ -222,7 +224,7 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererVanillaD
                 camX, camY, camZ);
 
             final var event = new VSGameEvents.ShipRenderEvent(
-                receiver, renderType, camX, camY, camZ, poseStack.last().pose(), projectionMatrix, ship, chunks
+                receiver, renderType, poseStack, camX, camY, camZ, projectionMatrix, ship, chunks
             );
 
             VSGameEvents.INSTANCE.getRenderShip().emit(event);

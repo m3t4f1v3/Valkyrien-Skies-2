@@ -44,7 +44,7 @@ fun relocateBlock(
         if (it is Clearable) {
 			val blockEntity = it as BlockEntity
 			val emptyTag = CompoundTag()
-            blockEntity.load(emptyTag)
+            blockEntity.loadWithComponents(emptyTag, level.registryAccess())
 			
             //it.clearContent()
         }

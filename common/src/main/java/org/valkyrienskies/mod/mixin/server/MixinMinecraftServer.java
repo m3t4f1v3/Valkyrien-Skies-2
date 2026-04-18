@@ -33,11 +33,12 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.At.Shift;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.valkyrienskies.core.api.util.AerodynamicUtils;
 import org.valkyrienskies.core.api.ships.properties.IShipActiveChunksSet;
-import org.valkyrienskies.core.apigame.GameServer;
-import org.valkyrienskies.core.apigame.world.IPlayer;
-import org.valkyrienskies.core.apigame.world.ServerShipWorldCore;
-import org.valkyrienskies.core.apigame.world.VSPipeline;
+import org.valkyrienskies.core.internal.VsiGameServer;
+import org.valkyrienskies.core.internal.world.VsiPlayer;
+import org.valkyrienskies.core.internal.world.VsiPipeline;
+import org.valkyrienskies.core.internal.world.VsiServerShipWorld;
 import org.valkyrienskies.mod.common.IShipObjectWorldServerProvider;
 import org.valkyrienskies.mod.common.ShipSavedData;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
@@ -54,7 +55,7 @@ import org.valkyrienskies.mod.util.KrunchSupport;
 import org.valkyrienskies.mod.util.McMathUtilKt;
 
 @Mixin(MinecraftServer.class)
-public abstract class MixinMinecraftServer implements IShipObjectWorldServerProvider, GameServer {
+public abstract class MixinMinecraftServer implements IShipObjectWorldServerProvider, VsiGameServer {
     @Shadow
     private PlayerList playerList;
 
@@ -65,10 +66,10 @@ public abstract class MixinMinecraftServer implements IShipObjectWorldServerProv
     public abstract Iterable<ServerLevel> getAllLevels();
 
     @Unique
-    private ServerShipWorldCore shipWorld;
+    private VsiServerShipWorld shipWorld;
 
     @Unique
-    private VSPipeline vsPipeline;
+    private VsiPipeline vsPipeline;
 
     @Unique
     private Set<String> loadedLevels = new HashSet<>();
@@ -91,13 +92,13 @@ public abstract class MixinMinecraftServer implements IShipObjectWorldServerProv
 
     @Nullable
     @Override
-    public ServerShipWorldCore getShipObjectWorld() {
+    public VsiServerShipWorld getShipObjectWorld() {
         return shipWorld;
     }
 
     @Nullable
     @Override
-    public VSPipeline getVsPipeline() {
+    public VsiPipeline getVsPipeline() {
         return vsPipeline;
     }
 
@@ -150,7 +151,9 @@ public abstract class MixinMinecraftServer implements IShipObjectWorldServerProv
         getShipObjectWorld().addDimension(
             VSGameUtilsKt.getDimensionId(overworld()),
             VSGameUtilsKt.getYRange(overworld()),
-            McMathUtilKt.getDEFAULT_WORLD_GRAVITY()
+            McMathUtilKt.getDEFAULT_WORLD_GRAVITY(),
+            AerodynamicUtils.DEFAULT_SEA_LEVEL,
+            AerodynamicUtils.DEFAULT_MAX
         );
     }
 
@@ -159,7 +162,7 @@ public abstract class MixinMinecraftServer implements IShipObjectWorldServerProv
         at = @At("HEAD")
     )
     private void preTick(final CallbackInfo ci) {
-        final Set<IPlayer> vsPlayers = playerList.getPlayers().stream()
+        final Set<VsiPlayer> vsPlayers = playerList.getPlayers().stream()
             .map(VSGameUtilsKt::getPlayerWrapper).collect(Collectors.toSet());
 
         shipWorld.setPlayers(vsPlayers);
@@ -218,7 +221,7 @@ public abstract class MixinMinecraftServer implements IShipObjectWorldServerProv
         vsPipeline.postTickGame();
         // Only drag entities after we have updated the ship positions
         for (final ServerLevel level : getAllLevels()) {
-            EntityDragger.INSTANCE.dragEntitiesWithShips(level.getAllEntities());
+            EntityDragger.INSTANCE.dragEntitiesWithShips(level.getAllEntities(), false);
             if (LoadedMods.getWeather2())
                 Weather2Compat.INSTANCE.tick(level);
         }
