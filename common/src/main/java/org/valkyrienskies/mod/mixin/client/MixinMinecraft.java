@@ -30,6 +30,7 @@ import org.valkyrienskies.mod.common.IShipObjectWorldClientProvider;
 import org.valkyrienskies.mod.common.IShipObjectWorldServerProvider;
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod;
 import org.valkyrienskies.mod.common.util.EntityDragger;
+import org.valkyrienskies.mod.mixin.accessors.network.ConnectionAccessor;
 import org.valkyrienskies.mod.mixinducks.client.MinecraftDuck;
 
 @Mixin(Minecraft.class)
@@ -40,6 +41,8 @@ public abstract class MixinMinecraft
     private static final Logger log = LogManager.getLogger("VS2 MixinMinecraft");
     @Unique
     private static long lastLog = System.currentTimeMillis();
+    @Unique
+    private static long vs$lastNetworkingAddressLog = 0L;
 
     @Shadow
     private boolean pause;
@@ -116,7 +119,23 @@ public abstract class MixinMinecraft
     public void postTick(final CallbackInfo ci) {
         // Tick the ship world and then drag entities
         if (!pause && shipObjectWorld != null && level != null && getConnection() != null) {
-            shipObjectWorld.tickNetworking(getConnection().getConnection().getRemoteAddress());
+            final var connection = getConnection().getConnection();
+            final var remoteAddress = connection.getRemoteAddress();
+            final var channel = ((ConnectionAccessor) connection).valkyrienskies$getChannel();
+            final var localAddress = channel != null ? channel.localAddress() : null;
+            final var networkingAddress = remoteAddress != null && remoteAddress.toString().startsWith("local:")
+                ? localAddress
+                : remoteAddress;
+            if (vs$lastNetworkingAddressLog + 5000L < System.currentTimeMillis()) {
+                vs$lastNetworkingAddressLog = System.currentTimeMillis();
+                log.info(
+                    "tickNetworking networkingAddress={} remoteAddress={} localAddress={}",
+                    networkingAddress,
+                    remoteAddress,
+                    localAddress
+                );
+            }
+            shipObjectWorld.tickNetworking(networkingAddress);
             shipObjectWorld.postTick();
             EntityDragger.INSTANCE.dragEntitiesWithShips(level.entitiesForRendering(), false);
         }

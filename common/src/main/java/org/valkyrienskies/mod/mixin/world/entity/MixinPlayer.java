@@ -24,6 +24,10 @@ public abstract class MixinPlayer extends LivingEntity implements PlayerDuck {
 
     @Unique
     private final MinecraftPlayer vsPlayer = new MinecraftPlayer(Player.class.cast(this));
+    @Unique
+    private Vec3 queuedPositionUpdate = null;
+    @Unique
+    private boolean handledMovePacket = false;
 
     protected MixinPlayer(EntityType<? extends LivingEntity> entityType,
         Level level) {
@@ -33,6 +37,26 @@ public abstract class MixinPlayer extends LivingEntity implements PlayerDuck {
     @Override
     public MinecraftPlayer vs_getPlayer() {
         return vsPlayer;
+    }
+
+    @Override
+    public Vec3 vs_getQueuedPositionUpdate() {
+        return this.queuedPositionUpdate;
+    }
+
+    @Override
+    public void vs_setQueuedPositionUpdate(final Vec3 queuedPositionUpdate) {
+        this.queuedPositionUpdate = queuedPositionUpdate;
+    }
+
+    @Override
+    public boolean vs_handledMovePacket() {
+        return this.handledMovePacket;
+    }
+
+    @Override
+    public void vs_setHandledMovePacket(final boolean handledMovePacket) {
+        this.handledMovePacket = handledMovePacket;
     }
 
     @Shadow

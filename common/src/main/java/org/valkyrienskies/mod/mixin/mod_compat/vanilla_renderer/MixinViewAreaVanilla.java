@@ -67,18 +67,10 @@ public class MixinViewAreaVanilla implements IVSViewAreaMethods {
 
         if (VSGameUtilsKt.isChunkInShipyard(level, x, z)) {
             final long chunkPosAsLong = ChunkPos.asLong(x, z);
-            final SectionRenderDispatcher.RenderSection[] renderChunksArray =
-                vs$shipRenderChunks.computeIfAbsent(chunkPosAsLong,
-                    k -> new SectionRenderDispatcher.RenderSection[sectionGridSizeY]);
-
-            if (renderChunksArray[yIndex] == null) {
-                // TODO: I doubt that 0 is right, but oh well...... T_T
-                final int index = 0;
-                final SectionRenderDispatcher.RenderSection builtChunk = vs$sectionRenderDispatcher.new RenderSection(index, x << 4, y << 4, z << 4);
-                renderChunksArray[yIndex] = builtChunk;
+            final SectionRenderDispatcher.RenderSection[] renderChunksArray = vs$shipRenderChunks.get(chunkPosAsLong);
+            if (renderChunksArray != null && renderChunksArray[yIndex] != null) {
+                renderChunksArray[yIndex].setDirty(important);
             }
-
-            renderChunksArray[yIndex].setDirty(important);
 
             callbackInfo.cancel();
         }
@@ -108,6 +100,34 @@ public class MixinViewAreaVanilla implements IVSViewAreaMethods {
             final SectionRenderDispatcher.RenderSection renderChunk = renderChunksArray[chunkY];
             callbackInfoReturnable.setReturnValue(renderChunk);
         }
+    }
+
+    @Override
+    public SectionRenderDispatcher.RenderSection vs$getShipRenderSection(final int chunkX, final int sectionY, final int chunkZ) {
+        final int yIndex = sectionY - level.getMinSection();
+        if (yIndex < 0 || yIndex >= sectionGridSizeY) {
+            return null;
+        }
+        final SectionRenderDispatcher.RenderSection[] arr = vs$shipRenderChunks.get(ChunkPos.asLong(chunkX, chunkZ));
+        return arr != null ? arr[yIndex] : null;
+    }
+
+    @Override
+    public SectionRenderDispatcher.RenderSection vs$getOrCreateShipRenderSection(
+        final int chunkX, final int sectionY, final int chunkZ
+    ) {
+        final int yIndex = sectionY - level.getMinSection();
+        if (yIndex < 0 || yIndex >= sectionGridSizeY) {
+            return null;
+        }
+        final long key = ChunkPos.asLong(chunkX, chunkZ);
+        final SectionRenderDispatcher.RenderSection[] arr =
+            vs$shipRenderChunks.computeIfAbsent(key, k -> new SectionRenderDispatcher.RenderSection[sectionGridSizeY]);
+        if (arr[yIndex] == null) {
+            arr[yIndex] = vs$sectionRenderDispatcher.new RenderSection(0, chunkX << 4, sectionY << 4, chunkZ << 4);
+        }
+        arr[yIndex].setDirty(true);
+        return arr[yIndex];
     }
 
     @Override

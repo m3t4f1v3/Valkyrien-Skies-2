@@ -29,6 +29,7 @@ import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
+import org.joml.Vector3d;
 import org.joml.Vector3dc;
 import org.joml.Vector3f;
 import org.joml.primitives.AABBd;
@@ -44,15 +45,19 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.valkyrienskies.core.api.ships.ClientShip;
 import org.valkyrienskies.core.api.ships.Ship;
 import org.valkyrienskies.core.util.datastructures.BlockPos2ByteOpenHashMap;
+import org.valkyrienskies.mod.common.assembly.SeamlessChunksManager;
 import org.valkyrienskies.mod.common.VSClientGameUtils;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
+import org.valkyrienskies.mod.common.config.ShipRenderer;
+import org.valkyrienskies.mod.common.config.ShipRendererKt;
 import org.valkyrienskies.mod.common.hooks.VSGameEvents;
 import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
-import org.valkyrienskies.mod.mixin.accessors.client.render.ViewAreaAccessor;
+import org.valkyrienskies.mod.mixinducks.client.render.IVSViewAreaMethods;
+import org.valkyrienskies.mod.mixinducks.mod_compat.vanilla_renderer.LevelRendererDuck;
 import org.valkyrienskies.mod.mixinducks.client.render.LevelRendererVanillaDuck;
 
 @Mixin(value = LevelRenderer.class, priority = 999)
-public abstract class MixinLevelRendererVanilla implements LevelRendererVanillaDuck {
+public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, LevelRendererVanillaDuck {
     @Unique
     private final WeakHashMap<ClientShip, ObjectArrayList<SectionRenderDispatcher.RenderSection>> vs$shipRenderChunks = new WeakHashMap<>();
     @Shadow
@@ -89,6 +94,21 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererVanillaD
         );
     }
 
+    @Override
+    public void vs$setNeedsFrustumUpdate() {
+        // 1.21's renderer invalidation path changed; ship sections are rebuilt and re-discovered
+        // through the custom view-area path below, so a no-op is safer than shadowing a stale field.
+    }
+
+    @Inject(method = "setupRender", at = @At("HEAD"))
+    private void vs$drainShipChunksBeforeRender(final Camera camera, final Frustum frustum, final boolean bl, final boolean bl2,
+        final CallbackInfo ci) {
+        final SeamlessChunksManager manager = SeamlessChunksManager.get();
+        if (manager != null) {
+            manager.drainDeferredBatch();
+        }
+    }
+
     /**
      * Add ship render chunks to [renderChunks]
      */
@@ -103,9 +123,11 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererVanillaD
 
     @Override
     public void vs$addShipVisibleChunks(final Frustum frustum) {
-        final BlockPos.MutableBlockPos tempPos = new BlockPos.MutableBlockPos();
-        final ViewAreaAccessor chunkStorageAccessor = (ViewAreaAccessor) viewArea;
+        final IVSViewAreaMethods shipViewArea = (IVSViewAreaMethods) viewArea;
         for (final ClientShip shipObject : VSGameUtilsKt.getShipObjectWorld(level).getLoadedShips()) {
+            if (ShipRendererKt.getShipRenderer(shipObject) != ShipRenderer.VANILLA) {
+                continue;
+            }
             // Don't bother rendering the ship if its AABB isn't visible to the frustum
             if (!frustum.isVisible(VectorConversionsMCKt.toMinecraft(shipObject.getRenderAABB()))) {
                 continue;
@@ -118,17 +140,16 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererVanillaD
                     if (vs$visibileShipChunks.contains(x, y, z)) {
                         continue;
                     }
-                    tempPos.set(x << 4, y << 4, z << 4);
-                    final SectionRenderDispatcher.RenderSection renderChunk =
-                        chunkStorageAccessor.callGetRenderSectionAt(tempPos);
-                    if (renderChunk != null) {
-                        // If the chunk section is empty then skip it
-                        final LevelChunkSection levelChunkSection = levelChunk.getSection(y - level.getMinSection());
-                        if (levelChunkSection.hasOnlyAir()) {
-                            continue;
-                        }
+                    final LevelChunkSection levelChunkSection = levelChunk.getSection(y - level.getMinSection());
+                    if (levelChunkSection.hasOnlyAir()) {
+                        continue;
+                    }
 
-                        // If the chunk isn't in the frustum then skip it
+                    SectionRenderDispatcher.RenderSection renderChunk = shipViewArea.vs$getShipRenderSection(x, y, z);
+                    if (renderChunk == null) {
+                        renderChunk = shipViewArea.vs$getOrCreateShipRenderSection(x, y, z);
+                    }
+                    if (renderChunk != null) {
                         final AABBd b2 = new AABBd((x << 4) - 6e-1, (y << 4) - 6e-1, (z << 4) - 6e-1,
                             (x << 4) + 15.6, (y << 4) + 15.6, (z << 4) + 15.6)
                             .transform(shipObject.getRenderTransform().getShipToWorld());
@@ -218,7 +239,7 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererVanillaD
 
         vs$shipRenderChunks.forEach((ship, chunks) -> {
             poseStack.pushPose();
-            final Vector3dc center = ship.getRenderTransform().getPositionInShip();
+            final Vector3dc center = ship.getRenderTransform().getWorldToShip().transformPosition(new Vector3d(camX, camY, camZ));
             VSClientGameUtils.transformRenderWithShip(ship.getRenderTransform(), poseStack,
                 center.x(), center.y(), center.z(),
                 camX, camY, camZ);

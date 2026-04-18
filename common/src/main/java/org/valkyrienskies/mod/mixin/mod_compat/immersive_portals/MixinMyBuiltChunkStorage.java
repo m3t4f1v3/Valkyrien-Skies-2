@@ -110,6 +110,34 @@ public class MixinMyBuiltChunkStorage extends ViewArea implements IVSViewAreaMet
     }
 
     @Override
+    public SectionRenderDispatcher.RenderSection vs$getShipRenderSection(final int chunkX, final int sectionY, final int chunkZ) {
+        final int yIndex = sectionY - level.getMinSection();
+        if (yIndex < 0 || yIndex >= sectionGridSizeY) {
+            return null;
+        }
+        final SectionRenderDispatcher.RenderSection[] arr = vs$shipRenderChunks.get(ChunkPos.asLong(chunkX, chunkZ));
+        return arr != null ? arr[yIndex] : null;
+    }
+
+    @Override
+    public SectionRenderDispatcher.RenderSection vs$getOrCreateShipRenderSection(
+        final int chunkX, final int sectionY, final int chunkZ
+    ) {
+        final int yIndex = sectionY - level.getMinSection();
+        if (yIndex < 0 || yIndex >= sectionGridSizeY) {
+            return null;
+        }
+        final long key = ChunkPos.asLong(chunkX, chunkZ);
+        final SectionRenderDispatcher.RenderSection[] arr =
+            vs$shipRenderChunks.computeIfAbsent(key, k -> new SectionRenderDispatcher.RenderSection[sectionGridSizeY]);
+        if (arr[yIndex] == null) {
+            arr[yIndex] = vs$chunkBuilder.new RenderSection(0, chunkX << 4, sectionY << 4, chunkZ << 4);
+        }
+        arr[yIndex].setDirty(true);
+        return arr[yIndex];
+    }
+
+    @Override
     public void valkyrienskies$unloadChunk(final int chunkX, final int chunkZ) {
         if (VSGameUtilsKt.isChunkInShipyard(level, chunkX, chunkZ)) {
             final SectionRenderDispatcher.RenderSection[] chunks =

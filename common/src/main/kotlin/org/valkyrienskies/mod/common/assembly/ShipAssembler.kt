@@ -471,6 +471,8 @@ object ShipAssembler {
         // ChunkHolders and starting their pipelines. Then getChunk blocks on each
         // one — but since all pipelines are already running concurrently on the worker
         // thread pool, most will complete quickly.
+        (chunkSource as org.valkyrienskies.mod.mixin.accessors.server.level.ServerChunkCacheAccessor)
+            .callRunDistanceManagerUpdates()
         for (cp in allDestChunkPoses) {
             level.getChunk(cp.x, cp.z)
         }
