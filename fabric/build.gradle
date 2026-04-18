@@ -41,7 +41,7 @@ dependencies {
     include(modImplementation "fuzs.forgeconfigapiport:forgeconfigapiport-fabric:${rootProject.fcap_version}")
 
     modCompileOnly("maven.modrinth:create-utilities:${create_utilities_version}")
-    modCompileOnly("maven.modrinth:sodium:${sodium_version}")
+    modCompileOnly("maven.modrinth:sodium:${sodium_version}-fabric")
     // Disable indium until we update sodium to newer versions
     //modRuntimeOnly("maven.modrinth:indium:${indium_version}")
     modImplementation("maven.modrinth:modmenu:${modmenu_version}")

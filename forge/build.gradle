@@ -25,7 +25,7 @@ sourceSets {
             exclude "org/valkyrienskies/mod/forge/mixin/compat/hexcasting/**"
             exclude "org/valkyrienskies/mod/forge/mixin/compat/connectiblechains/**"
             exclude "org/valkyrienskies/mod/forge/mixin/compat/emf/**"
-            exclude "org/valkyrienskies/mod/forge/mixin/compat/sodium/**"
+            // exclude "org/valkyrienskies/mod/forge/mixin/compat/sodium/**"
             exclude "org/valkyrienskies/mod/forge/mixin/compat/create/client/MixinSuperGlueSelectionHandler66.java"
             exclude "org/valkyrienskies/mod/forge/mixin/feature/forge_interact/MixinIForge2Player.java"
             exclude "org/valkyrienskies/mod/forge/mixin/compat/create/MixinDeployerHandler.java"
@@ -152,6 +152,17 @@ dependencies {
 
     // Dynmap
     modCompileOnly("maven.modrinth:dynmap:${dynmap_version}")
+
+    modCompileOnly("maven.modrinth:sodium:${sodium_version}-neoforge")
+
+    modRuntimeOnly("dev.ryanhcode.sable:sable-neoforge-1.21.1:1.0.5")
+    runtimeOnly("dev.ryanhcode.sable-companion:sable-companion-common-1.21.1:1.4.2")
+    modRuntimeOnly("foundry.veil:veil-neoforge-1.21.1:3.5.0")
+    forgeRuntimeLibrary include("gg.moonflower:molang-compiler:3.1.1.19")
+    forgeRuntimeLibrary include("io.github.ocelot:glsl-processor:0.2.3")
+    forgeRuntimeLibrary include("io.github.spair:imgui-java-binding:1.88.0")
+    forgeRuntimeLibrary include("io.github.spair:imgui-java-lwjgl3:1.88.0")
+    
 
     // Hexcasting-family compat from 1.20.1 is disabled on 1.21.1 until the platform coordinates are restored.
 

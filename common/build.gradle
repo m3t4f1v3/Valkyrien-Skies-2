@@ -27,7 +27,7 @@ dependencies {
     modApi("me.shedaniel.cloth:cloth-config:${cloth_config_version}")
     modCompileOnly "fuzs.forgeconfigapiport:forgeconfigapiport-common:${rootProject.fcap_version}"
 
-    modCompileOnly("maven.modrinth:sodium:${sodium_version}")
+    modCompileOnly("maven.modrinth:sodium:${sodium_version}-fabric")
 
     // Alex Caves
     modCompileOnly("maven.modrinth:alexs-caves:$alexscaves_version")
@@ -57,6 +57,9 @@ dependencies {
 
     // Dynmap
     modCompileOnly("maven.modrinth:dynmap:${dynmap_version}")
+
+    modCompileOnly("dev.ryanhcode.sable:sable-common-1.21.1:1.0.5")
+    modCompileOnly("dev.ryanhcode.sable-companion:sable-companion-common-1.21.1:1.4.2")
 
     // Hexcasting-family compat from 1.20.1 does not currently resolve on 1.21.1.
     // The related sources are excluded below until the 1.21.1 coordinates are restored.
@@ -115,7 +118,7 @@ sourceSets {
             exclude "org/valkyrienskies/mod/mixin/mod_compat/flywheel/**"
             exclude "org/valkyrienskies/mod/mixin/mod_compat/create_big_cannons/**"
             exclude "org/valkyrienskies/mod/mixin/mod_compat/flywheel_renderer/**"
-            exclude "org/valkyrienskies/mod/mixin/mod_compat/sodium/**"
+            // exclude "org/valkyrienskies/mod/mixin/mod_compat/sodium/**"
             exclude "org/valkyrienskies/mod/compat/FlywheelEvents.java"
             exclude "org/valkyrienskies/mod/compat/flywheel/**"
             exclude "org/valkyrienskies/mod/mixin/accessors/client/render/chunk/**"

@@ -45,7 +45,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.valkyrienskies.core.api.ships.ClientShip;
 import org.valkyrienskies.core.api.ships.Ship;
 import org.valkyrienskies.core.util.datastructures.BlockPos2ByteOpenHashMap;
-import org.valkyrienskies.mod.common.assembly.SeamlessChunksManager;
 import org.valkyrienskies.mod.common.VSClientGameUtils;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.config.ShipRenderer;
@@ -98,15 +97,6 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
     public void vs$setNeedsFrustumUpdate() {
         // 1.21's renderer invalidation path changed; ship sections are rebuilt and re-discovered
         // through the custom view-area path below, so a no-op is safer than shadowing a stale field.
-    }
-
-    @Inject(method = "setupRender", at = @At("HEAD"))
-    private void vs$drainShipChunksBeforeRender(final Camera camera, final Frustum frustum, final boolean bl, final boolean bl2,
-        final CallbackInfo ci) {
-        final SeamlessChunksManager manager = SeamlessChunksManager.get();
-        if (manager != null) {
-            manager.drainDeferredBatch();
-        }
     }
 
     /**

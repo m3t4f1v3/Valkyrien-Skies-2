@@ -1,6 +1,7 @@
 package org.valkyrienskies.mod.common
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation
+import dev.ryanhcode.sable.companion.SableCompanion
 import net.minecraft.client.Minecraft
 import net.minecraft.client.multiplayer.ClientLevel
 import net.minecraft.world.level.block.Blocks
@@ -294,7 +295,12 @@ inline fun Level.transformToNearbyShipsAndWorld(
 
 // Level
 fun Level.isChunkInShipyard(chunkX: Int, chunkZ: Int) =
-    shipObjectWorld.isChunkInShipyard(chunkX, chunkZ, dimensionId)
+    shipObjectWorld.isChunkInShipyard(chunkX, chunkZ, dimensionId) &&
+        !isHandledBySable(chunkX, chunkZ)
+
+private fun Level.isHandledBySable(chunkX: Int, chunkZ: Int): Boolean {
+    return SableCompanion.INSTANCE.isInPlotGrid(this, chunkX, chunkZ) == true
+}
 
 fun Level.isBlockInShipyard(blockX: Int, blockY: Int, blockZ: Int) =
     shipObjectWorld.isBlockInShipyard(blockX, blockY, blockZ, dimensionId)

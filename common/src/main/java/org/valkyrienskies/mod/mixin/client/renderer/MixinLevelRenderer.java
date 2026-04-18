@@ -6,6 +6,7 @@ import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.SectionOcclusionGraph;
+import net.minecraft.client.renderer.culling.Frustum;
 import org.joml.Matrix4f;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -17,6 +18,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyConstant;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.valkyrienskies.core.api.ships.properties.ShipTransform;
+import org.valkyrienskies.mod.common.assembly.SeamlessChunksManager;
 import org.valkyrienskies.mod.client.IVSCamera;
 
 @Mixin(LevelRenderer.class)
@@ -28,18 +30,27 @@ public abstract class MixinLevelRenderer {
     @Unique
     private ShipTransform valkyrienskies$prevShipMountedToTransform = null;
 
+    @Inject(method = "setupRender", at = @At("HEAD"))
+    private void vs$drainDeferredShipChunkPackets(final Camera camera, final Frustum frustum, final boolean bl,
+        final boolean bl2, final CallbackInfo ci) {
+        final SeamlessChunksManager manager = SeamlessChunksManager.get();
+        if (manager != null) {
+            manager.drainDeferredBatch();
+        }
+    }
+
     /**
      * @reason This mixin forces the game to always render block damage.
      */
-    @ModifyConstant(
-        method = "renderLevel",
-        constant = @Constant(
-            doubleValue = 1024,
-            ordinal = 0
-        ))
-    private double disableBlockDamageDistanceCheck(final double originalBlockDamageDistanceConstant) {
-        return Double.MAX_VALUE;
-    }
+    // @ModifyConstant(
+    //     method = "renderLevel",
+    //     constant = @Constant(
+    //         doubleValue = 1024,
+    //         ordinal = 0
+    //     ))
+    // private double disableBlockDamageDistanceCheck(final double originalBlockDamageDistanceConstant) {
+    //     return Double.MAX_VALUE;
+    // }
 
     @Inject(method = "renderLevel", at = @At("HEAD"))
     private void preRenderLevel(DeltaTracker deltaTracker, boolean bl, Camera camera, GameRenderer gameRenderer,

@@ -26,6 +26,7 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.service.MixinService;
 import org.valkyrienskies.core.api.ships.ClientShip;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.mixinducks.mod_compat.sodium.RenderSectionManagerDuck;
@@ -100,7 +101,7 @@ public abstract class MixinRenderSectionManager implements RenderSectionManagerD
                 this.taskLists.get(entry.getKey()).addAll(entry.getValue());
             }
         }
-        this.rebuildLists.forEach(
+        this.taskLists.forEach(
             (type, rebuildLists) -> {
                 final List<RenderSection> rebuildSorted = new ArrayList<>(rebuildLists);
                 rebuildSorted.sort(Comparator.comparingDouble(section -> section.getSquaredDistance(camera.getBlockPosition())));

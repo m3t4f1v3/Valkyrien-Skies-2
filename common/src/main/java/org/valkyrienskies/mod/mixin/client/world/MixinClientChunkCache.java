@@ -187,8 +187,9 @@ public abstract class MixinClientChunkCache implements ClientChunkCacheDuck {
             if (ValkyrienCommonMixinConfigPlugin.getVSRenderer() != VSRenderer.SODIUM) {
                 ((IVSViewAreaMethods) ((LevelRendererAccessor) ((ClientLevelAccessor) level).getLevelRenderer()).getViewArea())
                     .valkyrienskies$unloadChunk(chunkX, chunkZ);
+            } else {
+                SodiumCompat.onChunkRemoved(this.level, chunkX, chunkZ);
             }
-            SodiumCompat.onChunkRemoved(this.level, chunkX, chunkZ);
             ci.cancel();
         }
     }
@@ -222,8 +223,9 @@ public abstract class MixinClientChunkCache implements ClientChunkCacheDuck {
         if (ValkyrienCommonMixinConfigPlugin.getVSRenderer() != VSRenderer.SODIUM) {
             ((IVSViewAreaMethods) ((LevelRendererAccessor) ((ClientLevelAccessor) level).getLevelRenderer()).getViewArea())
                 .valkyrienskies$unloadChunk(chunkX, chunkZ);
+        } else {
+            SodiumCompat.onChunkRemoved(level, chunkX, chunkZ);
         }
-        SodiumCompat.onChunkRemoved(level, chunkX, chunkZ);
     }
 
     @Unique

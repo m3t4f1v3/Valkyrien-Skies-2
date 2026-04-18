@@ -290,6 +290,10 @@ subprojects {
                 }
                 filter {
                     includeGroup("at.petra-k.hexcasting")
+                    // sable
+                    includeGroup("foundry.veil")
+                    includeGroup("io.github.ocelot")
+                    includeGroup("gg.moonflower")
                 }
             }
             exclusiveContent {
@@ -309,6 +313,17 @@ subprojects {
                 }
                 filter {
                     includeGroup('com.github.iPortalTeam')
+                }
+            }
+            exclusiveContent {
+                forRepository {
+                    maven {
+                        url = "https://maven.ryanhcode.dev/releases"
+                    }
+                }
+                filter {
+                    includeGroup("dev.ryanhcode.sable")
+                    includeGroup("dev.ryanhcode.sable-companion")
                 }
             }
         }
