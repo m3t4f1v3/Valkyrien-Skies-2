@@ -1,6 +1,11 @@
 package org.valkyrienskies.mod.mixin.mod_compat.sodium;
 
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
 import net.caffeinemc.mods.sodium.client.render.chunk.ChunkUpdateType;
@@ -52,10 +57,16 @@ public abstract class MixinRenderSectionManager implements RenderSectionManagerD
     private ClientLevel level;
 
     @Shadow
+    private SortedRenderLists renderLists;
+
+    @Shadow
     protected abstract RenderSection getRenderSection(int x, int y, int z);
 
     @Shadow
     private Map<ChunkUpdateType, ArrayDeque<RenderSection>> taskLists;
+
+    @Shadow
+    public abstract void tickVisibleRenders();
 
     @Inject(at = @At("TAIL"), method = "createTerrainRenderList")
     private void afterIterateChunks(Camera camera, Viewport viewport, int frame, boolean spectator, CallbackInfo ci) {
@@ -89,6 +100,28 @@ public abstract class MixinRenderSectionManager implements RenderSectionManagerD
                 this.taskLists.get(entry.getKey()).addAll(entry.getValue());
             }
         }
+        this.rebuildLists.forEach(
+            (type, rebuildLists) -> {
+                final List<RenderSection> rebuildSorted = new ArrayList<>(rebuildLists);
+                rebuildSorted.sort(Comparator.comparingDouble(section -> section.getSquaredDistance(camera.getBlockPosition())));
+                rebuildLists.clear();
+                rebuildLists.addAll(rebuildSorted);
+            }
+        );
+    }
+
+    @WrapMethod(method = "tickVisibleRenders")
+    private void tickVisibleShipRenders(Operation<Void> original) {
+        original.call();
+
+        SortedRenderLists trueRenderLists = renderLists;
+
+        for (final SortedRenderLists currentShipRenderLists : shipRenderLists.values()) {
+            renderLists = currentShipRenderLists;
+            original.call();
+        }
+
+        renderLists = trueRenderLists;
     }
 
     @Inject(at = @At("TAIL"), method = "resetRenderLists")

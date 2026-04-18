@@ -32,3 +32,20 @@ mandatory = true
 versionRange = "[1.21.1]"
 ordering = "NONE"
 side = "BOTH"
+
+[[dependencies.valkyrienskies]]
+modId = "create"
+mandatory = false
+versionRange = "[6.0.6, )"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.valkyrienskies]]
+modId = "computercraft"
+mandatory = false
+versionRange = "[1.115.1,)"
+ordering = "NONE"
+side = "BOTH"
+
+["lithium:options"]
+mixin.ai.poi = false

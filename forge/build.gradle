@@ -19,6 +19,14 @@ architectury {
     neoForge()
 }
 
+sourceSets {
+    main {
+        resources {
+            srcDir "$buildDir/generated/resources"
+        }
+    }
+}
+
 loom {
     accessWidenerPath = project(":common").loom.accessWidenerPath
 
@@ -61,6 +69,8 @@ dependencies {
     //modCompileOnly("curse.maven:rubidium-574856:4024781")
     modCompileOnly("maven.modrinth:embeddium:${embeddium_version}")
 
+    modRuntimeOnly("maven.modrinth:forge-config-screens:v8.0.2-1.20.1-Forge")
+
     // Twilight Forest
     // modImplementation("teamtwilight:twilightforest:${twilightforest_version}:universal")
 
@@ -77,7 +87,12 @@ dependencies {
     // modImplementation("curse.maven:coroutil-237749:5096038")
 
     // CC Tweaked
-    modCompileOnly("maven.modrinth:cc-tweaked:${cc_tweaked_version}")
+    modRuntimeOnly("cc.tweaked:cc-tweaked-${minecraft_version}-forge:${cc_tweaked_version}")
+
+    //modImplementation("curse.maven:vmp-forge-892037:4657678")
+
+    // OpenComputers 2: Reimagined
+    modCompileOnly("maven.modrinth:oc2r:${oc2r_version}")
 
     // EMF compat
     // https://www.curseforge.com/minecraft/mc-mods/entity-model-features/files/all?page=1&pageSize=20&version=1.21.1
@@ -97,11 +112,35 @@ dependencies {
     // https://www.curseforge.com/minecraft/mc-mods/modular-routers/files/all?page=1&pageSize=20&version=1.21.1
     modCompileOnly("curse.maven:modular-routers-250294:6130459")
 
+    // Modular Force Field System
+    modCompileOnly("maven.modrinth:mffs:5.1.18")
+
+    // Epic Fight
+    modCompileOnly("maven.modrinth:epic-fight:20.10.3")
+
+    // Dynmap
+    modCompileOnly("maven.modrinth:dynmap:${dynmap_version}")
+
+    // Hexcasting
+    modCompileOnly("at.petra-k.hexcasting:hexcasting-forge-${minecraft_version}:${hexcasting_version}") { transitive = false }
+
+    // HexTweaks
+    modCompileOnly("maven.modrinth:hextweaks:$hextweaks_version")
+
+    // Ephemera
+    modCompileOnly("maven.modrinth:ephemera:$ephemera_version")
+
+    // Hexal
+    modCompileOnly("ram.talia.hexal:hexal-forge-$minecraft_version:$hexal_version") { transitive = false }
+
     // Integrated Dynamics
     // https://www.curseforge.com/minecraft/mc-mods/integrated-dynamics/files/all?page=1&pageSize=20&version=1.21.1
     modCompileOnly("curse.maven:integrated-dynamics-236307:6250036")
     modCompileOnly("curse.maven:cyclops-core-232758:6230091")
     modCompileOnly("curse.maven:common-capabilities-247007:5980086")
+
+    // Very Many Players
+    //modCompileOnly("maven.modrinth:vmp-forge:0.2.0+beta.7.101+1.20.1")
 
     // Mekanism
     modCompileOnly ("curse.maven:mekanism-268560:6242484")
@@ -113,7 +152,11 @@ dependencies {
     include(modImplementation("me.shedaniel.cloth:cloth-config-neoforge:${cloth_config_version}"))
 
     // Shade vs-core
-    implementation("org.valkyrienskies.core:impl:${rootProject.vs_core_version}"){
+    implementation("org.valkyrienskies.core:util:${rootProject.vs_core_version}")
+    implementation("org.valkyrienskies.core:internal:${rootProject.vs_core_version}") {
+        exclude group: 'org.joml', module: 'joml'
+    }
+    runtimeOnly("org.valkyrienskies.core:impl:${rootProject.vs_core_version}") {
         exclude group: 'org.joml', module: 'joml'
     }
     forgeRuntimeLibrary shadowCommon("org.valkyrienskies.core:impl:${rootProject.vs_core_version}") {
@@ -127,7 +170,7 @@ dependencies {
         transitive = false
     }
 
-    forgeRuntimeLibrary shadowCommon("org.valkyrienskies.core:api-game:${rootProject.vs_core_version}") {
+    forgeRuntimeLibrary shadowCommon("org.valkyrienskies.core:internal:${rootProject.vs_core_version}") {
         exclude group: 'org.joml', module: 'joml'
         transitive = false
     }
@@ -137,12 +180,12 @@ dependencies {
         transitive = false
     }
 
-    forgeRuntimeLibrary shadowCommon("org.valkyrienskies:physics_api_krunch:1.0.0+7db6a103f1") {
+    forgeRuntimeLibrary shadowCommon("org.valkyrienskies:physics_api_krunch:${rootProject.krunch_version}") {
         exclude group: 'org.joml', module: 'joml'
         transitive = false
     }
 
-    forgeRuntimeLibrary shadowCommon("org.valkyrienskies:physics_api:1.0.0+0ba0cc41e1") {
+    forgeRuntimeLibrary shadowCommon("org.valkyrienskies:physics_api:${rootProject.krunch_api_version}") {
         exclude group: 'org.joml', module: 'joml'
         transitive = false
     }
@@ -188,7 +231,16 @@ tasks.runServer.configure {
     jvmArgs '-Dkotlinx.coroutines.debug=off'
 }
 
+// Copy the VS common access widener to the generated resources folder.
+def generatedResourcesDir = layout.buildDirectory.dir("generated/resources")
+
+tasks.register("copyAccessWidener", Copy) {
+    from(project(":common").file("src/main/resources/valkyrienskies-common.accesswidener"))
+    into(generatedResourcesDir)
+}
+
 processResources {
+    dependsOn("copyAccessWidener")
     inputs.property "version", project.version
 
     filesMatching('META-INF/neoforge.mods.toml') {
@@ -248,6 +300,8 @@ jar {
 }
 
 sourcesJar {
+    dependsOn("copyAccessWidener")
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     def commonSources = project(":common").sourcesJar
     dependsOn commonSources
     from commonSources.archiveFile.map { zipTree(it) }

@@ -1,8 +1,8 @@
-accessWidener	v1	named
+accessWidener	v2	named
 
 # Only put classes in here. For everything else use Accessor mixins
 
-# For ChunkMap
+# For ChunkMap, ClientChunkCache
 accessible	class	net/minecraft/client/multiplayer/ClientChunkCache$Storage
 
 # For including entities on ships getting send to the client
@@ -18,3 +18,20 @@ mutable field    net/minecraft/world/phys/HitResult  location    Lnet/minecraft/
 accessible field    net/minecraft/world/phys/HitResult  location    Lnet/minecraft/world/phys/Vec3;
 
 accessible  class   net/minecraft/server/level/ChunkMap$DistanceManager
+
+accessible  class   net/minecraft/world/entity/ai/behavior/AcquirePoi$JitteredLinearRetry
+
+accessible  class   net/minecraft/world/entity/animal/Bee$BeePollinateGoal
+accessible  class   net/minecraft/world/entity/animal/Bee$BeeEnterHiveGoal
+accessible  class   net/minecraft/world/entity/animal/Bee$BeeLocateHiveGoal
+accessible  class   net/minecraft/world/entity/animal/Bee$BeeGrowCropGoal
+accessible  class   net/minecraft/world/entity/animal/Bee$BaseBeeGoal
+
+# For flywheel lighting engine
+mutable field   net/minecraft/world/level/lighting/LevelLightEngine   blockEngine    Lnet/minecraft/world/level/lighting/LightEngine;
+
+# For unloading shipyard chunks when teleporting across dimensions
+accessible class net/minecraft/world/level/chunk/LevelChunk$RebindableTickingBlockEntityWrapper
+accessible method net/minecraft/world/level/chunk/LevelChunk$RebindableTickingBlockEntityWrapper rebind (Lnet/minecraft/world/level/block/entity/TickingBlockEntity;)V
+
+accessible class net/minecraft/server/level/ServerLevel$EntityCallbacks

@@ -9,14 +9,16 @@ import net.minecraft.world.item.context.UseOnContext
 import net.minecraft.world.level.block.Rotation.NONE
 import net.minecraft.world.level.block.state.BlockState
 import org.joml.Vector3d
-import org.valkyrienskies.core.impl.game.ships.ShipDataCommon
-import org.valkyrienskies.core.impl.game.ships.ShipTransformImpl
+import org.valkyrienskies.core.api.VsBeta
+import org.valkyrienskies.core.internal.ships.VsiServerShip
 import org.valkyrienskies.mod.common.dimensionId
 import org.valkyrienskies.mod.common.getShipManagingPos
 import org.valkyrienskies.mod.common.shipObjectWorld
+import org.valkyrienskies.mod.common.util.EntityShipCollisionUtils
 import org.valkyrienskies.mod.common.util.toBlockPos
 import org.valkyrienskies.mod.common.util.toJOML
 import org.valkyrienskies.mod.common.util.toJOMLD
+import org.valkyrienskies.mod.common.vsCore
 import org.valkyrienskies.mod.common.yRange
 import org.valkyrienskies.mod.util.relocateBlock
 import java.util.function.DoubleSupplier
@@ -29,6 +31,7 @@ class ShipCreatorItem(
         return true
     }
 
+    @OptIn(VsBeta::class)
     override fun useOn(ctx: UseOnContext): InteractionResult {
         val level = ctx.level as? ServerLevel ?: return super.useOn(ctx)
         val blockPos = ctx.clickedPos
@@ -43,15 +46,28 @@ class ShipCreatorItem(
                 val scale = scale.asDouble
                 val minScaling = minScaling.asDouble
 
+                org.slf4j.LoggerFactory.getLogger("VS2").info(" ShipCreatorItem: creating ship at $blockPos (block=$blockState, dim=$dimensionId, scale=$scale)")
+
                 val serverShip =
                     level.shipObjectWorld.createNewShipAtBlock(blockPos.toJOML(), false, scale, dimensionId)
 
+                org.slf4j.LoggerFactory.getLogger("VS2").info(" ShipCreatorItem: ship created id=${serverShip.id}, slug=${serverShip.slug}")
+
+                // Mark this ship as recently spawned so the player isn't frozen while
+                // the ship's chunks load. Without this, the player's movement is cancelled
+                // by isCollidingWithUnloadedShips() because the new ship exists in allShips
+                // but its chunks haven't reached FULL status yet.
+                EntityShipCollisionUtils.markShipAsRecentlySpawned(serverShip.id, level.server.tickCount.toLong())
+
                 val centerPos = serverShip.chunkClaim.getCenterBlockCoordinates(level.yRange).toBlockPos()
+                org.slf4j.LoggerFactory.getLogger("VS2").info(" ShipCreatorItem: relocating block from $blockPos to $centerPos in shipyard")
 
                 // Move the block from the world to a ship
                 level.relocateBlock(blockPos, centerPos, true, serverShip, NONE)
 
-                ctx.player?.sendSystemMessage(Component.literal("SHIPIFIED!"))
+                org.slf4j.LoggerFactory.getLogger("VS2").info(" ShipCreatorItem: block relocated. Ship transform pos=(${serverShip.transform.position})")
+
+                ctx.player?.sendSystemMessage(Component.translatable("command.valkyrienskies.shipify.success_one", serverShip.slug))
                 if (parentShip != null) {
                     // Compute the ship transform
                     val newShipPosInWorld =
@@ -63,9 +79,15 @@ class ShipCreatorItem(
                         // Do not allow scaling to go below minScaling
                         newShipScaling = Vector3d(minScaling, minScaling, minScaling)
                     }
-                    val shipTransform =
-                        ShipTransformImpl(newShipPosInWorld, newShipPosInShipyard, newShipRotation, newShipScaling)
-                    (serverShip as ShipDataCommon).transform = shipTransform
+
+
+                    val newTransform = vsCore.newBodyTransform(
+                        newShipPosInWorld,
+                        newShipRotation,
+                        newShipScaling,
+                        newShipPosInShipyard,
+                    )
+                    (serverShip as VsiServerShip).unsafeSetTransform(newTransform)
                 }
             }
         }

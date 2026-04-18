@@ -12,7 +12,41 @@ object LoadedMods {
     val weather2 by CompatInfo("weather2.Weather")
 
     @JvmStatic
+    val alexCaves by CompatInfo("com.github.alexmodguy.alexscaves.AlexsCaves")
+
+    @JvmStatic
     val immersivePortals by CompatInfo("qouteall.imm_ptl.core.IPModMain")
+
+    @JvmStatic
+    val create by CompatInfo("com.simibubi.create.AllMountedDispenseItemBehaviors")
+
+    @JvmStatic
+    val oldCreate by CompatInfo("com.simibubi.create.foundation.render.AllInstanceFormats")
+
+    @JvmStatic
+    val flywheel: FlywheelVersion by lazy {
+        try {
+            Class.forName("dev.engine_room.flywheel.backend.FlwBackend")
+            FlywheelVersion.V1
+        } catch (e: ClassNotFoundException) {
+            try {
+                Class.forName("com.jozufozu.flywheel.Flywheel")
+                FlywheelVersion.V06
+            } catch (_: ClassNotFoundException) {
+                FlywheelVersion.NONE
+            }
+        }
+    }
+
+    @JvmStatic
+    val bluemap: String by lazy {
+        try {
+            val claz = Class.forName("de.bluecolored.bluemap.core.BlueMap")
+            claz.getField("VERSION").get(null) as String
+        } catch (e: ClassNotFoundException) {
+            "NONE"
+        }
+    }
 
     class CompatInfo(private val className: String) : ReadOnlyProperty<Any?, Boolean> {
         private var isLoaded: Boolean? = null
@@ -28,5 +62,17 @@ object LoadedMods {
             }
             return isLoaded!!
         }
+    }
+
+    enum class FlywheelVersion {
+        V1,
+        V06,
+        NONE
+    }
+
+    enum class BluemapVersion {
+        V53,
+        V512,
+        NONE
     }
 }

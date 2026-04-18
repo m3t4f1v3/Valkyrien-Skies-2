@@ -17,8 +17,8 @@ object ContraptionShipyardEntityHandlerForge: AbstractShipyardEntityHandler() {
         /*
         if (entity is AbstractContraptionEntity && ship is LoadedServerShip) {
             entity as ContraptionWingProvider
-            val attachment = ship.getAttachment(WingManager::class.java)!!
-            entity.wingGroupId = attachment.createWingGroup()
+            val attachment = ship.wingManager!!
+            entity.wingGroupId = attachment.createWingGroup(true)
             entity.contraption.blocks.forEach { (pos: BlockPos, blockInfo: StructureTemplate.StructureBlockInfo) ->
                 val block = blockInfo.state.block
                 if (block is WingBlock) {
@@ -36,7 +36,7 @@ object ContraptionShipyardEntityHandlerForge: AbstractShipyardEntityHandler() {
         /*
         if (entity is AbstractContraptionEntity && ship is LoadedServerShip) {
             entity as ContraptionWingProvider
-            val attachment = ship.getAttachment(WingManager::class.java)!!
+            val attachment = ship.wingManager!!
             attachment.deleteWingGroup(entity.wingGroupId)
             entity.wingGroupId = -1
         }

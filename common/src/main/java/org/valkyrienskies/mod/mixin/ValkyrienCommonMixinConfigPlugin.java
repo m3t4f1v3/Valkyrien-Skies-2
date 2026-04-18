@@ -9,6 +9,7 @@ import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
 import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 import org.spongepowered.asm.service.MixinService;
 import org.valkyrienskies.mod.compat.LoadedMods;
+import org.valkyrienskies.mod.compat.LoadedMods.FlywheelVersion;
 import org.valkyrienskies.mod.compat.VSRenderer;
 
 /**
@@ -17,7 +18,7 @@ import org.valkyrienskies.mod.compat.VSRenderer;
 public class ValkyrienCommonMixinConfigPlugin implements IMixinConfigPlugin {
 
     private static final boolean PATH_FINDING_DEBUG =
-        "true".equals(System.getProperty("org.valkyrienskies.render_pathfinding"));
+        "false".equals(System.getProperty("org.valkyrienskies.render_pathfinding"));
     private static VSRenderer vsRenderer = null;
 
     public static VSRenderer getVSRenderer() {
@@ -28,6 +29,7 @@ public class ValkyrienCommonMixinConfigPlugin implements IMixinConfigPlugin {
     }
 
     private static VSRenderer getVSRendererHelper() {
+        //TODO remove?
         if (classExists("optifine.OptiFineTransformationService")) {
             return VSRenderer.OPTIFINE;
         } else if (classExists("net.caffeinemc.mods.sodium.client.SodiumClientMod")) {
@@ -87,7 +89,26 @@ public class ValkyrienCommonMixinConfigPlugin implements IMixinConfigPlugin {
             return PATH_FINDING_DEBUG;
         }
 
-        if (mixinClassName.contains("org.valkyrienskies.mod.mixin.mod_compat.create.client.trackOutlines")) {
+        if (mixinClassName.contains("org.valkyrienskies.mod.mixin.mod_compat.flywheel")) {
+            // Only load this mixin if Flywheel v1 is present
+            return LoadedMods.getFlywheel() == FlywheelVersion.V1;
+        }
+        if (mixinClassName.contains("org.valkyrienskies.mod.mixin.mod_compat.flywheel_renderer")) {
+            // Only load this mixin if Flywheel v1 is present
+            return LoadedMods.getFlywheel() == FlywheelVersion.V1;
+        }
+        if (mixinClassName.contains("org.valkyrienskies.mod.mixin.mod_compat.old_flywheel")) {
+            // Only load this mixin if Flywheel v1 is present
+            return LoadedMods.getFlywheel() == FlywheelVersion.V06;
+        }
+
+        if (mixinClassName.contains("org.valkyrienskies.mod.mixin.mod_compat.bluemap")) {
+            // Our mixins will crash if bluemap version is NONE or 5.12(+)
+            // We can't support bluemap 5.12(+) because it needs JVM 21, so that's for an addon to do.
+            return LoadedMods.getBluemap().matches("^5\\.3(-.*)?$");
+        }
+
+        if (mixinClassName.contains("org.valkyrienskies.mod.mixin.mod_compat.common_create.client.trackOutlines")) {
             //interactive has its own track outline stuff so disable fixed version of VS2's track outline stuff
             if (classExists("org.valkyrienskies.create_interactive.mixin.client.MixinTrackBlockOutline")) {
                 MixinService.getService().getLogger("mixin")
@@ -97,11 +118,27 @@ public class ValkyrienCommonMixinConfigPlugin implements IMixinConfigPlugin {
             }
         }
 
+        if (mixinClassName.contains("org.valkyrienskies.mod.mixin.mod_compat.common_create")) {
+            // Only load this mixin if Create is present
+            return LoadedMods.getCreate() || LoadedMods.getOldCreate();
+        }
+        if (mixinClassName.contains("org.valkyrienskies.mod.mixin.mod_compat.old_create")) {
+            return LoadedMods.getOldCreate();
+        }
+        if (mixinClassName.contains("org.valkyrienskies.mod.mixin.mod_compat.create")) {
+            return LoadedMods.getCreate();
+        }
+
         // Only load this mixin when ETF is installed
         if (mixinClassName.equals("org.valkyrienskies.mod.mixin.mod_compat.etf.MixinBlockEntity")) {
             if (!classExists("traben.entity_texture_features.utils.ETFEntity")) {
                 return false;
             }
+        }
+
+        if (mixinClassName.contains("org.valkyrienskies.mod.mixin.mod_compat.alex_caves")) {
+            // Only load this mixin if Alex Caves is installed
+            return LoadedMods.getAlexCaves();
         }
 
         return true;

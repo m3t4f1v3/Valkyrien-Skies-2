@@ -5,6 +5,7 @@ import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import java.util.Collections;
 import java.util.List;
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Explosion;
@@ -24,10 +25,13 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.valkyrienskies.core.api.ships.LoadedServerShip;
 import org.valkyrienskies.core.api.ships.ServerShip;
+import org.valkyrienskies.core.impl.config.VSCoreConfig;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
+import org.valkyrienskies.mod.common.ValkyrienSkiesMod;
 import org.valkyrienskies.mod.common.config.VSGameConfig;
-import org.valkyrienskies.mod.common.util.GameTickForceApplier;
+import org.valkyrienskies.mod.common.util.GameToPhysicsAdapter;
 import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
 
 @Mixin(Explosion.class)
@@ -61,6 +65,9 @@ public abstract class MixinExplosion {
 
     @Unique
     private void doExplodeForce() {
+        if (this.level.isClientSide) {
+            return;
+        }
         // Custom forces
         final Vector3d originPos = new Vector3d(this.x, this.y, this.z);
         final BlockPos explodePos = BlockPos.containing(originPos.x(), originPos.y(), originPos.z());
@@ -75,8 +82,7 @@ public abstract class MixinExplosion {
                             ClipContext.Fluid.NONE, CollisionContext.empty()));
                     if (result.getType() == Type.BLOCK) {
                         final BlockPos blockPos = result.getBlockPos();
-                        final ServerShip ship =
-                            (ServerShip) VSGameUtilsKt.getShipObjectManagingPos(this.level, blockPos);
+                        final LoadedServerShip ship = VSGameUtilsKt.getLoadedShipManagingPos((ServerLevel) this.level, blockPos);
                         if (ship != null) {
                             final Vector3d forceVector =
                                 VectorConversionsMCKt.toJOML(
@@ -93,12 +99,19 @@ public abstract class MixinExplosion {
                             forceVector.mul(distanceMult); //Multiply by distance falloff
                             forceVector.mul(powerMult); //Multiply by radius, roughly equivalent to power
 
-                            final GameTickForceApplier forceApplier =
-                                ship.getAttachment(GameTickForceApplier.class);
-                            final Vector3dc shipCoords = ship.getShipTransform().getShipPositionInShipCoordinates();
+                            Vector3dc modelPos = VectorConversionsMCKt.toJOML(Vec3.atCenterOf(blockPos));
+
+                            if (VSCoreConfig.SERVER.getSp().getEnableSplitting()) {
+                                //custom split logic for TNT specifically
+                                ValkyrienSkiesMod.splitHandler.split(level, ship.getId(), (ServerShip ship1) -> ValkyrienSkiesMod.getOrCreateGTPA(ship.getChunkClaimDimension()).applyWorldForceToModelPos(
+                                        ship1.getId(), forceVector, ship1.getTransform().getWorldToShip().transformPosition(ship.getTransform().getShipToWorld().transformPosition(modelPos, new Vector3d())
+                                    )));
+                            }
+
+                            final GameToPhysicsAdapter forceApplier = ValkyrienSkiesMod.getOrCreateGTPA(ship.getChunkClaimDimension());
                             if (forceVector.isFinite()) {
-                                forceApplier.applyInvariantForceToPos(forceVector,
-                                    VectorConversionsMCKt.toJOML(Vec3.atCenterOf(blockPos)).sub(shipCoords));
+                                forceApplier.applyWorldForceToModelPos(ship.getId(), forceVector,
+                                    VectorConversionsMCKt.toJOML(Vec3.atCenterOf(blockPos)));
                             }
                         }
                     }
@@ -134,9 +147,33 @@ public abstract class MixinExplosion {
         isModifyingExplosion = false;
     }
 
+    @WrapOperation(
+        method = "getSeenPercent",
+        at = @At(
+            value = "NEW",
+            target = "Lnet/minecraft/world/level/ClipContext;"
+        )
+    )
+    private static ClipContext getSeenPercent$ClipContext$new(
+        Vec3 from,
+        Vec3 to,
+        final ClipContext.Block blockClip,
+        final ClipContext.Fluid fluidClip,
+        final Entity source,
+        final Operation<ClipContext> operation
+    ) {
+        if (source != null) {
+            final Level level = source.level();
+            from = VSGameUtilsKt.toWorldCoordinates(level, from);
+            to = VSGameUtilsKt.toWorldCoordinates(level, to);
+        }
+        return operation.call(from, to, blockClip, fluidClip, source);
+    }
+
     // Don't raytrace the shipyard
     // getEntities already gives shipyard entities
-    @WrapOperation(method = "explode",
+    @WrapOperation(
+        method = "explode",
         at = @At(
             value = "INVOKE",
             target = "Lnet/minecraft/world/level/Level;getEntities(Lnet/minecraft/world/entity/Entity;Lnet/minecraft/world/phys/AABB;)Ljava/util/List;"

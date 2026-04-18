@@ -5,6 +5,7 @@ import static org.valkyrienskies.mod.common.ValkyrienSkiesMod.getVsCore;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap;
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -15,11 +16,13 @@ import java.util.function.BooleanSupplier;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.BlockPos.MutableBlockPos;
 import net.minecraft.core.Position;
+import net.minecraft.core.SectionPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ChunkHolder;
 import net.minecraft.server.level.ChunkResult;
 import net.minecraft.server.level.ServerChunkCache;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.ai.village.poi.PoiManager;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
@@ -37,18 +40,27 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.valkyrienskies.core.api.ships.LoadedServerShip;
 import org.valkyrienskies.core.api.ships.Wing;
 import org.valkyrienskies.core.api.ships.WingManager;
-import org.valkyrienskies.core.apigame.world.ServerShipWorldCore;
-import org.valkyrienskies.core.apigame.world.chunks.TerrainUpdate;
+import org.valkyrienskies.core.api.util.AerodynamicUtils;
+import org.valkyrienskies.core.impl.config.VSCoreConfig;
+import org.valkyrienskies.core.internal.world.VsiServerShipWorld;
+import org.valkyrienskies.core.internal.world.chunks.VsiTerrainUpdate;
+import org.valkyrienskies.mod.common.VS2ChunkAllocator;
 import org.valkyrienskies.mod.common.IShipObjectWorldServerProvider;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
+import org.valkyrienskies.mod.common.ValkyrienSkiesMod;
 import org.valkyrienskies.mod.common.block.WingBlock;
+import org.valkyrienskies.mod.common.config.DimensionParametersResolver;
+import org.valkyrienskies.mod.common.util.DragInfoReporter;
 import org.valkyrienskies.mod.common.util.VSServerLevel;
 import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
 import org.valkyrienskies.mod.mixin.accessors.server.level.ChunkMapAccessor;
 import org.valkyrienskies.mod.mixin.accessors.server.level.DistanceManagerAccessor;
+import org.valkyrienskies.mod.mixinducks.world.OfLevel;
+import org.valkyrienskies.mod.mixinducks.world.level.NoVSLevelDuck;
 import org.valkyrienskies.mod.util.McMathUtilKt;
 
 @Mixin(ServerLevel.class)
@@ -60,6 +72,61 @@ public abstract class MixinServerLevel implements IShipObjectWorldServerProvider
     @Shadow
     @NotNull
     public abstract MinecraftServer getServer();
+
+    @Shadow
+    public abstract int sectionsToVillage(SectionPos arg);
+
+
+    /**
+     * Allow scheduled ticks and block entity ticking in shipyard chunks at FULL status (level 33).
+     *
+     * Forge's Level.tickBlockEntities() calls shouldTickBlocksAt(BlockPos) before ticking each
+     * block entity. Ship chunks use level 33 (FULL) tickets to minimize neighbor loading, but
+     * shouldTickBlocksAt requires level ≤ 32. Without this override, furnaces/hoppers/etc won't
+     * tick on ships.
+     */
+    @Inject(method = "shouldTickBlocksAt(J)Z", at = @At("HEAD"), cancellable = true)
+    private void vs$allowShipyardBlockTicking(long packedPos, CallbackInfoReturnable<Boolean> cir) {
+        // Try both BlockPos and ChunkPos decodings since Forge may use either format
+        int chunkX, chunkZ;
+        // First try BlockPos encoding (used by tickBlockEntities)
+        chunkX = BlockPos.getX(packedPos) >> 4;
+        chunkZ = BlockPos.getZ(packedPos) >> 4;
+        if (org.valkyrienskies.mod.common.VS2ChunkAllocator.INSTANCE.isChunkInShipyardCompanion(chunkX, chunkZ)) {
+            if (chunkSource.getChunkNow(chunkX, chunkZ) != null) {
+                cir.setReturnValue(true);
+                return;
+            }
+        }
+        // Also try ChunkPos encoding (used by LevelTicks for scheduled ticks)
+        chunkX = ChunkPos.getX(packedPos);
+        chunkZ = ChunkPos.getZ(packedPos);
+        if (org.valkyrienskies.mod.common.VS2ChunkAllocator.INSTANCE.isChunkInShipyardCompanion(chunkX, chunkZ)) {
+            if (chunkSource.getChunkNow(chunkX, chunkZ) != null) {
+                cir.setReturnValue(true);
+            }
+        }
+    }
+
+    /**
+     * Allow shipyard chunks to pass the LevelTicks tick-processing gate.
+     *
+     * LevelTicks uses isPositionTickingWithEntitiesLoaded as its tickCheck predicate.
+     * This method requires BOTH areEntitiesLoaded() AND isPositionTicking() to be true.
+     * Ship chunks may not have their entity sections loaded through the normal entity
+     * management pipeline, so areEntitiesLoaded() returns false, which prevents ALL
+     * scheduled ticks (repeaters, observers, torches, buttons) from being processed.
+     */
+    @Inject(method = "isPositionTickingWithEntitiesLoaded", at = @At("HEAD"), cancellable = true)
+    private void vs$allowShipyardPositionTicking(long packedPos, CallbackInfoReturnable<Boolean> cir) {
+        int chunkX = ChunkPos.getX(packedPos);
+        int chunkZ = ChunkPos.getZ(packedPos);
+        if (VS2ChunkAllocator.INSTANCE.isChunkInShipyardCompanion(chunkX, chunkZ)) {
+            if (chunkSource.getChunkNow(chunkX, chunkZ) != null) {
+                cir.setReturnValue(true);
+            }
+        }
+    }
 
     // Map from ChunkPos to the list of voxel chunks that chunk owns
     @Unique
@@ -75,20 +142,57 @@ public abstract class MixinServerLevel implements IShipObjectWorldServerProvider
 
     @Nullable
     @Override
-    public ServerShipWorldCore getShipObjectWorld() {
+    public VsiServerShipWorld getShipObjectWorld() {
         return ((IShipObjectWorldServerProvider) getServer()).getShipObjectWorld();
     }
 
     @Inject(method = "<init>", at = @At("RETURN"))
     void onInit(final CallbackInfo ci) {
+        // Fake / wrapped ServerLevels are used by Create, Supplementaries and maybe others.
+        if (this instanceof NoVSLevelDuck) return;
 
         // This only happens when overworld gets loaded on startup, we have a mixin in MixinMinecraftServer for this specific case
         if (getShipObjectWorld() != null) {
+            DimensionParametersResolver.Parameters params = DimensionParametersResolver.INSTANCE.getDimensionMap().get(
+                VSGameUtilsKt.getDimensionId((ServerLevel) (Object) this)
+            );
+            if (params != null) {
+                getShipObjectWorld().addDimension(
+                    VSGameUtilsKt.getDimensionId((ServerLevel) (Object) this),
+                    VSGameUtilsKt.getYRange((ServerLevel) (Object) this),
+                    params.getGravity(),
+                    params.getSeaLevel(),
+                    params.getMaxY()
+                );
+                return;
+            }
             getShipObjectWorld().addDimension(
                 VSGameUtilsKt.getDimensionId((ServerLevel) (Object) this),
                 VSGameUtilsKt.getYRange((ServerLevel) (Object) this),
-                McMathUtilKt.getDEFAULT_WORLD_GRAVITY()
+                McMathUtilKt.getDEFAULT_WORLD_GRAVITY(),
+                AerodynamicUtils.DEFAULT_SEA_LEVEL,
+                AerodynamicUtils.DEFAULT_MAX
             );
+        }
+    }
+
+    @Inject(method = "getPoiManager", at = @At("HEAD"))
+    void onGetPoiManager(CallbackInfoReturnable<PoiManager> cir) {
+        if (chunkSource.getPoiManager() instanceof final OfLevel levelProvider) {
+            levelProvider.setLevel((ServerLevel) (Object) this);
+        }
+    }
+
+    @Inject(method = "isCloseToVillage", at = @At("HEAD"), cancellable = true)
+    void preIsCloseToVillage(BlockPos blockPos, int i, CallbackInfoReturnable<Boolean> cir) {
+        if (i <= 6) {
+            final boolean[] found = {false};
+            VSGameUtilsKt.transformToNearbyShipsAndWorld(ServerLevel.class.cast(this), blockPos.getX(), blockPos.getY(), blockPos.getZ(), i * 100.0, (double x, double y, double z) -> {
+                found[0] = found[0] || this.sectionsToVillage(SectionPos.of(BlockPos.containing(x, y, z))) <= i;
+            });
+            if (found[0]) {
+                cir.setReturnValue(true);
+            }
         }
     }
 
@@ -107,7 +211,7 @@ public abstract class MixinServerLevel implements IShipObjectWorldServerProvider
         final Operation<Boolean> closerToCenterThan) {
 
         final ServerLevel self = ServerLevel.class.cast(this);
-        final LoadedServerShip ship = VSGameUtilsKt.getShipObjectManagingPos(
+        final LoadedServerShip ship = VSGameUtilsKt.getLoadedShipManagingPos(
             self, (int) particle.x() >> 4, (int) particle.z() >> 4);
 
         if (ship == null) {
@@ -122,10 +226,26 @@ public abstract class MixinServerLevel implements IShipObjectWorldServerProvider
     }
 
     @Unique
-    private void vs$loadChunk(@NotNull final ChunkAccess worldChunk, final List<TerrainUpdate> voxelShapeUpdates) {
+    private void vs$loadChunk(@NotNull final ChunkAccess worldChunk, final List<VsiTerrainUpdate> voxelShapeUpdates) {
         // Remove the chunk pos from vs$chunksToUnload if its present
         vs$chunksToUnload.remove(worldChunk.getPos().toLong());
         if (!vs$knownChunks.containsKey(worldChunk.getPos())) {
+            // Ship chunks at level 33 (FULL) never reach BLOCK_TICKING status in vanilla,
+            // so two critical callbacks are missed:
+            // 1. registerTickContainerInLevel() — adds tick containers to LevelTicks
+            // 2. startTickingChunk() → unpackTicks() — moves saved ticks from pendingTicks
+            //    to the active tickQueue so they actually fire
+            // Without both, scheduled ticks (repeaters, torches, observers) freeze on reload.
+            if (worldChunk instanceof LevelChunk levelChunk) {
+                final int cx = worldChunk.getPos().x;
+                final int cz = worldChunk.getPos().z;
+                if (VS2ChunkAllocator.INSTANCE.isChunkInShipyardCompanion(cx, cz)) {
+                    final ServerLevel self = ServerLevel.class.cast(this);
+                    levelChunk.registerTickContainerInLevel(self);
+                    self.startTickingChunk(levelChunk);
+                }
+            }
+
             final List<Vector3ic> voxelChunkPositions = new ArrayList<>();
 
             final int chunkX = worldChunk.getPos().x;
@@ -141,17 +261,17 @@ public abstract class MixinServerLevel implements IShipObjectWorldServerProvider
 
                 if (chunkSection != null && !chunkSection.hasOnlyAir()) {
                     // Add this chunk to the ground rigid body
-                    final TerrainUpdate voxelShapeUpdate =
+                    final VsiTerrainUpdate voxelShapeUpdate =
                         VSGameUtilsKt.toDenseVoxelUpdate(chunkSection, chunkPos);
                     voxelShapeUpdates.add(voxelShapeUpdate);
 
                     // region Detect wings
                     final ServerLevel thisAsLevel = ServerLevel.class.cast(this);
                     final LoadedServerShip
-                        ship = VSGameUtilsKt.getShipObjectManagingPos(thisAsLevel, chunkX, chunkZ);
+                        ship = VSGameUtilsKt.getLoadedShipManagingPos(thisAsLevel, chunkX, chunkZ);
                     if (ship != null) {
                         // Sussy cast, but I don't want to expose this directly through the vs-core api
-                        final WingManager shipAsWingManager = ship.getAttachment(WingManager.class);
+                        final WingManager shipAsWingManager = ship.getWingManager();
                         final MutableBlockPos mutableBlockPos = new MutableBlockPos();
                         for (int x = 0; x < 16; x++) {
                             for (int y = 0; y < 16; y++) {
@@ -176,7 +296,7 @@ public abstract class MixinServerLevel implements IShipObjectWorldServerProvider
                     }
                     // endregion
                 } else {
-                    final TerrainUpdate emptyVoxelShapeUpdate = getVsCore()
+                    final VsiTerrainUpdate emptyVoxelShapeUpdate = getVsCore()
                         .newEmptyVoxelShapeUpdate(chunkPos.x(), chunkPos.y(), chunkPos.z(), true);
                     voxelShapeUpdates.add(emptyVoxelShapeUpdate);
                 }
@@ -188,24 +308,38 @@ public abstract class MixinServerLevel implements IShipObjectWorldServerProvider
     @Inject(method = "tick", at = @At("TAIL"))
     private void postTick(final BooleanSupplier shouldKeepTicking, final CallbackInfo ci) {
         final ServerLevel self = ServerLevel.class.cast(this);
-        final ServerShipWorldCore shipObjectWorld = VSGameUtilsKt.getShipObjectWorld(self);
+        final VsiServerShipWorld shipObjectWorld = VSGameUtilsKt.getShipObjectWorld(self);
         // Find newly loaded chunks
         final ChunkMapAccessor chunkMapAccessor = (ChunkMapAccessor) chunkSource.chunkMap;
 
         // Create DenseVoxelShapeUpdate for new loaded chunks
         // Also mark the chunks as loaded in the ship objects
-        final List<TerrainUpdate> voxelShapeUpdates = new ArrayList<>();
+        final List<VsiTerrainUpdate> voxelShapeUpdates = new ArrayList<>();
         final DistanceManagerAccessor distanceManagerAccessor = (DistanceManagerAccessor) chunkSource.chunkMap.getDistanceManager();
 
         for (final ChunkHolder chunkHolder : chunkMapAccessor.callGetChunks()) {
             final ChunkResult<LevelChunk> worldChunkResult =
                 chunkHolder.getTickingChunkFuture().getNow(ChunkHolder.UNLOADED_LEVEL_CHUNK);
-            // Only load chunks that are present and that have tickets
-            worldChunkResult.ifSuccess((chunk) -> {
-                if (distanceManagerAccessor.getTickets().containsKey(chunkHolder.getPos().toLong())) {
-                    vs$loadChunk(chunk, voxelShapeUpdates);
+            if (vs$knownChunks.containsKey(chunkHolder.getPos())
+                || !distanceManagerAccessor.getTickets().containsKey(chunkHolder.getPos().toLong())) {
+                continue;
+            }
+
+            final LevelChunk[] loadedChunk = new LevelChunk[1];
+            worldChunkResult.ifSuccess(chunk -> loadedChunk[0] = chunk);
+            if (loadedChunk[0] != null) {
+                vs$loadChunk(loadedChunk[0], voxelShapeUpdates);
+                continue;
+            }
+
+            // Shipyard chunks use FULL tickets and may never produce a ticking future.
+            final ChunkPos cp = chunkHolder.getPos();
+            if (VS2ChunkAllocator.INSTANCE.isChunkInShipyardCompanion(cp.x, cp.z)) {
+                final LevelChunk cachedChunk = chunkSource.getChunkNow(cp.x, cp.z);
+                if (cachedChunk != null) {
+                    vs$loadChunk(cachedChunk, voxelShapeUpdates);
                 }
-            });
+            }
         }
 
         final Iterator<Entry<ChunkPos, List<Vector3ic>>> knownChunkPosIterator = vs$knownChunks.entrySet().iterator();
@@ -218,7 +352,7 @@ public abstract class MixinServerLevel implements IShipObjectWorldServerProvider
                 if (ticksWaitingToUnload > VS$CHUNK_UNLOAD_THRESHOLD) {
                     // Unload this chunk
                     for (final Vector3ic unloadedChunk : knownChunkPosEntry.getValue()) {
-                        final TerrainUpdate deleteVoxelShapeUpdate =
+                        final VsiTerrainUpdate deleteVoxelShapeUpdate =
                             getVsCore().newDeleteTerrainUpdate(unloadedChunk.x(), unloadedChunk.y(), unloadedChunk.z());
                         voxelShapeUpdates.add(deleteVoxelShapeUpdate);
                     }
@@ -236,11 +370,31 @@ public abstract class MixinServerLevel implements IShipObjectWorldServerProvider
             voxelShapeUpdates
         );
 
+        if (VSCoreConfig.SERVER.getSp().getEnableSplitting()) {
+            ValkyrienSkiesMod.splitHandler.tick(ServerLevel.class.cast(this));
+        }
+
+        DragInfoReporter.INSTANCE.tick((ServerLevel) (Object) this);
+
     }
 
     @Override
     public void removeChunk(final int chunkX, final int chunkZ) {
         final ChunkPos chunkPos = new ChunkPos(chunkX, chunkZ);
         vs$knownChunks.remove(chunkPos);
+    }
+
+    @Unique
+    private final LongOpenHashSet vs$pendingForcedChunks = new LongOpenHashSet();
+
+    @Override
+    public void addPendingForcedChunk(final int chunkX, final int chunkZ) {
+        vs$pendingForcedChunks.add(ChunkPos.asLong(chunkX, chunkZ));
+    }
+
+    @NotNull
+    @Override
+    public LongOpenHashSet getPendingForcedChunks() {
+        return vs$pendingForcedChunks;
     }
 }
