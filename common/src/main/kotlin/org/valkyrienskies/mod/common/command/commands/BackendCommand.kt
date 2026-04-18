@@ -7,7 +7,7 @@ import net.minecraft.commands.Commands.argument
 import net.minecraft.commands.Commands.literal
 import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.Component.translatable
-import net.minecraftforge.common.ForgeConfigSpec
+import net.neoforged.neoforge.common.ModConfigSpec
 import org.valkyrienskies.core.impl.api_impl.config.ConfigPhysicsBackendType
 import org.valkyrienskies.core.impl.config.VSCoreConfig
 import org.valkyrienskies.mod.common.config.VSConfigUpdater
@@ -27,7 +27,7 @@ object BackendCommand {
                 .then(literal("krunch")
                     .executes {
                         VSCoreConfig.SERVER.physics.physicsBackend = ConfigPhysicsBackendType.KRUNCH_CLASSIC
-                        (VSConfigUpdater.forgeConfigValuesMap.get("physicsBackend") as ForgeConfigSpec.ConfigValue<String>).set(ConfigPhysicsBackendType.KRUNCH_CLASSIC.name)
+                        (VSConfigUpdater.forgeConfigValuesMap.get("physicsBackend") as ModConfigSpec.ConfigValue<String>).set(ConfigPhysicsBackendType.KRUNCH_CLASSIC.name)
 
                         it.source.sendSuccess(
                             {
@@ -40,7 +40,7 @@ object BackendCommand {
                 ).then(literal("DEFAULT")
                     .executes {
                         VSCoreConfig.SERVER.physics.physicsBackend = ConfigPhysicsBackendType.KRUNCH_CLASSIC
-                        (VSConfigUpdater.forgeConfigValuesMap.get("physicsBackend") as ForgeConfigSpec.ConfigValue<String>).set(ConfigPhysicsBackendType.KRUNCH_CLASSIC.name)
+                        (VSConfigUpdater.forgeConfigValuesMap.get("physicsBackend") as ModConfigSpec.ConfigValue<String>).set(ConfigPhysicsBackendType.KRUNCH_CLASSIC.name)
 
                         it.source.sendSuccess(
                             {
@@ -53,7 +53,7 @@ object BackendCommand {
                 ).then(literal("physx")
                     .executes {
                         VSCoreConfig.SERVER.physics.physicsBackend = ConfigPhysicsBackendType.KRUNCH_PHYSX
-                        (VSConfigUpdater.forgeConfigValuesMap.get("physicsBackend") as ForgeConfigSpec.ConfigValue<String>).set(ConfigPhysicsBackendType.KRUNCH_PHYSX.name)
+                        (VSConfigUpdater.forgeConfigValuesMap.get("physicsBackend") as ModConfigSpec.ConfigValue<String>).set(ConfigPhysicsBackendType.KRUNCH_PHYSX.name)
 
                         it.source.sendSuccess(
                             {
@@ -66,7 +66,7 @@ object BackendCommand {
                 ).then(literal("jolt")
                     .executes {
                         VSCoreConfig.SERVER.physics.physicsBackend = ConfigPhysicsBackendType.KRUNCH_JOLT
-                        (VSConfigUpdater.forgeConfigValuesMap.get("physicsBackend") as ForgeConfigSpec.ConfigValue<String>).set(ConfigPhysicsBackendType.KRUNCH_JOLT.name)
+                        (VSConfigUpdater.forgeConfigValuesMap.get("physicsBackend") as ModConfigSpec.ConfigValue<String>).set(ConfigPhysicsBackendType.KRUNCH_JOLT.name)
 
                         it.source.sendSuccess(
                             {
@@ -91,7 +91,7 @@ object BackendCommand {
                     .executes {
                         var amount = IntegerArgumentType.getInteger(it, "amount")
                         VSCoreConfig.SERVER.physics.lodDetail = amount
-                        (VSConfigUpdater.forgeConfigValuesMap.get("lodDetail") as ForgeConfigSpec.ConfigValue<Int>).set(amount)
+                        (VSConfigUpdater.forgeConfigValuesMap.get("lodDetail") as ModConfigSpec.ConfigValue<Int>).set(amount)
 
                         val msg = if (amount == -1) {
                             Component.translatable(LOD_DISABLED_MESSAGE)

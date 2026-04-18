@@ -78,33 +78,20 @@ public abstract class MixinServerLevel implements IShipObjectWorldServerProvider
 
 
     /**
-     * Allow scheduled ticks and block entity ticking in shipyard chunks at FULL status (level 33).
-     *
-     * Forge's Level.tickBlockEntities() calls shouldTickBlocksAt(BlockPos) before ticking each
-     * block entity. Ship chunks use level 33 (FULL) tickets to minimize neighbor loading, but
-     * shouldTickBlocksAt requires level ≤ 32. Without this override, furnaces/hoppers/etc won't
-     * tick on ships.
+     * Allow block entity ticking (furnaces, hoppers, etc.) on shipyard chunks at FULL status
+     * (level 33). Level.tickBlockEntities() gates each ticker on shouldTickBlocksAt(pos),
+     * which normally requires BLOCK_TICKING status (level ≤ 32) — so ship chunks held by
+     * VS's level-33 tickets would never tick their block entities. The argument is a
+     * ChunkPos.asLong (not a BlockPos). As with isPositionTickingWithEntitiesLoaded, we
+     * don't guard on getChunkNow because level-33 holders often haven't promoted to the
+     * visibleChunkMap — that guard returns null for real ship chunks and breaks ticking.
      */
     @Inject(method = "shouldTickBlocksAt(J)Z", at = @At("HEAD"), cancellable = true)
-    private void vs$allowShipyardBlockTicking(long packedPos, CallbackInfoReturnable<Boolean> cir) {
-        // Try both BlockPos and ChunkPos decodings since Forge may use either format
-        int chunkX, chunkZ;
-        // First try BlockPos encoding (used by tickBlockEntities)
-        chunkX = BlockPos.getX(packedPos) >> 4;
-        chunkZ = BlockPos.getZ(packedPos) >> 4;
-        if (org.valkyrienskies.mod.common.VS2ChunkAllocator.INSTANCE.isChunkInShipyardCompanion(chunkX, chunkZ)) {
-            if (chunkSource.getChunkNow(chunkX, chunkZ) != null) {
-                cir.setReturnValue(true);
-                return;
-            }
-        }
-        // Also try ChunkPos encoding (used by LevelTicks for scheduled ticks)
-        chunkX = ChunkPos.getX(packedPos);
-        chunkZ = ChunkPos.getZ(packedPos);
-        if (org.valkyrienskies.mod.common.VS2ChunkAllocator.INSTANCE.isChunkInShipyardCompanion(chunkX, chunkZ)) {
-            if (chunkSource.getChunkNow(chunkX, chunkZ) != null) {
-                cir.setReturnValue(true);
-            }
+    private void vs$allowShipyardBlockTicking(long packedChunkPos, CallbackInfoReturnable<Boolean> cir) {
+        int chunkX = ChunkPos.getX(packedChunkPos);
+        int chunkZ = ChunkPos.getZ(packedChunkPos);
+        if (VS2ChunkAllocator.INSTANCE.isChunkInShipyardCompanion(chunkX, chunkZ)) {
+            cir.setReturnValue(true);
         }
     }
 
@@ -122,11 +109,25 @@ public abstract class MixinServerLevel implements IShipObjectWorldServerProvider
         int chunkX = ChunkPos.getX(packedPos);
         int chunkZ = ChunkPos.getZ(packedPos);
         if (VS2ChunkAllocator.INSTANCE.isChunkInShipyardCompanion(chunkX, chunkZ)) {
-            if (chunkSource.getChunkNow(chunkX, chunkZ) != null) {
-                cir.setReturnValue(true);
-            }
+            // Unconditional true for shipyard chunks. The getChunkNow() guard we used here
+            // was returning null for chunks whose ChunkHolder hadn't promoted to visibleChunkMap
+            // (common for level-33 FULL tickets), causing LevelTicks.sortContainersToTick's
+            // tickCheck to return false and scheduled ticks to never drain. If we've already
+            // registered a tick container for this chunk, the chunk exists — we don't need to
+            // re-verify via getChunkNow.
+            cir.setReturnValue(true);
         }
     }
+
+    // Enable with -Dvs.traceScheduledTicks=true to emit trace logs for scheduled-tick
+    // plumbing on shipyard chunks. Off by default because it's noisy.
+    @Unique
+    private static final boolean VS$TRACE_SCHEDULED_TICKS =
+        Boolean.getBoolean("vs.traceScheduledTicks");
+
+    @Unique
+    private static final org.slf4j.Logger VS$TICK_TRACE_LOG =
+        org.slf4j.LoggerFactory.getLogger("VS2-TickTrace");
 
     // Map from ChunkPos to the list of voxel chunks that chunk owns
     @Unique
@@ -243,6 +244,11 @@ public abstract class MixinServerLevel implements IShipObjectWorldServerProvider
                     final ServerLevel self = ServerLevel.class.cast(this);
                     levelChunk.registerTickContainerInLevel(self);
                     self.startTickingChunk(levelChunk);
+                    if (VS$TRACE_SCHEDULED_TICKS) {
+                        VS$TICK_TRACE_LOG.info(
+                            "vs$loadChunk registered tick container for shipyard chunk=({},{}) gameTime={}",
+                            cx, cz, self.getGameTime());
+                    }
                 }
             }
 
@@ -302,6 +308,30 @@ public abstract class MixinServerLevel implements IShipObjectWorldServerProvider
                 }
             }
             vs$knownChunks.put(worldChunk.getPos(), voxelChunkPositions);
+        }
+    }
+
+    /**
+     * Prevent vanilla from unloading shipyard chunks whose ship is still alive.
+     *
+     * Ship chunks silently cycle through unload/reload during normal play (vs-core
+     * unwatch fires when no player watches; parallel tests can briefly drop tickets).
+     * Each unload calls {@code chunk.unregisterTickContainerFromLevel(this)} which
+     * discards pending scheduled block/fluid ticks — and that's what breaks buttons,
+     * water flow, dispensers, hoppers, etc. on unattended ships.
+     *
+     * We block the unload HEAD for shipyard chunks whose ship is still in {@code allShips}.
+     * When the ship is actually deleted (removed from allShips), {@code ChunkManagement.kt}
+     * releases the SHIP_CHUNK ticket and this check falls through → vanilla unload runs.
+     */
+    @Inject(method = "unload", at = @At("HEAD"), cancellable = true)
+    private void vs$keepActiveShipChunksLoaded(final net.minecraft.world.level.chunk.LevelChunk chunk,
+                                                final CallbackInfo ci) {
+        final ChunkPos pos = chunk.getPos();
+        if (!VS2ChunkAllocator.INSTANCE.isChunkInShipyardCompanion(pos.x, pos.z)) return;
+        final ServerLevel self = ServerLevel.class.cast(this);
+        if (org.valkyrienskies.mod.common.VSGameUtilsKt.getShipManagingPos(self, pos.x, pos.z) != null) {
+            ci.cancel();
         }
     }
 

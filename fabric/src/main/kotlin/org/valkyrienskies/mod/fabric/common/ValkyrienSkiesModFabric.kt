@@ -25,8 +25,12 @@ import net.minecraft.world.item.Item
 import net.minecraft.world.item.Item.Properties
 import net.minecraft.world.level.block.Block
 import org.valkyrienskies.mod.client.EmptyRenderer
+import fuzs.forgeconfigapiport.fabric.api.neoforge.v4.NeoForgeConfigRegistry
+import fuzs.forgeconfigapiport.fabric.api.neoforge.v4.NeoForgeModConfigEvents
+import net.neoforged.fml.config.ModConfig
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod
 import org.valkyrienskies.mod.common.block.TestChairBlock
+import org.valkyrienskies.mod.common.config.VSConfigUpdater
 import org.valkyrienskies.mod.common.block.TestFlapBlock
 import org.valkyrienskies.mod.common.block.TestHingeBlock
 import org.valkyrienskies.mod.common.block.TestWingBlock
@@ -85,6 +89,29 @@ class ValkyrienSkiesModFabric : ModInitializer {
         if (isClient) onInitializeClient()
 
         ValkyrienSkiesMod.init()
+
+        // Register our four ModConfigSpecs with fcap-fabric's NeoForgeConfigRegistry
+        // (the Fabric-side equivalent of NeoForge's ModContainer.registerConfig). Without
+        // this, every ConfigValue has no backing config file and operations like /vs
+        // backend ... NPE with "Cannot set config value without assigned Config object
+        // present". Mirrors the Forge-side registration in ValkyrienSkiesModForge.
+        val modId = ValkyrienSkiesMod.MOD_ID
+        NeoForgeConfigRegistry.INSTANCE.register(modId, ModConfig.Type.STARTUP, VSConfigUpdater.CORE_SERVER_SPEC, "valkyrienskies-core-server.toml")
+        NeoForgeConfigRegistry.INSTANCE.register(modId, ModConfig.Type.SERVER, VSConfigUpdater.SERVER_SPEC, "valkyrienskies-server.toml")
+        NeoForgeConfigRegistry.INSTANCE.register(modId, ModConfig.Type.COMMON, VSConfigUpdater.COMMON_SPEC, "valkyrienskies-common.toml")
+        NeoForgeConfigRegistry.INSTANCE.register(modId, ModConfig.Type.CLIENT, VSConfigUpdater.CLIENT_SPEC, "valkyrienskies-client.toml")
+
+        // Propagate TOML changes (first-load + reload on external edits) back into the
+        // in-memory VsiConfigModel so things that read the Kotlin vars pick up changes.
+        // The Fabric path uses fcap's NeoForgeModConfigEvents instead of NeoForge's mod
+        // event bus.
+        val applyConfig = fun(config: ModConfig) {
+            val spec = config.spec as? net.neoforged.neoforge.common.ModConfigSpec ?: return
+            val loaded = config.loadedConfig?.config() ?: return
+            VSConfigUpdater.applyFromConfigLoad(spec) { key -> loaded.get<Any?>(key) }
+        }
+        NeoForgeModConfigEvents.loading(modId).register { applyConfig(it) }
+        NeoForgeModConfigEvents.reloading(modId).register { applyConfig(it) }
         // VSEntityManager.registerContraptionHandler(ContraptionShipyardEntityHandlerFabric)
 
         registerBlockAndItem("test_chair", ValkyrienSkiesMod.TEST_CHAIR)

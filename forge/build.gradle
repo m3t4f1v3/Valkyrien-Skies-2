@@ -62,6 +62,12 @@ loom {
         useLegacyMixinAp = true
         defaultRefmapName = "valkyrienskies-refmap.json"
     }
+
+    mods {
+        "valkyrienskies" {
+            sourceSet sourceSets.main
+        }
+    }
 }
 
 configurations {

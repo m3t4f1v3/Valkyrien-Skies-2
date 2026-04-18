@@ -1,6 +1,10 @@
 package org.valkyrienskies.mod.mixin.server.world;
 
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.minecraft.server.level.ChunkHolder;
+import net.minecraft.server.level.ChunkLevel;
+import net.minecraft.server.level.FullChunkStatus;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.LevelHeightAccessor;
@@ -44,4 +48,34 @@ public abstract class MixinChunkHolder {
         }
     }
 
+    /**
+     * Promote shipyard chunks to BLOCK_TICKING inside updateFutures().
+     *
+     * In 1.21.1 vanilla, ChunkHolder.updateFutures() calls ChunkLevel.fullStatus(ticketLevel)
+     * as a static method — our getFullStatus mixin is bypassed here. For level-33 (FULL)
+     * shipyard chunks, this returns FullChunkStatus.FULL, so prepareTickingChunk() and
+     * prepareEntityTickingChunk() are never scheduled. That leaves the ticking chunk future
+     * empty and, more importantly, prevents startTickingChunk → LevelChunk.unpackTicks from
+     * running for newly-loaded chunks via the normal pipeline. Scheduled block ticks
+     * (repeaters, buttons, water flow, dispensers) never fire as a result.
+     *
+     * Upgrading the reported status to BLOCK_TICKING for shipyard chunks restores the normal
+     * transitions; ENTITY_TICKING is intentionally NOT used because we want ship chunks to
+     * stay at level 33 for neighbor-loading reasons.
+     */
+    @WrapOperation(
+        method = "updateFutures",
+        at = @At(
+            value = "INVOKE",
+            target = "Lnet/minecraft/server/level/ChunkLevel;fullStatus(I)Lnet/minecraft/server/level/FullChunkStatus;"
+        )
+    )
+    private FullChunkStatus vs$promoteShipyardStatus(final int ticketLevel, final Operation<FullChunkStatus> op) {
+        final ChunkPos pos = ((ChunkHolder) (Object) this).getPos();
+        if (ticketLevel == 33
+                && VS2ChunkAllocator.INSTANCE.isChunkInShipyardCompanion(pos.x, pos.z)) {
+            return FullChunkStatus.BLOCK_TICKING;
+        }
+        return op.call(ticketLevel);
+    }
 }

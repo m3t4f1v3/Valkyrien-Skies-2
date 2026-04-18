@@ -17,6 +17,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod;
+import org.valkyrienskies.mod.common.config.VSConfigUpdater;
 import org.valkyrienskies.mod.common.config.VSGameConfig;
 
 @Mixin(Gui.class)
@@ -31,7 +32,17 @@ public class MixinGui {
      */
     @Inject(method = "renderEffects", at = @At("HEAD"))
     private void preRenderStatusEffectOverlay(GuiGraphics guiGraphics, DeltaTracker deltaTracker, CallbackInfo ci) {
-        if (!VSGameConfig.CLIENT.getRenderDebugText()) {
+        // Read directly from the ModConfigSpec ConfigValue instead of the Kotlin-var
+        // mirror. ConfigValue.get() returns the live, auto-synced cache that NeoForge
+        // writes through on UI edits, so toggling "Render Debug Text" in the mods-menu
+        // config screen takes effect immediately. Relying on VSGameConfig.CLIENT's
+        // Kotlin var requires ModConfigEvent.Reloading to fire on every edit, which
+        // isn't guaranteed.
+        final var value = VSConfigUpdater.getForgeConfigValuesMap().get("renderDebugText");
+        final boolean enabled = value != null
+            ? Boolean.TRUE.equals(value.get())
+            : VSGameConfig.CLIENT.getRenderDebugText();
+        if (!enabled) {
             return;
         }
 

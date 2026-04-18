@@ -15,7 +15,10 @@ import net.minecraft.world.item.Item
 import net.minecraft.world.item.Item.Properties
 import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.entity.BlockEntityType
+import net.neoforged.fml.ModLoadingContext
 import net.neoforged.fml.common.Mod
+import net.neoforged.fml.config.ModConfig
+import net.neoforged.fml.event.config.ModConfigEvent
 import net.neoforged.fml.event.lifecycle.FMLLoadCompleteEvent
 import net.neoforged.fml.loading.FMLEnvironment
 import net.neoforged.neoforge.client.event.EntityRenderersEvent
@@ -39,6 +42,7 @@ import org.valkyrienskies.mod.common.command.arguments.RelativeVector3Argument
 import org.valkyrienskies.mod.common.command.arguments.ShipArgument
 import org.valkyrienskies.mod.common.command.VSCommands
 import org.valkyrienskies.mod.common.config.MassDatapackResolver
+import org.valkyrienskies.mod.common.config.VSConfigUpdater
 import org.valkyrienskies.mod.common.config.VSEntityHandlerDataLoader
 import org.valkyrienskies.mod.common.config.VSGameConfig
 import org.valkyrienskies.mod.common.config.VSKeyBindings
@@ -74,8 +78,76 @@ object ValkyrienSkiesModForge {
 
     init {
         val isClient = FMLEnvironment.dist.isClient
+
+        // VS2 1.21.1: set synchronizePhysics=true at mod init, BEFORE any VsiPipeline is
+        // created. The pipeline samples this config when it's constructed, so setting it
+        // later (e.g. ServerStartedEvent) leaves the pipeline running in async mode and
+        // the flag is ignored. Synchronous physics means postTickGame runs
+        // physicsTicksPerGameTick (default 3) steps inline per server tick — ships
+        // actually move each tick instead of waiting on a wall-clock-scheduled physics
+        // thread, which matters for responsiveness and for any workload that ticks the
+        // server faster than 20 Hz.
+        //
+        // Also zero out shipLoadFreezeSeconds. vs-core defaults this to 5.0s, and
+        // ShipObjectServerWorld re-arms the freeze on every DenseVoxelShapeUpdate that
+        // arrives for a ship. Under heavy voxel streaming these updates keep coming, so
+        // the freeze never expires and ship positions get clamped to their spawn pose by
+        // effectiveKinematicTarget in VSGamePipelineStage.
+        try {
+            val pt = org.valkyrienskies.core.impl.config.VSCoreConfig.SERVER.pt
+            pt.synchronizePhysics = true
+            org.valkyrienskies.core.impl.config.VSCoreConfig.SERVER.physics.shipLoadFreezeSeconds = 0.0
+            org.slf4j.LoggerFactory.getLogger("VS2").info(
+                "VS2: synchronizePhysics=true, shipLoadFreezeSeconds=0.0 set at mod init, physicsTicksPerGameTick={}",
+                pt.physicsTicksPerGameTick)
+        } catch (t: Throwable) {
+            org.slf4j.LoggerFactory.getLogger("VS2").warn(
+                "VS2: failed to set synchronizePhysics at mod init", t)
+        }
+
         ValkyrienSkiesMod.init()
         VSEntityManager.registerContraptionHandler(ContraptionShipyardEntityHandlerForge)
+
+        // Register the ModConfigSpecs with NeoForge so their ConfigValues have a backing
+        // Config to read/write. Without this, /vs backend <engine> calls .set(...) on an
+        // unbacked ConfigValue and NPEs with "Cannot set config value without assigned
+        // Config object present". Each spec lives in its own TOML file named after the
+        // spec type to avoid collisions.
+        ModLoadingContext.get().activeContainer.apply {
+            // Core and mod server configs are both semantically server-side, but NeoForge's
+            // ConfigurationScreen labels each tab by Type — two SERVER-typed configs both
+            // show up as "Server Settings" buttons with no way to distinguish. Typing the
+            // vs-core one as STARTUP sidesteps the collision (tab is labeled "Startup
+            // Settings") and is actually a decent semantic fit: physics-backend selection
+            // and related fields want to be fixed before the pipeline initializes.
+            registerConfig(ModConfig.Type.STARTUP, VSConfigUpdater.CORE_SERVER_SPEC, "valkyrienskies-core-server.toml")
+            registerConfig(ModConfig.Type.SERVER, VSConfigUpdater.SERVER_SPEC, "valkyrienskies-server.toml")
+            registerConfig(ModConfig.Type.COMMON, VSConfigUpdater.COMMON_SPEC, "valkyrienskies-common.toml")
+            registerConfig(ModConfig.Type.CLIENT, VSConfigUpdater.CLIENT_SPEC, "valkyrienskies-client.toml")
+
+            // Wire up the "Config" button in the vanilla Mods menu. NeoForge ships a
+            // generic ConfigurationScreen that can render any registered ModConfigSpec,
+            // but only activates when a mod registers an IConfigScreenFactory extension
+            // point. Without this the button is greyed out. Client-only — guarded by
+            // FMLEnvironment.dist so a dedicated server doesn't try to classload Screen.
+            if (isClient) {
+                registerExtensionPoint(
+                    net.neoforged.neoforge.client.gui.IConfigScreenFactory::class.java,
+                    net.neoforged.neoforge.client.gui.IConfigScreenFactory { container, parent ->
+                        net.neoforged.neoforge.client.gui.ConfigurationScreen(container, parent)
+                    }
+                )
+            }
+        }
+
+        // Propagate TOML changes (from disk edits and the in-game config UI) back into the
+        // in-memory Kotlin config vars like VSGameConfig.CLIENT.renderDebugText. Without
+        // this, toggling anything in the Mods-menu config screen writes to the TOML but
+        // the running code keeps reading the default. Handles both first-load and
+        // subsequent reloads; Loading fires on mod construction so the bus listener has
+        // to be registered here, before we finish constructing.
+        MOD_BUS.addListener<ModConfigEvent.Loading> { applyModConfigToVSConfigUpdater(it.config) }
+        MOD_BUS.addListener<ModConfigEvent.Reloading> { applyModConfigToVSConfigUpdater(it.config) }
 
         val modBus = MOD_BUS
         val forgeBus = FORGE_BUS
@@ -170,6 +242,17 @@ object ValkyrienSkiesModForge {
     private fun registerResourceManagers(event: AddReloadListenerEvent) {
         event.addListener(MassDatapackResolver.loader)
         event.addListener(VSEntityHandlerDataLoader)
+    }
+
+    /**
+     * Matches the event's ModConfig against one of VSConfigUpdater's four specs and pushes
+     * the loaded NightConfig values into the matching VsiConfigModel. Guards the spec check
+     * by identity because that's how VSConfigUpdater dispatches internally.
+     */
+    private fun applyModConfigToVSConfigUpdater(config: ModConfig) {
+        val spec = config.spec as? net.neoforged.neoforge.common.ModConfigSpec ?: return
+        val loaded = config.loadedConfig?.config() ?: return
+        VSConfigUpdater.applyFromConfigLoad(spec) { key -> loaded.get<Any?>(key) }
     }
 
     private fun registerKeyBindings(event: RegisterKeyMappingsEvent) {

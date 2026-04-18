@@ -10,6 +10,7 @@ import org.valkyrienskies.core.internal.world.chunks.VsiChunkWatchTask
 import org.valkyrienskies.mod.common.VS2ChunkAllocator
 import org.valkyrienskies.mod.common.executeIf
 import org.valkyrienskies.mod.common.getLevelFromDimensionId
+import org.valkyrienskies.mod.common.getShipManagingPos
 import org.valkyrienskies.mod.common.isChunkLoadedForVS
 import org.valkyrienskies.mod.common.isTickingChunk
 import org.valkyrienskies.mod.common.mcPlayer
@@ -86,7 +87,21 @@ object ChunkManagement {
             if (chunkUnwatchTask.shouldUnload) {
                 val level = server.getLevelFromDimensionId(chunkUnwatchTask.dimensionId)!!
                 if (VS2ChunkAllocator.isChunkInShipyardCompanion(chunkPos.x, chunkPos.z)) {
-                    level.chunkSource.removeRegionTicket(VSTicketType.SHIP_CHUNK, chunkPos, 0, chunkPos)
+                    // Only release the SHIP_CHUNK ticket if the ship that owns this chunk
+                    // is actually gone. If the ship still exists (just no player watcher),
+                    // keep the chunk loaded — otherwise scheduled ticks, block entities, and
+                    // fluid flow on unattended ships all silently stop working (redstone
+                    // clocks halt, hoppers freeze, furnaces don't smelt).
+                    //
+                    // Check via the task's own ship field (rather than re-looking up via
+                    // allShips.getByChunkPos, which has already stopped answering by the
+                    // time this task fires). If the task's ship is no longer registered
+                    // in allShips, it's been deleted — drop the ticket. Otherwise keep it.
+                    val taskShip = chunkUnwatchTask.ship
+                    val shipStillAlive = shipWorld.allShips.getById(taskShip.id) != null
+                    if (!shipStillAlive) {
+                        level.chunkSource.removeRegionTicket(VSTicketType.SHIP_CHUNK, chunkPos, 0, chunkPos)
+                    }
                 } else {
                     level.chunkSource.updateChunkForced(chunkPos, false)
                 }

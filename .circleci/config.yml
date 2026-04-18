@@ -154,9 +154,8 @@ jobs:
   fabric_server_test:
     executor: java_large
     environment:
-      MC_VERSION: "1.20.1"
+      MC_VERSION: "1.21.1"
       FABRIC_VERSION: "1.0.1"
-      FABRIC_API_URL: "https://cdn.modrinth.com/data/P7dR8mSH/versions/UapVHwiP/fabric-api-0.92.6%2B1.20.1.jar"
     steps:
       - attach_workspace:
           at: .
@@ -187,12 +186,21 @@ jobs:
             # Generates server.jar and required loader files for the requested MC version.
             java -jar fabric-installer-${FABRIC_VERSION}.jar server -downloadMinecraft -mcversion "${MC_VERSION}" -noprofile
             # Copy mod jar into mods/
-            cp "/${FABRIC_MOD_JAR}" mods/
+            cp "${FABRIC_MOD_JAR}" mods/
       - run:
-          name: Download Fabric API
+          name: Download Fabric API (latest compatible with ${MC_VERSION})
           command: |
             set -euo pipefail
             cd /tmp/fabric-server
+            # Ask Modrinth for the newest Fabric API release that targets this MC version
+            # instead of hard-coding a URL that has to be hand-updated each MC bump.
+            FABRIC_API_URL=$(curl -fsSL \
+              "https://api.modrinth.com/v2/project/fabric-api/version?game_versions=%5B%22${MC_VERSION}%22%5D&loaders=%5B%22fabric%22%5D" \
+              | grep -oE '"url":"[^"]+\.jar"' | head -n1 | sed 's/"url":"//; s/"$//')
+            if [ -z "${FABRIC_API_URL}" ]; then
+              echo "Could not resolve a Fabric API version for MC ${MC_VERSION}"
+              exit 1
+            fi
             curl -L "${FABRIC_API_URL}" -o mods/fabric-api.jar
       - run_test_server:
           cmd: "java -Xmx2G -Xms2G -jar fabric-server-launch.jar nogui"
@@ -201,44 +209,54 @@ jobs:
   forge_server_test:
     executor: java_large
     environment:
-      MC_VERSION: "1.20.1"
-      FORGE_VERSION: "47.2.0"
-      KFF_URL: "https://cdn.modrinth.com/data/ordsPcFz/versions/hmeyC41q/kotlinforforge-4.11.0-all.jar"
+      MC_VERSION: "1.21.1"
+      NEOFORGE_VERSION: "21.1.206"
     steps:
       - attach_workspace:
           at: .
       - prepare_server_dir:
           server_root: /tmp/forge-server
       - run:
-          name: Find built Forge mod jar
+          name: Find built NeoForge mod jar
           command: |
             set -euo pipefail
-            FORGE_JAR="$(pwd)/$(ls -1 artifacts/*-forge-*.jar | head -n1)"
+            # save_artifacts names the produced jar <name>-neoforge-<sha>.jar since the
+            # forge/ subproject builds for NeoForge 21.1.
+            FORGE_JAR="$(pwd)/$(ls -1 artifacts/*-neoforge-*.jar | head -n1)"
             if [ -z "${FORGE_JAR}" ]; then
-              echo "No Forge jar found in artifacts/"
+              echo "No NeoForge jar found in artifacts/"
               ls -la artifacts || true
               exit 1
             fi
             echo "export FORGE_MOD_JAR=${FORGE_JAR}" >> "$BASH_ENV"
       - run:
-          name: Download Forge server
+          name: Download NeoForge server installer
           command: |
             set -euo pipefail
             cd /tmp/forge-server
-            curl -L "https://maven.minecraftforge.net/net/minecraftforge/forge/${MC_VERSION}-${FORGE_VERSION}/forge-${MC_VERSION}-${FORGE_VERSION}-installer.jar" -o forge-installer-${FORGE_VERSION}.jar
+            curl -L "https://maven.neoforged.net/releases/net/neoforged/neoforge/${NEOFORGE_VERSION}/neoforge-${NEOFORGE_VERSION}-installer.jar" -o neoforge-installer.jar
       - run:
-          name: Install Forge server
+          name: Install NeoForge server
           command: |
             set -euo pipefail
             cd /tmp/forge-server
-            java -jar forge-installer-${FORGE_VERSION}.jar --installServer
+            java -jar neoforge-installer.jar --installServer
             # Copy the mod into mods/
             cp "${FORGE_MOD_JAR}" mods/
       - run:
-          name: Download Kotlin For Forge
+          name: Download Kotlin For Forge (NeoForge, latest compatible with ${MC_VERSION})
           command: |
             set -euo pipefail
             cd /tmp/forge-server
+            # Modrinth project 'ordsPcFz' is Kotlin For Forge. Fetch the newest neoforge
+            # jar for this MC version instead of pinning a URL.
+            KFF_URL=$(curl -fsSL \
+              "https://api.modrinth.com/v2/project/ordsPcFz/version?game_versions=%5B%22${MC_VERSION}%22%5D&loaders=%5B%22neoforge%22%5D" \
+              | grep -oE '"url":"[^"]+\.jar"' | head -n1 | sed 's/"url":"//; s/"$//')
+            if [ -z "${KFF_URL}" ]; then
+              echo "Could not resolve a Kotlin For Forge (NeoForge) version for MC ${MC_VERSION}"
+              exit 1
+            fi
             curl -L "${KFF_URL}" -o mods/kff.jar
       - run_test_server:
           cmd: "./run.sh nogui"

@@ -757,23 +757,31 @@ object ShipAssembler {
             lightEngine.updateSectionStatus(sp, false)
         }
 
-        // Propagate sky light sources so the engine knows where sky light starts.
-        // Include neighbor chunks — light changes at chunk boundaries need neighbors
-        // to recompute to avoid one-side-dark rendering artifacts.
-        val shipChunks = destPositions.map { ChunkPos(it) }.distinct()
-        val chunksToLight = shipChunks.flatMap { cp ->
-            (-1..1).flatMap { dx ->
-                (-1..1).map { dz -> ChunkPos(cp.x + dx, cp.z + dz) }
-            }
-        }.distinct()
-        for (cp in chunksToLight) {
-            lightEngine.propagateLightSources(cp)
-        }
+        // NOTE: We do NOT call propagateLightSources here. The vanilla lightChunk phase
+        // already ran during chunk generation and initialized sky light for the empty chunk.
+        // Calling propagateLightSources again would reinitialize from the heightmap, which
+        // may be stale (not yet visible to the light thread), causing enclosed interiors
+        // to be incorrectly filled with sky light 15.
+        //
+        // Instead, we rely on checkBlock to cast shadows from the newly placed blocks.
+        // Since the chunk started with sky light 15 everywhere (empty), checkBlock for
+        // each opaque block will reduce light to 0 and cascade to darken enclosed spaces.
 
-        // Queue a checkBlock for every block position so the light engine
-        // recomputes sky + block light around them
+        // Queue a checkBlock for every block position AND its 6 neighbors.
+        // The block positions themselves need shadow computation, and the neighbor
+        // air blocks (which may be in adjacent chunks) need their sky light updated
+        // to account for the new opaque blocks.
+        val checked = hashSetOf<BlockPos>()
         for (pos in destPositions) {
-            lightEngine.checkBlock(pos)
+            if (checked.add(pos)) {
+                lightEngine.checkBlock(pos)
+            }
+            for (dir in net.minecraft.core.Direction.entries) {
+                val neighbor = pos.relative(dir)
+                if (checked.add(neighbor)) {
+                    lightEngine.checkBlock(neighbor)
+                }
+            }
         }
     }
 }
