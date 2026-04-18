@@ -82,8 +82,8 @@ dependencies {
 
     // EMF compat
     //todo: fix
-    // modCompileOnly("maven.modrinth:entity-model-features:3.1.1-fabric-1.21")
-    // modCompileOnly("maven.modrinth:entitytexturefeatures:7.1-fabric-1.21")
+    modCompileOnly("maven.modrinth:entity-model-features:3.0.7-fabric-1.20.1")
+    modCompileOnly("maven.modrinth:entitytexturefeatures:7.0.6-fabric-1.20.1")
 
     // Create compat
     // modCompileOnly("com.simibubi.create:create-fabric-${minecraft_version}:${create_fabric_version}") {

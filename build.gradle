@@ -263,18 +263,25 @@ subprojects {
                     includeGroup("dev.ftb.mods")
                 }
             }
-            exclusiveContent {
-                forRepository {
-                    maven {
-                        name = "NeoForged"
-                        url = "https://maven.neoforged.net/releases"
-                    }
-                }
-                filter {
-                    includeGroupByRegex("net\\.neoforged(\\.(?!fancymodloader\\.[0-9a-f]{64}\$).+)?")
-                    includeGroup("cpw.mods")
-                }
+            maven {
+                name = "NeoForged"
+                url = "https://maven.neoforged.net/releases"
             }
+            // exclusiveContent {
+            //     forRepository {
+            //         maven {
+            //             name = "NeoForged"
+            //             url = "https://maven.neoforged.net/releases"
+            //         }
+            //     }
+            //     filter {
+            //         includeGroup("net.neoforged")
+            //         includeGroup("net.neoforged.fancymodloader")
+            //         includeGroup("net.neoforged.installertools")
+            //         includeGroup("net.neoforged.fml")
+            //         includeGroup("cpw.mods")
+            //     }
+            // }
             exclusiveContent {
                 forRepository {
                     maven { // Hexcasting

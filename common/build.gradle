@@ -1,3 +1,17 @@
+def resolveFmlLoaderVersion = {
+    def userdev = configurations.detachedConfiguration(
+        dependencies.create("net.neoforged:neoforge:$rootProject.neoforge_version:userdev@jar")
+    )
+    def userdevJar = userdev.resolve().first()
+    def configJson = zipTree(userdevJar).matching { include "config.json" }.singleFile.text
+    def match = (configJson =~ /net\.neoforged\.fancymodloader:loader:([^"\\s]+)/)
+    if (match.find()) {
+        return match.group(1)
+    }
+    throw new GradleException("Could not derive net.neoforged.fancymodloader:loader version from neoforge userdev metadata")
+}
+
+
 dependencies {
     implementation(annotationProcessor("io.github.llamalad7:mixinextras-common:0.4.1"))
 
@@ -8,7 +22,7 @@ dependencies {
 
     // Add NeoForge to the compile classpath
     compileOnly("net.neoforged:neoforge:$rootProject.neoforge_version")
-    modImplementation("net.neoforged.fancymodloader:loader:4.0.41")
+    compileOnly("net.neoforged.fancymodloader:loader:${resolveFmlLoaderVersion()}")
 
     modApi("me.shedaniel.cloth:cloth-config:${cloth_config_version}")
     modCompileOnly "fuzs.forgeconfigapiport:forgeconfigapiport-common:${rootProject.fcap_version}"
