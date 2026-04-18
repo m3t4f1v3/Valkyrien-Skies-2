@@ -305,24 +305,37 @@ subprojects {
                 }
             }
         }
-        exclusiveContent {
-            forRepository {
-                maven {
-                    name = "Valkyrien Skies Internal"
-                    url = project.vs_maven_url ?: 'https://maven.valkyrienskies.org'
-                    if (project.vs_maven_username && project.vs_maven_password) {
-                        credentials {
-                            username = project.vs_maven_username
-                            password = project.vs_maven_password
-                        }
+        if (project.block_external_repositories) {
+            maven {
+                name = "Valkyrien Skies Internal"
+                url = project.vs_maven_url ?: 'https://maven.valkyrienskies.org'
+                if (project.vs_maven_username && project.vs_maven_password) {
+                    credentials {
+                        username = project.vs_maven_username
+                        password = project.vs_maven_password
                     }
                 }
             }
-            filter {
-                includeGroup("org.valkyrienskies")
-                includeGroup("org.valkyrienskies.core")
-                includeGroup("com.github.Rubydesic")
-                includeVersion("com.fasterxml.jackson.module", "jackson-module-kotlin", "2.14.0-rubyfork")
+        } else {
+            exclusiveContent {
+                forRepository {
+                    maven {
+                        name = "Valkyrien Skies Internal"
+                        url = project.vs_maven_url ?: 'https://maven.valkyrienskies.org'
+                        if (project.vs_maven_username && project.vs_maven_password) {
+                            credentials {
+                                username = project.vs_maven_username
+                                password = project.vs_maven_password
+                            }
+                        }
+                    }
+                }
+                filter {
+                    includeGroup("org.valkyrienskies")
+                    includeGroup("org.valkyrienskies.core")
+                    includeGroup("com.github.Rubydesic")
+                    includeVersion("com.fasterxml.jackson.module", "jackson-module-kotlin", "2.14.0-rubyfork")
+                }
             }
         }
     }
