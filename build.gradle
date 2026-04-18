@@ -364,7 +364,7 @@ subprojects {
                 return false
             }
             def url = repo.url.toString()
-            url.contains("maven.minecraftforge.net") ||
+            url.contains("maven.neoforged.net") ||
                 url.contains("maven.fabricmc.net") ||
                 url.contains("maven.architectury.dev")
         }
