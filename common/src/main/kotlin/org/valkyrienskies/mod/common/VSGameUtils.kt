@@ -296,21 +296,21 @@ inline fun Level.transformToNearbyShipsAndWorld(
 // Level
 fun Level.isChunkInShipyard(chunkX: Int, chunkZ: Int) =
     shipObjectWorld.isChunkInShipyard(chunkX, chunkZ, dimensionId) &&
-        !isHandledBySable(chunkX, chunkZ)
-
-private fun Level.isHandledBySable(chunkX: Int, chunkZ: Int): Boolean {
-    return SableCompanion.INSTANCE.isInPlotGrid(this, chunkX, chunkZ) == true
-}
+        SableCompanion.INSTANCE.isInPlotGrid(this, chunkX, chunkZ) == false
 
 fun Level.isBlockInShipyard(blockX: Int, blockY: Int, blockZ: Int) =
-    shipObjectWorld.isBlockInShipyard(blockX, blockY, blockZ, dimensionId)
+    shipObjectWorld.isBlockInShipyard(blockX, blockY, blockZ, dimensionId) &&
+        SableCompanion.INSTANCE.isInPlotGrid(this, BlockPos(blockX, blockY, blockZ)) == false
 
-fun Level.isBlockInShipyard(pos: BlockPos) = isBlockInShipyard(pos.x, pos.y, pos.z)
+fun Level.isBlockInShipyard(pos: BlockPos) = isBlockInShipyard(pos.x, pos.y, pos.z) &&
+    SableCompanion.INSTANCE.isInPlotGrid(this, pos) == false
 
-fun Level.isBlockInShipyard(pos: Vec3) = isBlockInShipyard(pos.x.toInt(), pos.y.toInt(), pos.z.toInt())
+fun Level.isBlockInShipyard(pos: Vec3) = isBlockInShipyard(pos.x.toInt(), pos.y.toInt(), pos.z.toInt()) &&
+    SableCompanion.INSTANCE.isInPlotGrid(this, pos) == false
 
 fun Level.isBlockInShipyard(x: Double, y: Double, z: Double) =
-    isBlockInShipyard(x.toInt(), y.toInt(), z.toInt())
+    isBlockInShipyard(x.toInt(), y.toInt(), z.toInt()) &&
+        SableCompanion.INSTANCE.isInPlotGrid(this, Vector3d(x, y, z)) == false
 
 fun Level?.getLoadedShipManagingPos(chunkX: Int, chunkZ: Int) =
     getShipObjectManagingPosImpl(this, chunkX, chunkZ)
