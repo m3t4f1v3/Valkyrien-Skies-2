@@ -219,7 +219,7 @@ fun Level?.squaredDistanceBetweenInclShips(
     val dy = inWorldY2 - inWorldY1
     val dz = inWorldZ2 - inWorldZ1
 
-    return dx * dx + dy * dy + dz * dz
+    return minOf(dx * dx + dy * dy + dz * dz, SableCompanion.INSTANCE.distanceSquaredWithSubLevels(this, x1, y1, z1, x2, y2, z2))
 }
 
 private fun getShipObjectManagingPosImpl(world: Level?, chunkX: Int, chunkZ: Int): LoadedShip? {
