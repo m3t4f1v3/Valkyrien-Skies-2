@@ -87,6 +87,12 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
     private Long lastMountedShipId = null;
     @Unique
     private ShipTransform lastTransform = null;
+    @Unique
+    private boolean vs$shipChunkVisibilityDirty = true;
+    @Unique
+    private long vs$lastShipVisibilitySignature = Long.MIN_VALUE;
+    @Unique
+    private int vs$lastShipVisibilityCount = -1;
 
     /**
      * Fix the distance to render chunks, so that MC doesn't think ship chunks are too far away
@@ -120,22 +126,26 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
         final Player player = this.minecraft.player;
         if (player == null || !(VSGameUtilsKt.getShipMountedTo(player) instanceof final ClientShip ship)) {
             this.lastMountedShipId = null;
+            this.vs$shipChunkVisibilityDirty = needsFrustumUpdate || this.vs$shipChunkVisibilityDirty;
             return needsFrustumUpdate;
         }
         final ShipTransform transform = ship.getRenderTransform();
         if (this.lastMountedShipId == null || this.lastMountedShipId.longValue() != ship.getId() || this.lastTransform == null) {
             this.lastMountedShipId = ship.getId();
             this.lastTransform = transform;
+            this.vs$shipChunkVisibilityDirty = true;
             return true;
         }
         final boolean needUpdate = this.lastTransform != transform && !this.lastTransform.getShipToWorld().equals(transform.getShipToWorld());
         this.lastTransform = transform;
+        this.vs$shipChunkVisibilityDirty = needUpdate || needsFrustumUpdate || this.vs$shipChunkVisibilityDirty;
         return needUpdate;
     }
 
     @Override
     public void vs$setNeedsFrustumUpdate() {
         this.needsFrustumUpdate.set(true);
+        this.vs$shipChunkVisibilityDirty = true;
     }
 
     /**
@@ -173,6 +183,29 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
 
     @Override
     public void vs$addShipVisibleChunks(final Frustum frustum) {
+        long shipVisibilitySignature = 0L;
+        int loadedShipCount = 0;
+        for (final ClientShip shipObject : VSGameUtilsKt.getShipObjectWorld(level).getLoadedShips()) {
+            loadedShipCount++;
+            long shipSig = shipObject.getId();
+            shipSig = 31L * shipSig + shipObject.getRenderTransform().getShipToWorld().hashCode();
+            shipSig = 31L * shipSig + shipObject.getRenderAABB().hashCode();
+            shipVisibilitySignature = 31L * shipVisibilitySignature + shipSig;
+        }
+
+        if (!this.vs$shipChunkVisibilityDirty &&
+            this.vs$lastShipVisibilityCount == loadedShipCount &&
+            this.vs$lastShipVisibilitySignature == shipVisibilitySignature
+        ) {
+            return;
+        }
+
+        shipRenderChunks.forEach((ship, chunks) -> chunks.clear());
+        vs$visibileShipChunks = new BlockPos2ByteOpenHashMap();
+        this.vs$lastShipVisibilityCount = loadedShipCount;
+        this.vs$lastShipVisibilitySignature = shipVisibilitySignature;
+        this.vs$shipChunkVisibilityDirty = false;
+
         final IVSViewAreaMethods shipViewArea = (IVSViewAreaMethods) viewArea;
         final AABBd tempAABB = new AABBd();
         for (final ClientShip shipObject : VSGameUtilsKt.getShipObjectWorld(level).getLoadedShips()) {
@@ -231,16 +264,9 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
         }
     }
 
-    @Inject(
-        method = "*",
-        at = @At(
-            value = "INVOKE",
-            target = "Lit/unimi/dsi/fastutil/objects/ObjectArrayList;clear()V"
-        )
-    )
-    private void clearShipChunks(final CallbackInfo ci) {
-        shipRenderChunks.forEach((ship, chunks) -> chunks.clear());
-        vs$visibileShipChunks = new BlockPos2ByteOpenHashMap();
+    @Override
+    public boolean vs$isShipChunkVisible(final int chunkX, final int sectionY, final int chunkZ) {
+        return vs$visibileShipChunks.contains(chunkX, sectionY, chunkZ);
     }
 
     @WrapOperation(

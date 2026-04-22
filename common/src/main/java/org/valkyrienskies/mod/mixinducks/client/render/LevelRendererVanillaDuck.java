@@ -6,4 +6,6 @@ public interface LevelRendererVanillaDuck {
 
     void vs$addShipVisibleChunks(final Frustum frustum);
 
+    boolean vs$isShipChunkVisible(int chunkX, int sectionY, int chunkZ);
+
 }
