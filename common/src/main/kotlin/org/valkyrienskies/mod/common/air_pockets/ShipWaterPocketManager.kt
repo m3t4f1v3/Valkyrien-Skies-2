@@ -82,6 +82,7 @@ object ShipWaterPocketManager {
     private const val PERSIST_FLUSH_INTERVAL_TICKS = 20L
     private const val CLIENT_WATER_SOLVE_DEMAND_WINDOW_TICKS = 10L
     private const val CLIENT_WATER_SOLVE_FORCED_REFRESH_STALE_TICKS = 20L
+    private const val CLIENT_WATER_SOLVE_TRANSFORM_KEY_QUANTIZATION = 64.0
     private const val CLIENT_WATER_SOLVE_LARGE_QUERY_RADIUS_CHUNKS = 12
     private const val CLIENT_WATER_SOLVE_HUGE_QUERY_RADIUS_CHUNKS = 8
     private const val INTERSECTING_SHIPS_CACHE_SIZE = 64
@@ -363,17 +364,18 @@ object ShipWaterPocketManager {
         return if (queryWindow == null) baseTransformKey else mixHash64(baseTransformKey, queryWindow.key)
     }
 
-    private fun transformKey(
+    private fun transformKeyQuantized(
         minX: Int,
         minY: Int,
         minZ: Int,
         shipTransform: ShipTransform,
         shipPosTmp: Vector3d,
         worldPosTmp: Vector3d,
+        quantization: Double,
     ): Long {
         fun q(v: Double): Long {
             // Quantize to reduce jitter while still catching meaningful motion/rotation changes.
-            return kotlin.math.round(v * 1024.0).toLong()
+            return kotlin.math.round(v * quantization).toLong()
         }
 
         var h = 0x1234_5678_9ABCL
@@ -395,6 +397,40 @@ object ShipWaterPocketManager {
         sample(x0, y0, z0 + 1.0)
         return h
     }
+
+    private fun transformKey(
+        minX: Int,
+        minY: Int,
+        minZ: Int,
+        shipTransform: ShipTransform,
+        shipPosTmp: Vector3d,
+        worldPosTmp: Vector3d,
+    ): Long = transformKeyQuantized(
+        minX = minX,
+        minY = minY,
+        minZ = minZ,
+        shipTransform = shipTransform,
+        shipPosTmp = shipPosTmp,
+        worldPosTmp = worldPosTmp,
+        quantization = 1024.0,
+    )
+
+    private fun clientTransformKey(
+        minX: Int,
+        minY: Int,
+        minZ: Int,
+        shipTransform: ShipTransform,
+        shipPosTmp: Vector3d,
+        worldPosTmp: Vector3d,
+    ): Long = transformKeyQuantized(
+        minX = minX,
+        minY = minY,
+        minZ = minZ,
+        shipTransform = shipTransform,
+        shipPosTmp = shipPosTmp,
+        worldPosTmp = worldPosTmp,
+        quantization = CLIENT_WATER_SOLVE_TRANSFORM_KEY_QUANTIZATION,
+    )
 
     private data class BuoyancyFluidProps(
         val density: Double,
@@ -2777,7 +2813,7 @@ object ShipWaterPocketManager {
             ) {
                 val shipPosTmpKey = tmpShipPos3.get()
                 val worldPosTmpKey = tmpWorldPos3.get()
-                val baseTransformKey = transformKey(
+                val baseTransformKey = clientTransformKey(
                     minX = state.minX,
                     minY = state.minY,
                     minZ = state.minZ,

@@ -17,6 +17,8 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.LevelRenderer.RenderChunkInfo;
+import net.minecraft.client.renderer.GameRenderer;
+import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraft.client.renderer.ViewArea;
@@ -93,6 +95,8 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
     private long vs$lastShipVisibilitySignature = Long.MIN_VALUE;
     @Unique
     private int vs$lastShipVisibilityCount = -1;
+    @Unique
+    private boolean vs$emittedShipsStartRenderingThisFrame = false;
 
     /**
      * Fix the distance to render chunks, so that MC doesn't think ship chunks are too far away
@@ -160,6 +164,16 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
         ((IVSViewAreaMethods) viewArea).vs$fillRenderChunkPool();
         // This mixin never gets called for IP dimensions, instead we'll call it manually
         vs$addShipVisibleChunks(frustum);
+    }
+
+    @Inject(
+        method = "renderLevel",
+        at = @At("HEAD")
+    )
+    private void vs$resetShipRenderFrameState(final PoseStack poseStack, final float partialTick, final long finishNanoTime,
+        final boolean renderBlockOutline, final Camera camera, final GameRenderer gameRenderer,
+        final LightTexture lightTexture, final Matrix4f projectionMatrix, final CallbackInfo ci) {
+        this.vs$emittedShipsStartRenderingThisFrame = false;
     }
 
     /**
@@ -282,11 +296,13 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
 
         renderChunkLayer.call(receiver, renderType, poseStack, camX, camY, camZ, matrix4f);
 
-        VSGameEvents.INSTANCE.getShipsStartRendering().emit(new VSGameEvents.ShipStartRenderEvent(
-            receiver, renderType, poseStack, camX, camY, camZ, matrix4f
-        ));
-
         if (!shipRenderChunks.isEmpty()) {
+            if (!this.vs$emittedShipsStartRenderingThisFrame) {
+                this.vs$emittedShipsStartRenderingThisFrame = true;
+                VSGameEvents.INSTANCE.getShipsStartRendering().emit(new VSGameEvents.ShipStartRenderEvent(
+                    receiver, renderType, poseStack, camX, camY, camZ, matrix4f
+                ));
+            }
             renderAllShipChunkLayers(renderType, poseStack, camX, camY, camZ, matrix4f, receiver);
         }
     }
