@@ -101,7 +101,7 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
 
     @Unique
     private static long vs$quantizeRenderCoord(final double value) {
-        return Math.round(value * 16.0);
+        return Math.round(value * 256.0);
     }
 
     @Unique
