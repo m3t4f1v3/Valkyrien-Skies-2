@@ -276,6 +276,7 @@
     "client.renderer.MixinGameRenderer",
     "client.renderer.MixinLevelRenderer",
     "client.world.MixinClientChunkCache",
+    "client.world.MixinClientChunkCache$MixinStorage",
     "client.world.MixinClientLevel",
     "feature.air_pockets.MixinClientPacketListener",
     "feature.air_pockets.client.MixinCamera",

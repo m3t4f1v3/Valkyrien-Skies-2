@@ -16,9 +16,10 @@ import me.jellysquid.mods.sodium.client.render.chunk.lists.SortedRenderLists;
 import me.jellysquid.mods.sodium.client.render.chunk.terrain.DefaultTerrainRenderPasses;
 import me.jellysquid.mods.sodium.client.render.chunk.terrain.TerrainRenderPass;
 import me.jellysquid.mods.sodium.client.render.viewport.CameraTransform;
+import me.jellysquid.mods.sodium.client.render.viewport.Viewport;
+import net.minecraft.client.Camera;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.MultiBufferSource.BufferSource;
 import net.minecraft.client.renderer.RenderBuffers;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderDispatcher;
@@ -41,6 +42,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.valkyrienskies.core.api.ships.ClientShip;
 import org.valkyrienskies.mod.common.VSClientGameUtils;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
+import org.valkyrienskies.mod.common.assembly.SeamlessChunksManager;
 import org.valkyrienskies.mod.mixinducks.mod_compat.sodium.RenderSectionManagerDuck;
 
 @Mixin(SodiumWorldRenderer.class)
@@ -90,7 +92,7 @@ public abstract class MixinSodiumWorldRenderer {
     @Shadow
     protected abstract void renderBlockEntities(PoseStack matrices, RenderBuffers bufferBuilders,
         Long2ObjectMap<SortedSet<BlockDestructionProgress>> blockBreakingProgressions, float tickDelta,
-        BufferSource immediate, double x, double y, double z, BlockEntityRenderDispatcher blockEntityRenderer);
+        MultiBufferSource.BufferSource immediate, double x, double y, double z, BlockEntityRenderDispatcher blockEntityRenderer);
 
     @Redirect(
         method = "renderBlockEntities(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/RenderBuffers;Lit/unimi/dsi/fastutil/longs/Long2ObjectMap;Lnet/minecraft/client/Camera;F)V",
@@ -143,6 +145,26 @@ public abstract class MixinSodiumWorldRenderer {
     private void isEntityVisible(final Entity entity, final CallbackInfoReturnable<Boolean> cir) {
         if (VSGameUtilsKt.isBlockInShipyard(world, entity.position())) {
             cir.setReturnValue(true);
+        }
+    }
+
+    /**
+     * TODO: check if this comment is true for sodium renderer.
+     * Process deferred ship chunk packets BEFORE vanilla's light updates so that
+     * ship chunks are loaded and their light is computed before render chunks compile.
+     */
+    @Inject(
+        method = "setupTerrain",
+        at = @At("HEAD")
+    )
+    private void drainShipChunksBeforeLightUpdate(final Camera camera, final Viewport viewport, final int frame, final boolean spectator, final boolean updateChunksImmediately, final CallbackInfo ci) {
+        final SeamlessChunksManager manager = SeamlessChunksManager.get();
+        if (manager != null) {
+            manager.drainDeferredBatch();
+            // Drain all queued light updates so the light engine has the latest data
+            while (!world.isLightUpdateQueueEmpty()) {
+                world.pollLightUpdates();
+            }
         }
     }
 }
