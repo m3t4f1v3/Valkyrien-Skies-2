@@ -117,6 +117,15 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
         return sig;
     }
 
+    @Unique
+    private void vs$appendShipRenderChunksToFrustumList() {
+        shipRenderChunks.forEach((ship, chunks) -> {
+            for (int i = 0; i < chunks.size(); i++) {
+                renderChunksInFrustum.add(chunks.get(i));
+            }
+        });
+    }
+
     /**
      * Fix the distance to render chunks, so that MC doesn't think ship chunks are too far away
      */
@@ -232,6 +241,7 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
             this.vs$lastShipVisibilityCount == loadedShipCount &&
             this.vs$lastShipVisibilitySignature == shipVisibilitySignature
         ) {
+            vs$appendShipRenderChunksToFrustumList();
             return;
         }
 
@@ -297,6 +307,8 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
                 }
             });
         }
+
+        vs$appendShipRenderChunksToFrustumList();
     }
 
     @Override

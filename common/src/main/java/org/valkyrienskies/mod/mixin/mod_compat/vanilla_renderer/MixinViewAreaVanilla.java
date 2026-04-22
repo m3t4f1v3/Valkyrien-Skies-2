@@ -109,6 +109,19 @@ public class MixinViewAreaVanilla implements IVSViewAreaMethods {
         }
     }
 
+    @Unique
+    private void vs$markExistingShipRenderChunkDirty(final int chunkX, final int sectionY, final int chunkZ,
+        final boolean important) {
+        final int yIndex = sectionY - level.getMinSection();
+        if (yIndex < 0 || yIndex >= chunkGridSizeY) {
+            return;
+        }
+        final ChunkRenderDispatcher.RenderChunk[] renderChunksArray = vs$shipRenderChunks.get(ChunkPos.asLong(chunkX, chunkZ));
+        if (renderChunksArray != null && renderChunksArray[yIndex] != null) {
+            renderChunksArray[yIndex].setDirty(important);
+        }
+    }
+
     /**
      * Intercept setDirty for ship chunks. We do NOT create RenderChunks here because
      * each RenderChunk constructor calls glGenBuffers (blocking GPU allocation).
@@ -140,11 +153,13 @@ public class MixinViewAreaVanilla implements IVSViewAreaMethods {
             // Only mark existing render chunks dirty — don't create new ones.
             // Creation is deferred to vs$getOrCreateShipRenderChunk (called from
             // vs$addShipVisibleChunks) which only creates for non-empty sections.
-            final long chunkPosAsLong = ChunkPos.asLong(x, z);
-            final ChunkRenderDispatcher.RenderChunk[] renderChunksArray = vs$shipRenderChunks.get(chunkPosAsLong);
-            if (renderChunksArray != null && renderChunksArray[yIndex] != null) {
-                renderChunksArray[yIndex].setDirty(important);
-            }
+            vs$markExistingShipRenderChunkDirty(x, y, z, important);
+            vs$markExistingShipRenderChunkDirty(x - 1, y, z, important);
+            vs$markExistingShipRenderChunkDirty(x + 1, y, z, important);
+            vs$markExistingShipRenderChunkDirty(x, y - 1, z, important);
+            vs$markExistingShipRenderChunkDirty(x, y + 1, z, important);
+            vs$markExistingShipRenderChunkDirty(x, y, z - 1, important);
+            vs$markExistingShipRenderChunkDirty(x, y, z + 1, important);
 
             callbackInfo.cancel();
         }
