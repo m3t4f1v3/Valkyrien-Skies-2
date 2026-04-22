@@ -38,6 +38,7 @@ import org.valkyrienskies.mod.common.IShipObjectWorldServerProvider
 import org.valkyrienskies.mod.common.air_pockets.MIN_OPENING_CONDUCTANCE
 import org.valkyrienskies.mod.common.air_pockets.ShipPocketState
 import org.valkyrienskies.mod.common.air_pockets.ShipWaterPocketManager
+import org.valkyrienskies.mod.common.air_pockets.WaterSolveSnapshot
 import org.valkyrienskies.mod.common.util.DimensionIdProvider
 import org.valkyrienskies.mod.mixinducks.feature.air_pockets.ship_water_pockets.LevelChunkDuck
 import org.valkyrienskies.mod.util.FluidStateManager
@@ -215,6 +216,11 @@ internal fun createTrackingLevel(
         moreInterfaces = arrayOf(LevelChunkDuck::class),
     )
     val random = RandomSource.create(0L)
+    val fluidData = FluidStateManager.ChunkFluidData()
+
+    for ((key, state) in states) {
+        fluidData.setFluidState(BlockPos.of(key), state.fluidState)
+    }
 
     every { level.gameTime } returns gameTime
     every { level.minBuildHeight } returns -64
@@ -230,18 +236,23 @@ internal fun createTrackingLevel(
     every { chunk.getFluidState(any()) } answers {
         states.getOrElse(blockKey(firstArg<BlockPos>())) { Blocks.AIR.defaultBlockState() }.fluidState
     }
-    every { (chunk as LevelChunkDuck).`vs$getFluidData`() } returns FluidStateManager.ChunkFluidData()
+    every { (chunk as LevelChunkDuck).`vs$getFluidData`() } returns fluidData
 
     every { level.getChunk(any<Int>(), any<Int>(), any(), any()) } returns chunk
     every { level.getBlockState(any<BlockPos>()) } answers {
         states.getOrElse(blockKey(firstArg<BlockPos>())) { Blocks.AIR.defaultBlockState() }
     }
     every { level.setBlock(any<BlockPos>(), any(), any()) } answers {
-        states[blockKey(firstArg<BlockPos>())] = secondArg()
+        val pos = firstArg<BlockPos>()
+        val blockState = secondArg<BlockState>()
+        states[blockKey(pos)] = blockState
+        fluidData.setFluidState(pos, blockState.fluidState)
         true
     }
     every { level.destroyBlock(any<BlockPos>(), any()) } answers {
-        states[blockKey(firstArg<BlockPos>())] = Blocks.AIR.defaultBlockState()
+        val pos = firstArg<BlockPos>()
+        states[blockKey(pos)] = Blocks.AIR.defaultBlockState()
+        fluidData.setFluidState(pos, Fluids.EMPTY.defaultFluidState())
         true
     }
     every { level.scheduleTick(any<BlockPos>(), any<Fluid>(), any()) } just runs
@@ -290,6 +301,74 @@ internal fun invokeSyncMaterializedFloodFluidFromWorld(
     )
     method.isAccessible = true
     method.invoke(ShipWaterPocketManager, level, state)
+}
+
+internal fun invokeEstimateExteriorFluidSurfaceYAtShipPoint(
+    level: Level,
+    shipTransform: ShipTransform,
+    shipX: Double,
+    shipY: Double,
+    shipZ: Double,
+    sampleFluid: Fluid,
+): Double? {
+    val method = ShipWaterPocketManager::class.java.declaredMethods.single {
+        it.name == "estimateExteriorFluidSurfaceYAtShipPoint"
+    }
+    method.isAccessible = true
+    return method.invoke(
+        ShipWaterPocketManager,
+        level,
+        shipTransform,
+        shipX,
+        shipY,
+        shipZ,
+        sampleFluid,
+        Vector3d(),
+        Vector3d(),
+        BlockPos.MutableBlockPos(),
+        null,
+        null,
+        null,
+    ) as Double?
+}
+
+internal fun invokeCaptureWaterSolveSnapshot(
+    level: Level,
+    state: ShipPocketState,
+    shipTransform: ShipTransform,
+    generation: Long = 1L,
+    captureTick: Long = 0L,
+): WaterSolveSnapshot? {
+    val method = ShipWaterPocketManager::class.java.declaredMethods.single {
+        it.name == "captureWaterSolveSnapshot"
+    }
+    method.isAccessible = true
+    @Suppress("UNCHECKED_CAST")
+    return method.invoke(
+        ShipWaterPocketManager,
+        level,
+        state,
+        shipTransform,
+        generation,
+        captureTick,
+        null,
+        null,
+    ) as WaterSolveSnapshot?
+}
+
+internal fun invokeComputeWaterReachable(
+    level: Level,
+    state: ShipPocketState,
+    shipTransform: ShipTransform,
+): BitSet {
+    val method = ShipWaterPocketManager::class.java.getDeclaredMethod(
+        "computeWaterReachable",
+        Level::class.java,
+        ShipPocketState::class.java,
+        ShipTransform::class.java,
+    )
+    method.isAccessible = true
+    return method.invoke(ShipWaterPocketManager, level, state, shipTransform) as BitSet
 }
 
 internal fun <T> withRegisteredServerState(
