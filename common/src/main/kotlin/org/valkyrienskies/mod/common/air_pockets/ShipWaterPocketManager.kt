@@ -19,7 +19,6 @@ import net.minecraft.core.particles.ParticleTypes
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.util.Mth
 import net.minecraft.world.level.Level
-import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.block.LiquidBlock
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.block.state.properties.BlockStateProperties
@@ -4439,6 +4438,14 @@ object ShipWaterPocketManager {
             return if (bestY.isFinite()) bestY else fallback
         }
 
+        data class OpeningFaceCoverageCacheKey(
+            val faceKey: Long,
+            val componentMaskCur: Long,
+            val componentMaskNeighbor: Long,
+        )
+
+        val openingFaceCoverageCache = HashMap<OpeningFaceCoverageCacheKey, OpeningFaceFluidCoverageSample>()
+
         fun sampleOpeningFaceFluidCoverage(
             curIdx: Int,
             lx: Int,
@@ -4449,6 +4456,16 @@ object ShipWaterPocketManager {
             componentMaskCur: Long = -1L,
             componentMaskNeighbor: Long = -1L,
         ): OpeningFaceFluidCoverageSample {
+            val cacheKey = OpeningFaceCoverageCacheKey(
+                faceKey = (curIdx.toLong() shl 3) or (outDirCode.toLong() and 7L),
+                componentMaskCur = componentMaskCur,
+                componentMaskNeighbor = componentMaskNeighbor,
+            )
+            val cached = openingFaceCoverageCache[cacheKey]
+            if (cached != null) {
+                return cached
+            }
+
             val faceTopY = openingFaceTopWorldY(
                 curIdx = curIdx,
                 lx = lx,
@@ -4464,13 +4481,15 @@ object ShipWaterPocketManager {
                 val key = (curIdx.toLong() shl 3) or (outDirCode.toLong() and 7L)
                 val precomputed = precomputedOpeningFaceSamples?.get(key)
                 if (precomputed != null) {
-                    return OpeningFaceFluidCoverageSample(
+                    val result = OpeningFaceFluidCoverageSample(
                         canonicalFluid = precomputed.canonicalFluid,
                         coverageRatio = precomputed.coverageRatio.coerceIn(0.0, 1.0),
                         centerSubmerged = precomputed.centerSubmerged,
                         faceTopWorldY = precomputed.faceTopWorldY,
                         estimatedSurfaceY = precomputed.estimatedSurfaceY,
                     )
+                    openingFaceCoverageCache[cacheKey] = result
+                    return result
                 }
                 val fallbackCount = asyncOpeningFaceFallbackCount.incrementAndGet()
                 logThrottledDiag(
@@ -4480,16 +4499,18 @@ object ShipWaterPocketManager {
                     outDirCode,
                     nIdx,
                 )
-                return OpeningFaceFluidCoverageSample(
+                val result = OpeningFaceFluidCoverageSample(
                     canonicalFluid = null,
                     coverageRatio = 0.0,
                     centerSubmerged = false,
                     faceTopWorldY = faceTopY,
                     estimatedSurfaceY = null,
                 )
+                openingFaceCoverageCache[cacheKey] = result
+                return result
             }
 
-            return withBypassedFluidOverrides {
+            val result = withBypassedFluidOverrides {
                 val sampledFluids = arrayOfNulls<Fluid>(5)
                 val sampledCounts = IntArray(5)
                 var sampledFluidCount = 0
@@ -4649,6 +4670,8 @@ object ShipWaterPocketManager {
                     estimatedSurfaceY = estimatedSurfaceY,
                 )
             }
+            openingFaceCoverageCache[cacheKey] = result
+            return result
         }
 
         // 1) Flood-fill exterior world water. This ensures we never cull ocean water around the ship.
