@@ -1384,13 +1384,11 @@ object ShipWaterPocketManager {
         captureTick: Long,
         transformKeyOverride: Long? = null,
         clientWorldQueryBounds: ClientWorldChunkQueryBounds? = null,
-    ): WaterSolveSnapshot? {
+    ): WaterSolveSnapshot {
         val sizeX = state.sizeX
         val sizeY = state.sizeY
         val sizeZ = state.sizeZ
-        val volumeLong = sizeX.toLong() * sizeY.toLong() * sizeZ.toLong()
-        if (volumeLong <= 0 || volumeLong > MAX_SIM_VOLUME.toLong()) return null
-        val volume = volumeLong.toInt()
+        val volume = sizeX * sizeY * sizeZ
         val shipPosTmp = tmpShipPos2.get()
         val worldPosTmp = tmpWorldPos2.get()
         val queryCache = tmpChunkQueryCache.get().apply { reset() }
@@ -1956,25 +1954,24 @@ object ShipWaterPocketManager {
         val generation = state.requestedWaterSolveGeneration + 1L
         state.requestedWaterSolveGeneration = generation
 
-        val snapshot = try {
-            captureWaterSolveSnapshot(
-                level = level,
-                state = state,
-                shipTransform = shipTransform,
-                generation = generation,
-                captureTick = captureTick,
-                transformKeyOverride = transformKeyOverride,
-                clientWorldQueryBounds = clientWorldQueryBounds,
-            )
-        } catch (t: Throwable) {
-            val count = waterSolveJobsFailed.incrementAndGet()
-            logThrottledDiag(count, "Failed to capture water solve snapshot", t)
-            return false
-        } ?: return false
-
         val submittedFuture = ShipPocketAsyncRuntime.trySubmit(
             subsystem = ShipPocketAsyncSubsystem.WATER_SOLVER,
-            task = { computeWaterSolveAsync(snapshot) },
+            task = {
+                val snapshot = captureWaterSolveSnapshot(
+                    level = level,
+                    state = state,
+                    shipTransform = shipTransform,
+                    generation = generation,
+                    captureTick = captureTick,
+                    transformKeyOverride = transformKeyOverride,
+                    clientWorldQueryBounds = clientWorldQueryBounds,
+                )
+                if (level.isClientSide) {
+                    state.lastClientWaterSolveSubmittedTransformKey = snapshot.transformKey
+                }
+
+                computeWaterSolveAsync(snapshot)
+            },
         )
         if (submittedFuture == null) {
             val count = asyncQueueFullSkips.incrementAndGet()
@@ -1990,17 +1987,14 @@ object ShipWaterPocketManager {
         state.pendingWaterSolveFuture = submittedFuture
         state.waterSolveJobInFlight = true
         state.lastWaterSolveSubmitTick = captureTick
-        if (level.isClientSide) {
-            state.lastClientWaterSolveSubmittedTransformKey = snapshot.transformKey
-        }
 
         val count = waterSolveJobsSubmitted.incrementAndGet()
         logThrottledDiag(
             count,
             "Submitted water solve job gen={} geomRev={} tick={}",
             generation,
-            snapshot.geometryRevision,
-            snapshot.captureTick,
+            "todo", // snapshot.geometryRevision,
+            "todo", // snapshot.captureTick,
         )
         return true
     }
@@ -2306,7 +2300,8 @@ object ShipWaterPocketManager {
                 if ((geometryApplied || now != state.lastWaterReachableUpdateTick) &&
                     state.sizeX > 0 &&
                     state.sizeY > 0 &&
-                    state.sizeZ > 0
+                    state.sizeZ > 0 &&
+                    state.sizeX.toLong() * state.sizeY.toLong() * state.sizeZ.toLong() <= MAX_SIM_VOLUME.toLong()
                 ) {
                     if (remainingWaterSolveSubmissions > 0 &&
                         trySubmitWaterSolveJob(level, state, shipTransform, now)
@@ -2809,7 +2804,8 @@ object ShipWaterPocketManager {
             val shipTransform = getQueryTransform(ship)
             if (state.sizeX > 0 &&
                 state.sizeY > 0 &&
-                state.sizeZ > 0
+                state.sizeZ > 0 &&
+                state.sizeX.toLong() * state.sizeY.toLong() * state.sizeZ.toLong() <= MAX_SIM_VOLUME.toLong()
             ) {
                 val shipPosTmpKey = tmpShipPos3.get()
                 val worldPosTmpKey = tmpWorldPos3.get()
