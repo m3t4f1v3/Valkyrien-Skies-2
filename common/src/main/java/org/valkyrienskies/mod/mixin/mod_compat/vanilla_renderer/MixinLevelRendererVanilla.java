@@ -36,6 +36,7 @@ import org.joml.Vector3d;
 import org.joml.Vector3dc;
 import org.joml.Vector3f;
 import org.joml.primitives.AABBd;
+import org.joml.primitives.AABBdc;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Mutable;
@@ -97,6 +98,24 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
     private int vs$lastShipVisibilityCount = -1;
     @Unique
     private boolean vs$emittedShipsStartRenderingThisFrame = false;
+
+    @Unique
+    private static long vs$quantizeRenderCoord(final double value) {
+        return Math.round(value * 16.0);
+    }
+
+    @Unique
+    private static long vs$shipVisibilitySignature(final ClientShip ship) {
+        long sig = ship.getId();
+        final AABBdc renderAabb = ship.getRenderAABB();
+        sig = 31L * sig + vs$quantizeRenderCoord(renderAabb.minX());
+        sig = 31L * sig + vs$quantizeRenderCoord(renderAabb.minY());
+        sig = 31L * sig + vs$quantizeRenderCoord(renderAabb.minZ());
+        sig = 31L * sig + vs$quantizeRenderCoord(renderAabb.maxX());
+        sig = 31L * sig + vs$quantizeRenderCoord(renderAabb.maxY());
+        sig = 31L * sig + vs$quantizeRenderCoord(renderAabb.maxZ());
+        return sig;
+    }
 
     /**
      * Fix the distance to render chunks, so that MC doesn't think ship chunks are too far away
@@ -201,10 +220,7 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
         int loadedShipCount = 0;
         for (final ClientShip shipObject : VSGameUtilsKt.getShipObjectWorld(level).getLoadedShips()) {
             loadedShipCount++;
-            long shipSig = shipObject.getId();
-            shipSig = 31L * shipSig + shipObject.getRenderTransform().getShipToWorld().hashCode();
-            shipSig = 31L * shipSig + shipObject.getRenderAABB().hashCode();
-            shipVisibilitySignature = 31L * shipVisibilitySignature + shipSig;
+            shipVisibilitySignature = 31L * shipVisibilitySignature + vs$shipVisibilitySignature(shipObject);
         }
 
         if (!this.vs$shipChunkVisibilityDirty &&

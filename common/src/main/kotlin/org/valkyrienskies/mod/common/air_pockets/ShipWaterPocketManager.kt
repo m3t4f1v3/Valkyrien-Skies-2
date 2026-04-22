@@ -82,7 +82,7 @@ object ShipWaterPocketManager {
     private const val PERSIST_FLUSH_INTERVAL_TICKS = 20L
     private const val CLIENT_WATER_SOLVE_DEMAND_WINDOW_TICKS = 10L
     private const val CLIENT_WATER_SOLVE_FORCED_REFRESH_STALE_TICKS = 20L
-    private const val CLIENT_WATER_SOLVE_TRANSFORM_KEY_QUANTIZATION = 64.0
+    private const val CLIENT_WATER_SOLVE_TRANSFORM_KEY_QUANTIZATION = 16.0
     private const val CLIENT_WATER_SOLVE_LARGE_QUERY_RADIUS_CHUNKS = 12
     private const val CLIENT_WATER_SOLVE_HUGE_QUERY_RADIUS_CHUNKS = 8
     private const val INTERSECTING_SHIPS_CACHE_SIZE = 64
@@ -231,9 +231,9 @@ object ShipWaterPocketManager {
 
     internal fun clientWaterSolveCadenceTicksForVolume(volume: Long): Long {
         return when {
-            volume <= 32_768L -> 1L
-            volume <= 131_072L -> 2L
-            volume <= 524_288L -> 4L
+            volume <= 32_768L -> 2L
+            volume <= 131_072L -> 3L
+            volume <= 524_288L -> 5L
             else -> 8L
         }
     }
