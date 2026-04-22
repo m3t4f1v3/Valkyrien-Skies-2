@@ -210,7 +210,7 @@ public class FluidStateManager {
 				if (s.highY < y) {
 					continue;
 				}
-				return new FluidData(s.surface, s.highY == y);
+				return new FluidData(s.surface, s.highY, s.highY == y);
 			}
 			return null;
 		}
@@ -335,7 +335,7 @@ public class FluidStateManager {
 		}
 	}
 
-	public record FluidData(FluidState surface, boolean isSurface) {
+	public record FluidData(FluidState surface, int topY, boolean isSurface) {
 		public float height() {
 			return this.isSurface ? this.surface.getOwnHeight() : 1.0f;
 		}
