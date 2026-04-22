@@ -15,6 +15,8 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.config.VSGameConfig;
+import org.valkyrienskies.mod.common.util.ShipPathfindingUtils;
+import org.valkyrienskies.mod.util.FluidStateManager;
 
 @Mixin(SwimNodeEvaluator.class)
 public abstract class SwimNodeEvaluatorMixin extends NodeEvaluator {
@@ -28,6 +30,8 @@ public abstract class SwimNodeEvaluatorMixin extends NodeEvaluator {
     private FluidState getFluidStateRedirectPathType(BlockGetter instance, BlockPos blockPos,
         Operation<FluidState> original) {
         final FluidState[] fluidState = {original.call(instance, blockPos)};
+        final FluidStateManager.QueryCache queryCache = new FluidStateManager.QueryCache();
+        final BlockPos.MutableBlockPos groundPos = new BlockPos.MutableBlockPos();
         Level level = null;
         if (VSGameConfig.SERVER.getAiOnShips()) {
             if (instance instanceof PathNavigationRegion) {
@@ -44,8 +48,9 @@ public abstract class SwimNodeEvaluatorMixin extends NodeEvaluator {
                 VSGameUtilsKt.transformToNearbyShipsAndWorld(level, origX,
                     origY, origZ, 2,
                     (x, y, z) -> {
-                        final BlockPos groundPos = BlockPos.containing(x, y, z);
-                        final FluidState tempFluidState = original.call(finalLevel, groundPos);
+                        groundPos.set(net.minecraft.util.Mth.floor(x), net.minecraft.util.Mth.floor(y),
+                            net.minecraft.util.Mth.floor(z));
+                        final FluidState tempFluidState = ShipPathfindingUtils.getShipAwareFluidState(finalLevel, groundPos, queryCache);
                         if (!tempFluidState.isEmpty()) { // Skip any empty results for the case of intersecting ships
                             fluidState[0] = tempFluidState;
                         }
@@ -127,6 +132,8 @@ public abstract class SwimNodeEvaluatorMixin extends NodeEvaluator {
         final Operation<FluidState> getFluidState) {
         final FluidState[] fluidState = {getFluidState.call(instance, blockPos)};
         final Level level = ((PathNavigationRegionAccessor) instance).getLevel();
+        final FluidStateManager.QueryCache queryCache = new FluidStateManager.QueryCache();
+        final BlockPos.MutableBlockPos groundPos = new BlockPos.MutableBlockPos();
         if (VSGameConfig.SERVER.getAiOnShips()) {
             if (level != null && fluidState[0].isEmpty()) {
                 final double origX = blockPos.getX();
@@ -135,8 +142,9 @@ public abstract class SwimNodeEvaluatorMixin extends NodeEvaluator {
                 VSGameUtilsKt.transformToNearbyShipsAndWorld(level, origX,
                     origY, origZ, 1,
                     (x, y, z) -> {
-                        final BlockPos groundPos = BlockPos.containing(x, y, z);
-                        final FluidState tempFluidState = getFluidState.call(instance, groundPos);
+                        groundPos.set(net.minecraft.util.Mth.floor(x), net.minecraft.util.Mth.floor(y),
+                            net.minecraft.util.Mth.floor(z));
+                        final FluidState tempFluidState = ShipPathfindingUtils.getShipAwareFluidState(level, groundPos, queryCache);
                         if (!tempFluidState.isEmpty()) { // Skip any empty results for the case of intersecting ships
                             fluidState[0] = tempFluidState;
                         }

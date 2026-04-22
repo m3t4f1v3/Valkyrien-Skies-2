@@ -57,7 +57,6 @@ object ShipWaterPocketManager {
     private const val AIR_PRESSURE_PER_BLOCK_PER_DENSITY = 1e-4
     private const val AIR_PRESSURE_SOLVER_ITERS = 4
     private const val AIR_PRESSURE_MIN_EFFECTIVE_AIR_VOLUME = 0.25
-    private const val AIR_PRESSURE_SURFACE_SCAN_MAX_STEPS = 256
     private const val GRAVITY_RESETTLE_MAX_SCHEDULED_TICKS_PER_SHIP_PER_TICK = 4096
     // Flooding speed: this is an abstract "water plane rise" rate. Bigger/more holes increase the rise rate.
     private const val FLOOD_RISE_PER_TICK_BASE = 0.01
@@ -1303,29 +1302,12 @@ object ShipWaterPocketManager {
                 return@withBypassedFluidOverrides null
             }
 
-            var y = worldBlockPos.y
-            var steps = 0
-            var lastSurface = Double.NEGATIVE_INFINITY
-
-            while (steps < AIR_PRESSURE_SURFACE_SCAN_MAX_STEPS && y < level.maxBuildHeight) {
-                val fs = FluidStateManager.getFluidData(level, worldBlockPos, queryCache)
-                if (fs == null || fs.sourceFluid() != canonical) break
-
-                val h = if (!fs.isSurface || fs.surface.isSource) 1.0 else fs.height().toDouble()
-                lastSurface = y.toDouble() + h
-                if (h < 1.0 - 1e-6) break
-
-                worldBlockPos.move(0, 1, 0)
-                y++
-                steps++
-            }
-
-            if (!lastSurface.isFinite()) {
+            val fs = FluidStateManager.getFluidData(level, worldBlockPos, queryCache)
+            if (fs == null || fs.sourceFluid() != canonical) {
                 null
-            } else if (steps >= AIR_PRESSURE_SURFACE_SCAN_MAX_STEPS) {
-                maxOf(lastSurface, (level.seaLevel + 1).toDouble())
             } else {
-                lastSurface
+                val surfaceHeight = if (fs.surface.isSource) 1.0 else fs.surface.ownHeight.toDouble()
+                fs.topY.toDouble() + surfaceHeight
             }
         }
     }

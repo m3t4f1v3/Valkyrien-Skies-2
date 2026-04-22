@@ -9,12 +9,15 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.util.Mth;
 import org.joml.Vector3d;
 import org.joml.primitives.AABBd;
 import org.joml.primitives.AABBdc;
 import org.valkyrienskies.core.api.ships.Ship;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
+import org.valkyrienskies.mod.common.air_pockets.ShipWaterPocketManager;
 import org.valkyrienskies.mod.mixin.feature.ai.node_evaluator.PathNavigationRegionAccessor;
+import org.valkyrienskies.mod.util.FluidStateManager;
 
 public final class ShipPathfindingUtils {
     private static final double SHIP_SUPPORT_CHECK_DISTANCE = 0.15;
@@ -121,11 +124,14 @@ public final class ShipPathfindingUtils {
     public static FluidState findExactShipFluid(final Level level, final double sampleX, final double sampleY,
         final double sampleZ) {
         final FluidState[] result = {null};
+        final BlockPos.MutableBlockPos candidatePos = new BlockPos.MutableBlockPos();
+        final FluidStateManager.QueryCache queryCache = new FluidStateManager.QueryCache();
         VSGameUtilsKt.transformToNearbyShipsAndWorld(level, sampleX, sampleY, sampleZ, 0.5, (x, y, z) -> {
             if (result[0] != null && !result[0].isEmpty()) {
                 return;
             }
-            final FluidState candidateState = level.getFluidState(BlockPos.containing(x, y, z));
+            candidatePos.set(Mth.floor(x), Mth.floor(y), Mth.floor(z));
+            final FluidState candidateState = getShipAwareFluidState(level, candidatePos, queryCache);
             if (!candidateState.isEmpty()) {
                 result[0] = candidateState;
             }
@@ -148,5 +154,11 @@ public final class ShipPathfindingUtils {
             aabb.minY + SHIP_SUPPORT_MAX_Y_OFFSET,
             aabb.maxZ
         );
+    }
+
+    public static FluidState getShipAwareFluidState(final Level level, final BlockPos pos,
+        final FluidStateManager.QueryCache queryCache) {
+        final FluidState rawState = FluidStateManager.getFluidState(level, pos, queryCache);
+        return ShipWaterPocketManager.overrideWaterFluidState(level, pos, rawState);
     }
 }
