@@ -9,6 +9,7 @@ import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.ViewArea;
 import net.minecraft.client.renderer.chunk.ChunkRenderDispatcher;
 import net.minecraft.client.renderer.chunk.ChunkRenderDispatcher.RenderChunk;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.ChunkPos;
@@ -26,8 +27,10 @@ import org.valkyrienskies.core.api.ships.ClientShip;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.config.ShipRenderer;
 import org.valkyrienskies.mod.common.config.ShipRendererKt;
+import org.valkyrienskies.mod.mixin.accessors.client.multiplayer.ClientLevelAccessor;
 import org.valkyrienskies.mod.mixin.accessors.client.render.chunk.RenderChunkAccessor;
 import org.valkyrienskies.mod.mixinducks.client.render.IVSViewAreaMethods;
+import org.valkyrienskies.mod.mixinducks.mod_compat.vanilla_renderer.LevelRendererDuck;
 
 /**
  * The purpose of this mixin is to allow {@link ViewArea} to render ship chunks.
@@ -128,6 +131,12 @@ public class MixinViewAreaVanilla implements IVSViewAreaMethods {
 
         var ship = (ClientShip) VSGameUtilsKt.getShipManagingPos(level, x, z);
         if (ship != null && ShipRendererKt.getShipRenderer(ship) == ShipRenderer.VANILLA) {
+            if (this.level instanceof final ClientLevel clientLevel) {
+                final LevelRenderer levelRenderer = ((ClientLevelAccessor) clientLevel).getLevelRenderer();
+                if (levelRenderer instanceof final LevelRendererDuck levelRendererDuck) {
+                    levelRendererDuck.vs$setShipChunkVisibilityDirty();
+                }
+            }
             // Only mark existing render chunks dirty — don't create new ones.
             // Creation is deferred to vs$getOrCreateShipRenderChunk (called from
             // vs$addShipVisibleChunks) which only creates for non-empty sections.

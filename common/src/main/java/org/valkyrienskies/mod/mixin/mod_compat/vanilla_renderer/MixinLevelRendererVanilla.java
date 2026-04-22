@@ -171,6 +171,11 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
         this.vs$shipChunkVisibilityDirty = true;
     }
 
+    @Override
+    public void vs$setShipChunkVisibilityDirty() {
+        this.vs$shipChunkVisibilityDirty = true;
+    }
+
     /**
      * Add ship render chunks to [renderChunks]
      */
