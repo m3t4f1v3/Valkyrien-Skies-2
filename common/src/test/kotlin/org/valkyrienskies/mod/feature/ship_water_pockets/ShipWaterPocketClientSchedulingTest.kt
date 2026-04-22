@@ -23,11 +23,11 @@ class ShipWaterPocketClientSchedulingTest {
 
     @Test
     fun volumeTiersMapToCadenceBuckets() {
-        assertEquals(1L, ShipWaterPocketManager.clientWaterSolveCadenceTicksForVolume(32_768L))
-        assertEquals(2L, ShipWaterPocketManager.clientWaterSolveCadenceTicksForVolume(32_769L))
-        assertEquals(2L, ShipWaterPocketManager.clientWaterSolveCadenceTicksForVolume(131_072L))
-        assertEquals(4L, ShipWaterPocketManager.clientWaterSolveCadenceTicksForVolume(131_073L))
-        assertEquals(4L, ShipWaterPocketManager.clientWaterSolveCadenceTicksForVolume(524_288L))
+        assertEquals(2L, ShipWaterPocketManager.clientWaterSolveCadenceTicksForVolume(32_768L))
+        assertEquals(3L, ShipWaterPocketManager.clientWaterSolveCadenceTicksForVolume(32_769L))
+        assertEquals(3L, ShipWaterPocketManager.clientWaterSolveCadenceTicksForVolume(131_072L))
+        assertEquals(5L, ShipWaterPocketManager.clientWaterSolveCadenceTicksForVolume(131_073L))
+        assertEquals(5L, ShipWaterPocketManager.clientWaterSolveCadenceTicksForVolume(524_288L))
         assertEquals(8L, ShipWaterPocketManager.clientWaterSolveCadenceTicksForVolume(524_289L))
     }
 
@@ -106,7 +106,7 @@ class ShipWaterPocketClientSchedulingTest {
         assertFalse(decision.shouldSubmit)
         assertFalse(decision.forcedRefresh)
         assertEquals(ClientWaterSolveSkipReason.CADENCE, decision.skipReason)
-        assertEquals(4L, decision.cadenceTicks)
+        assertEquals(5L, decision.cadenceTicks)
     }
 
     @Test
