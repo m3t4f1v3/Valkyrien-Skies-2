@@ -6553,10 +6553,15 @@ object ShipWaterPocketManager {
         val shipBlockPos = BlockPos.MutableBlockPos()
         val worldBlockPos = BlockPos.MutableBlockPos()
         val queryCache = tmpChunkQueryCache.get().apply { reset() }
+        val submergedCache = Long2ByteOpenHashMap()
 
         fun shipCellSubmerged(idx: Int): Boolean {
+            when (submergedCache.getOrDefault(idx.toLong(), 0).toInt()) {
+                1 -> return true
+                2 -> return false
+            }
             posFromIndex(state, idx, shipBlockPos)
-            return isShipCellSubmergedInWorldFluid(
+            val submerged = isShipCellSubmergedInWorldFluid(
                 level,
                 shipTransform,
                 shipBlockPos,
@@ -6565,6 +6570,8 @@ object ShipWaterPocketManager {
                 worldBlockPos,
                 queryCache = queryCache,
             )
+            submergedCache.put(idx.toLong(), if (submerged) 1 else 2)
+            return submerged
         }
 
         fun tryEnqueue(idx: Int, requireSubmerged: Boolean) {
@@ -6620,6 +6627,33 @@ object ShipWaterPocketManager {
         val shipPosTmp = tmpShipPos2.get()
         val worldBlockPos = BlockPos.MutableBlockPos()
         val queryCache = tmpChunkQueryCache.get().apply { reset() }
+        val submergedCoverageCache = Long2ObjectOpenHashMap<FluidCoverageSample>()
+        val coverageTransform = shipTransform
+
+        fun shipCellFluidCoverage(idx: Int): FluidCoverageSample {
+            val key = idx.toLong()
+            val cached = submergedCoverageCache.get(key)
+            if (cached != null) {
+                return cached
+            }
+
+            posFromIndex(state, idx, pos)
+            val coverage = getShipCellFluidCoverage(
+                level,
+                coverageTransform ?: return FluidCoverageSample(
+                    canonicalFluid = null,
+                    coverageRatio = 0.0,
+                    centerSubmerged = false,
+                ),
+                pos,
+                shipPosTmp,
+                worldPosTmp,
+                worldBlockPos,
+                queryCache = queryCache,
+            )
+            submergedCoverageCache.put(key, coverage)
+            return coverage
+        }
 
         applyingInternalUpdates = true
         try {
@@ -6635,15 +6669,7 @@ object ShipWaterPocketManager {
                         continue
                     }
                     if (shipTransform != null) {
-                        val submergedSample = getShipCellFluidCoverage(
-                            level,
-                            shipTransform,
-                            pos,
-                            shipPosTmp,
-                            worldPosTmp,
-                            worldBlockPos,
-                            queryCache = queryCache,
-                        )
+                        val submergedSample = shipCellFluidCoverage(idx)
                         val submergedFluid = submergedSample.canonicalFluid
                         if (!submergedSample.isIngressQualified() || submergedFluid == null || canonicalFloodSource(submergedFluid) != state.floodFluid) {
                             idx = indices.nextSetBit(idx + 1)
