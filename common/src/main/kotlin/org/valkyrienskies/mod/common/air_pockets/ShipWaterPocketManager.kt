@@ -2,6 +2,7 @@ package org.valkyrienskies.mod.common.air_pockets
 
 import it.unimi.dsi.fastutil.ints.Int2DoubleOpenHashMap
 import it.unimi.dsi.fastutil.ints.IntArrayList
+import it.unimi.dsi.fastutil.longs.Long2ByteOpenHashMap
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet
 import java.util.Arrays
@@ -6200,6 +6201,7 @@ object ShipWaterPocketManager {
         val shipPosCornerTmp = tmpShipPos3.get()
         val worldPosCornerTmp = tmpWorldPos3.get()
         val worldBlockPos = BlockPos.MutableBlockPos()
+        val openingOutsideAirCache = Long2ByteOpenHashMap()
         var drainParticleBudget = 2
         fun spawnDrainParticles(ventIdx: Int, outDirCode: Int, conductance: Int) {
             if (drainParticleBudget <= 0) return
@@ -6225,6 +6227,13 @@ object ShipWaterPocketManager {
         }
 
         fun openingExposesOutsideAir(lx: Int, ly: Int, lz: Int, outDirCode: Int): Boolean {
+            val openingIdx = lx + ly * strideY + lz * strideZ
+            val openingKey = (openingIdx.toLong() shl 3) or outDirCode.toLong()
+            when (openingOutsideAirCache.getOrDefault(openingKey, 0).toInt()) {
+                1 -> return true
+                2 -> return false
+            }
+
             val faceOffset = 1.0e-4
             val lo = 1.0e-4
             val hi = 1.0 - lo
@@ -6314,11 +6323,13 @@ object ShipWaterPocketManager {
                 return true
             }
 
-            return sampleOutsideFace(0.5, 0.5) ||
+            val exposed = sampleOutsideFace(0.5, 0.5) ||
                 sampleOutsideFace(lo, lo) ||
                 sampleOutsideFace(hi, lo) ||
                 sampleOutsideFace(lo, hi) ||
                 sampleOutsideFace(hi, hi)
+            openingOutsideAirCache.put(openingKey, if (exposed) 1 else 2)
+            return exposed
         }
 
         fun scanComponent(start: Int) {
