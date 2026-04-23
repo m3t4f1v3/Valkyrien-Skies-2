@@ -576,6 +576,13 @@ ext.generateCommonForgeRefmap = { Map args ->
                         def outerInternal = tc.substring(0, dollarIdx)
                         if (f2.desc == "L${outerInternal};") {
                             entries[f2.name] = "L${tc};this\$0:${f2.desc}"
+                            // Also add to ownerLookup so VSMixinRemapper (the
+                            // IRemapper consulted by Mixin's findRemappedField)
+                            // can translate field_NNN → this$0 at runtime —
+                            // otherwise Mixin throws InvalidMixinException in
+                            // both dev and prod (neither mojmap nor SRG lists
+                            // this synthetic field by its fabric name).
+                            ownerLookup[tc].fields[f2.name] = 'this$0'
                             resolved = true
                             break
                         }
