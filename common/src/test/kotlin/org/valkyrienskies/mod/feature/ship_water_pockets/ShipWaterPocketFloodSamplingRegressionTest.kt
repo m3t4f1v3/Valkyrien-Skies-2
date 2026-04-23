@@ -33,6 +33,7 @@ class ShipWaterPocketFloodSamplingRegressionTest {
             blockKey(0, 2, 0) to Fluids.FLOWING_WATER.defaultFluidState().createLegacyBlock(),
         )
         val level = createTrackingLevel(states)
+
         val topFluidHeight = states.getValue(blockKey(0, 2, 0)).fluidState.ownHeight.toDouble()
 
         val surfaceY = invokeEstimateExteriorFluidSurfaceYAtShipPoint(
