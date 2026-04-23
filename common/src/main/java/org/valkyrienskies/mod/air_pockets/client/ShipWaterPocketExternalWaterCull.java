@@ -164,10 +164,10 @@ public final class ShipWaterPocketExternalWaterCull {
                 pendingMaskWordsFuture.cancel(true);
                 pendingMaskWordsFuture = null;
             }
-            if (maskTexId != 0) {
+            if (isLiveTextureId(maskTexId)) {
                 TextureUtil.releaseTextureId(maskTexId);
-                maskTexId = 0;
             }
+            maskTexId = 0;
         }
     }
 
@@ -213,6 +213,10 @@ public final class ShipWaterPocketExternalWaterCull {
     private static boolean programEverSupported = false;
     private static final ThreadLocal<FloatBuffer> MATRIX_BUFFER = ThreadLocal.withInitial(() -> BufferUtils.createFloatBuffer(16));
 
+    private static boolean isLiveTextureId(final int texId) {
+        return texId != 0 && GL11.glIsTexture(texId);
+    }
+
     private static final class ShaderHandles {
         private ShaderInstance shader;
         private boolean supported;
@@ -254,10 +258,10 @@ public final class ShipWaterPocketExternalWaterCull {
         }
         SHIP_MASKS.clear();
 
-        if (fluidMaskTexId != 0) {
+        if (isLiveTextureId(fluidMaskTexId)) {
             TextureUtil.releaseTextureId(fluidMaskTexId);
-            fluidMaskTexId = 0;
         }
+        fluidMaskTexId = 0;
         if (pendingFluidMaskFuture != null) {
             pendingFluidMaskFuture.cancel(true);
             pendingFluidMaskFuture = null;
@@ -1025,8 +1029,9 @@ public final class ShipWaterPocketExternalWaterCull {
             GL20.glUniform1i(handles.maskLoc[slot], unit);
         }
 
+        final int liveMaskTexId = isLiveTextureId(maskTexId) ? maskTexId : 0;
         GlStateManager._activeTexture(GL13.GL_TEXTURE0 + unit);
-        GlStateManager._bindTexture(maskTexId);
+        GlStateManager._bindTexture(liveMaskTexId);
 
         // Avoid surprising other render code by leaving the active texture on a high unit.
         GlStateManager._activeTexture(GL13.GL_TEXTURE0);
@@ -1041,8 +1046,9 @@ public final class ShipWaterPocketExternalWaterCull {
         if (fluidUnit < 0 || fluidUnit >= handles.maxSafeTextureUnits) return;
 
         GL20.glUniform1i(handles.fluidMaskLoc, fluidUnit);
+        final int liveFluidMaskTexId = isLiveTextureId(fluidMaskTexId) ? fluidMaskTexId : 0;
         GlStateManager._activeTexture(GL13.GL_TEXTURE0 + fluidUnit);
-        GlStateManager._bindTexture(fluidMaskTexId);
+        GlStateManager._bindTexture(liveFluidMaskTexId);
         GlStateManager._activeTexture(GL13.GL_TEXTURE0);
     }
 
@@ -1136,8 +1142,10 @@ public final class ShipWaterPocketExternalWaterCull {
         final int height = Math.max(1, (wordCount + MASK_TEX_WIDTH - 1) / MASK_TEX_WIDTH);
 
         boolean newOrResized = false;
-        if (masks.maskTexId != 0 && masks.maskTexHeight != height) {
-            TextureUtil.releaseTextureId(masks.maskTexId);
+        if (masks.maskTexId != 0 && (!isLiveTextureId(masks.maskTexId) || masks.maskTexHeight != height)) {
+            if (isLiveTextureId(masks.maskTexId)) {
+                TextureUtil.releaseTextureId(masks.maskTexId);
+            }
             masks.maskTexId = 0;
             newOrResized = true;
         }
@@ -1186,7 +1194,10 @@ public final class ShipWaterPocketExternalWaterCull {
     }
 
     private static void applyMaskWords(final ShipMasks masks, final int[] words, final long uploadRevision) {
-        if (masks.maskTexId == 0) return;
+        if (!isLiveTextureId(masks.maskTexId)) {
+            masks.maskTexId = 0;
+            return;
+        }
         final int capacity = MASK_TEX_WIDTH * masks.maskTexHeight;
         final int byteCapacity = capacity * 4;
         if (masks.maskData == null || masks.maskData.length != capacity) {
@@ -1222,7 +1233,7 @@ public final class ShipWaterPocketExternalWaterCull {
         if (atlasTexture == null) return 0;
 
         final int atlasTexId = atlasTexture.getId();
-        if (atlasTexId == 0) return 0;
+        if (!isLiveTextureId(atlasTexId)) return 0;
 
         int atlasWidth = 0;
         int atlasHeight = 0;
@@ -1238,8 +1249,10 @@ public final class ShipWaterPocketExternalWaterCull {
 
         if (atlasWidth <= 0 || atlasHeight <= 0) return 0;
 
-        if (fluidMaskTexId != 0 && (fluidMaskWidth != atlasWidth || fluidMaskHeight != atlasHeight)) {
-            TextureUtil.releaseTextureId(fluidMaskTexId);
+        if (fluidMaskTexId != 0 && (!isLiveTextureId(fluidMaskTexId) || fluidMaskWidth != atlasWidth || fluidMaskHeight != atlasHeight)) {
+            if (isLiveTextureId(fluidMaskTexId)) {
+                TextureUtil.releaseTextureId(fluidMaskTexId);
+            }
             fluidMaskTexId = 0;
         }
 
@@ -1388,6 +1401,11 @@ public final class ShipWaterPocketExternalWaterCull {
         fluidMaskBuffer.put(fluidMaskData);
         fluidMaskBuffer.flip();
 
+        if (!isLiveTextureId(fluidMaskTexId)) {
+            fluidMaskTexId = 0;
+            fluidMaskLastAtlasTexId = 0;
+            return;
+        }
         uploadByteTexture(fluidMaskTexId, atlasWidth, atlasHeight, fluidMaskBuffer);
         fluidMaskLastAtlasTexId = atlasTexId;
     }
@@ -1435,7 +1453,7 @@ public final class ShipWaterPocketExternalWaterCull {
         final int prevBinding = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
         final int prevUnpackAlignment = GL11.glGetInteger(GL11.GL_UNPACK_ALIGNMENT);
         try {
-            if (existingId != 0) {
+            if (isLiveTextureId(existingId)) {
                 GlStateManager._bindTexture(existingId);
                 return existingId;
             }
@@ -1463,7 +1481,7 @@ public final class ShipWaterPocketExternalWaterCull {
         final int prevBinding = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
         final int prevUnpackAlignment = GL11.glGetInteger(GL11.GL_UNPACK_ALIGNMENT);
         try {
-            if (existingId != 0) {
+            if (isLiveTextureId(existingId)) {
                 GlStateManager._bindTexture(existingId);
                 return existingId;
             }
@@ -1488,6 +1506,7 @@ public final class ShipWaterPocketExternalWaterCull {
     }
 
     private static void uploadByteTexture(final int texId, final int width, final int height, final java.nio.ByteBuffer data) {
+        if (!isLiveTextureId(texId)) return;
         final int prevBinding = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
         final int prevUnpackAlignment = GL11.glGetInteger(GL11.GL_UNPACK_ALIGNMENT);
         try {
@@ -1501,6 +1520,7 @@ public final class ShipWaterPocketExternalWaterCull {
     }
 
     private static void uploadWordTexture(final int texId, final int width, final int height, final ByteBuffer data) {
+        if (!isLiveTextureId(texId)) return;
         final int prevBinding = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
         final int prevUnpackAlignment = GL11.glGetInteger(GL11.GL_UNPACK_ALIGNMENT);
         try {
