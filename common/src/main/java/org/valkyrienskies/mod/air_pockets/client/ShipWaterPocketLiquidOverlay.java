@@ -1,9 +1,7 @@
 package org.valkyrienskies.mod.air_pockets.client;
 
-import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexConsumer;
-import com.mojang.blaze3d.vertex.VertexFormat;
 import it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import java.util.ArrayList;
@@ -17,7 +15,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ItemBlockRenderTypes;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
-import net.minecraft.client.renderer.RenderStateShard;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.core.BlockPos;
@@ -297,29 +294,7 @@ public final class ShipWaterPocketLiquidOverlay {
         bufferSource.endBatch();
     }
 
-    private static RenderType OVERLAY_RENDER_TYPE = new RenderStateShard(null, null, null) {
-        private static RenderType createOverlayRenderType() {
-            return RenderType.create(
-                "valkyrienskies_ship_liquid_overlay",
-                DefaultVertexFormat.NEW_ENTITY,
-                VertexFormat.Mode.QUADS,
-                256,
-                false,
-                true,
-                RenderType.CompositeState.builder()
-                    .setShaderState(RenderStateShard.RENDERTYPE_ENTITY_TRANSLUCENT_SHADER)
-                    .setTextureState(new RenderStateShard.TextureStateShard(InventoryMenu.BLOCK_ATLAS, false, false))
-                    .setTransparencyState(RenderStateShard.TRANSLUCENT_TRANSPARENCY)
-                    .setCullState(RenderStateShard.NO_CULL)
-                    .setLightmapState(RenderStateShard.LIGHTMAP)
-                    .setOverlayState(RenderStateShard.OVERLAY)
-                    .setLayeringState(RenderStateShard.VIEW_OFFSET_Z_LAYERING)
-                    .setDepthTestState(RenderStateShard.LEQUAL_DEPTH_TEST)
-                    .setWriteMaskState(RenderStateShard.COLOR_WRITE)
-                    .createCompositeState(true)
-            );
-        }
-    }.createOverlayRenderType();
+    private static final RenderType OVERLAY_RENDER_TYPE = RenderType.entityTranslucent(InventoryMenu.BLOCK_ATLAS);
 
     private static void ensureOverlaySolids(final net.minecraft.client.multiplayer.ClientLevel level, final ShipCache cache,
         final ShipWaterPocketManager.ClientWaterReachableSnapshot snapshot) {
@@ -376,8 +351,8 @@ public final class ShipWaterPocketLiquidOverlay {
 
         cache.overlaySolids = overlaySolids;
         cache.fullCellOverlaySolids = fullCellOverlaySolids;
-        cache.overlayBoundary = buildOverlayBoundaryMask(snapshot.getOpen(), snapshot.getInterior(), overlaySolids,
-            fullCellOverlaySolids, sizeX, sizeY, sizeZ);
+        cache.overlayBoundary = buildOverlayBoundaryMask(snapshot.getOpen(), snapshot.getInterior(), snapshot.getWaterReachable(),
+            overlaySolids, fullCellOverlaySolids, sizeX, sizeY, sizeZ);
     }
 
     private static int emitOverlayFaces(
@@ -407,6 +382,7 @@ public final class ShipWaterPocketLiquidOverlay {
 
         final BitSet open = snapshot.getOpen();
         final BitSet interior = snapshot.getInterior();
+        final BitSet waterReachable = snapshot.getWaterReachable();
         final BitSet overlaySolids = cache.overlaySolids;
         final BitSet fullCellOverlaySolids = cache.fullCellOverlaySolids;
         final BitSet overlayBoundary = cache.overlayBoundary;
@@ -420,9 +396,9 @@ public final class ShipWaterPocketLiquidOverlay {
         final int strideZ = sizeX * sizeY;
         int quadsEmitted = 0;
 
-        for (int outsideIdx = open.nextSetBit(0); outsideIdx >= 0; outsideIdx = open.nextSetBit(outsideIdx + 1)) {
+        for (int outsideIdx = waterReachable.nextSetBit(0); outsideIdx >= 0; outsideIdx = waterReachable.nextSetBit(outsideIdx + 1)) {
             if (outsideIdx >= volume) break;
-            if (interior.get(outsideIdx)) continue;
+            if (!isOutsideSubmergedFluid(open, interior, waterReachable, outsideIdx)) continue;
             if (isFullCellOverlaySolid(fullCellOverlaySolids, outsideIdx)) continue;
             if (overlayBoundary == null || !overlayBoundary.get(outsideIdx)) {
                 continue;
@@ -587,14 +563,17 @@ public final class ShipWaterPocketLiquidOverlay {
         return quadsEmitted;
     }
 
-    static BitSet buildOverlayBoundaryMask(final BitSet open, final BitSet interior, final @Nullable BitSet overlaySolids,
-        final @Nullable BitSet fullCellOverlaySolids, final int sizeX, final int sizeY, final int sizeZ) {
+    static BitSet buildOverlayBoundaryMask(final BitSet open, final BitSet interior, final BitSet waterReachable,
+        final @Nullable BitSet overlaySolids, final @Nullable BitSet fullCellOverlaySolids, final int sizeX, final int sizeY,
+        final int sizeZ) {
         final int volume = sizeX * sizeY * sizeZ;
         final BitSet overlayBoundary = new BitSet(volume);
-        for (int outsideIdx = open.nextSetBit(0); outsideIdx >= 0 && outsideIdx < volume; outsideIdx = open.nextSetBit(outsideIdx + 1)) {
-            if (interior.get(outsideIdx)) continue;
+        for (int outsideIdx = waterReachable.nextSetBit(0); outsideIdx >= 0 && outsideIdx < volume;
+             outsideIdx = waterReachable.nextSetBit(outsideIdx + 1)) {
+            if (!isOutsideSubmergedFluid(open, interior, waterReachable, outsideIdx)) continue;
             if (isFullCellOverlaySolid(fullCellOverlaySolids, outsideIdx)) continue;
-            if (touchesOverlayBoundary(open, interior, open, overlaySolids, fullCellOverlaySolids, outsideIdx, sizeX, sizeY, sizeZ)) {
+            if (touchesOverlayBoundary(open, interior, waterReachable, overlaySolids, fullCellOverlaySolids, outsideIdx, sizeX, sizeY,
+                sizeZ)) {
                 overlayBoundary.set(outsideIdx);
             }
         }
@@ -616,6 +595,9 @@ public final class ShipWaterPocketLiquidOverlay {
     static boolean touchesOverlayBoundary(final BitSet open, final BitSet interior, final BitSet waterReachable,
         final @Nullable BitSet overlaySolids, final @Nullable BitSet fullCellOverlaySolids, final int outsideIdx, final int sizeX,
         final int sizeY, final int sizeZ) {
+        if (!isOutsideSubmergedFluid(open, interior, waterReachable, outsideIdx)) {
+            return false;
+        }
         final int lx = outsideIdx % sizeX;
         final int t = outsideIdx / sizeX;
         final int ly = t % sizeY;

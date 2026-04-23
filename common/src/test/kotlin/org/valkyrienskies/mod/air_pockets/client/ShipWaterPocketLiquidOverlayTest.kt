@@ -110,8 +110,9 @@ class ShipWaterPocketLiquidOverlayTest {
         val open = bitSetOf(0, 1)
         val interior = bitSetOf(1)
         val overlaySolids = bitSetOf(2)
+        val waterReachable = bitSetOf(2)
 
-        val boundary = ShipWaterPocketLiquidOverlay.buildOverlayBoundaryMask(open, interior, overlaySolids, null, 3, 1, 1)
+        val boundary = ShipWaterPocketLiquidOverlay.buildOverlayBoundaryMask(open, interior, waterReachable, overlaySolids, null, 3, 1, 1)
 
         assertTrue(boundary.get(0))
         assertFalse(boundary.get(1))
@@ -123,11 +124,13 @@ class ShipWaterPocketLiquidOverlayTest {
         val open = bitSetOf(0, 1)
         val interior = BitSet()
         val overlaySolids = bitSetOf(1)
+        val waterReachable = bitSetOf(1)
         val fullCellOverlaySolids = bitSetOf(1)
 
         val boundary = ShipWaterPocketLiquidOverlay.buildOverlayBoundaryMask(
             open,
             interior,
+            waterReachable,
             overlaySolids,
             fullCellOverlaySolids,
             2,
