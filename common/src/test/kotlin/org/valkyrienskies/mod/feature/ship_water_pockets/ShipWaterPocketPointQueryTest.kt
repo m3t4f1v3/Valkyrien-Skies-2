@@ -10,6 +10,7 @@ import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.block.LadderBlock
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeAll
@@ -131,5 +132,25 @@ class ShipWaterPocketPointQueryTest {
         ) as Boolean
 
         assertTrue(result)
+    }
+
+    @Test
+    fun floodedPocketCellIsNotWorldFluidSuppressionZone() {
+        val pocketState = ShipPocketState(
+            sizeX = 1,
+            sizeY = 1,
+            sizeZ = 1,
+            open = bitSetOf(0),
+            strictInterior = bitSetOf(0),
+            simulationDomain = bitSetOf(0),
+            interior = bitSetOf(0),
+            waterReachable = bitSetOf(0),
+            voxelSimulationComponentMask = longArrayOf(1L),
+        )
+
+        val tmp = BlockPos.MutableBlockPos(0, 0, 0)
+        val shipPoint = Vector3d(0.5, 0.5, 0.5)
+
+        assertNull(findNearbyWorldFluidSuppressionZone(pocketState, shipPoint, tmp, 0))
     }
 }

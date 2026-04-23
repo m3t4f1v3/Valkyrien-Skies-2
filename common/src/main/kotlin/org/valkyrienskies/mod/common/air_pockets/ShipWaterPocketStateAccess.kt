@@ -369,5 +369,5 @@ internal fun isWorldFluidSuppressionCell(state: ShipPocketState, shipPos: BlockP
     val lz = shipPos.z - state.minZ
     if (lx !in 0 until state.sizeX || ly !in 0 until state.sizeY || lz !in 0 until state.sizeZ) return false
     val idx = indexOf(state, lx, ly, lz)
-    return state.simulationDomain.get(idx) && !state.materializedWater.get(idx)
+    return state.simulationDomain.get(idx) && !state.waterReachable.get(idx) && !state.materializedWater.get(idx)
 }

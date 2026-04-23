@@ -3485,6 +3485,7 @@ object ShipWaterPocketManager {
         val idx = classification.voxelIndex
         if (idx < 0) return false
         if (state.materializedWater.get(idx)) return false
+        if (state.waterReachable.get(idx)) return false
         return isClassificationInSimulationDomain(state, classification)
     }
 
