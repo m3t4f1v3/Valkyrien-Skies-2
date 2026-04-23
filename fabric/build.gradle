@@ -83,19 +83,23 @@ tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile).configureEach
     }
 }
 
-// Fabric prod jar must embed :common's class files and its AP-generated
-// refmap. Source: the remapped common jar (produced by :common:remapJar),
-// NOT the raw build/classes dir — remapJar is where loom rewrites @Shadow
-// method names like `register` to their intermediary form (`method_10017`).
-// Fabric's own remapJar would fail to do this rewrite because the common
-// refmap (keyed per-mixin-class) is opaque to it at fabric-remap time.
+// :common is compiled with officialMojangMappings, so its build/classes dir
+// contains mojmap-named bytecode (e.g. @Shadow abstract ServerLevel overworld()).
+// Fabric *dev* is also mojmap, so this matches directly. Fabric *prod* runs
+// against intermediary — but the :fabric jar is produced by fabric-loom's
+// remapJar which rewrites mojmap → intermediary across the whole jar
+// (including synced :common bytecode + its refmap values), so prod works too.
+// We used to pull from :common:remapJar (already intermediary), but that
+// left fabric dev with intermediary bytecode targeting mojmap runtime and
+// @Shadow overworld → method_30002 couldn't resolve at apply time.
 def commonClassesFabric = layout.buildDirectory.dir('common-classes-for-fabric')
-def commonRemappedJar = project(':common').tasks.named('remapJar').flatMap { it.archiveFile }
 tasks.register('syncCommonClassesForFabric', Sync) {
-    from({ zipTree(commonRemappedJar.get().asFile) })
+    from(project(':common').layout.buildDirectory.dir('classes/java/main'))
+    from(project(':common').layout.buildDirectory.dir('classes/kotlin/main'))
     into(commonClassesFabric)
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-    dependsOn(project(':common').tasks.named('remapJar'))
+    dependsOn(project(':common').tasks.named('compileJava'))
+    dependsOn(project(':common').tasks.named('compileKotlin'))
 }
 
 sourceSets.main.output.dir(
