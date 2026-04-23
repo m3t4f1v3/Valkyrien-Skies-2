@@ -16,6 +16,7 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.valkyrienskies.mod.air_pockets.client.ShipInteriorFogRenderer;
 import org.valkyrienskies.mod.air_pockets.client.ShipWaterPocketLiquidOverlay;
 import org.valkyrienskies.mod.air_pockets.client.ShipWaterPocketExternalWaterCullRenderContext;
 
@@ -75,6 +76,7 @@ public abstract class MixinLevelRenderer {
         RenderSystem.applyModelViewMatrix();
         try {
             ShipWaterPocketLiquidOverlay.render(camPos.x, camPos.y, camPos.z);
+            ShipInteriorFogRenderer.render(camera, projectionMatrix, poseStack.last().pose());
         } finally {
             modelViewStack.popPose();
             RenderSystem.applyModelViewMatrix();

@@ -493,6 +493,134 @@ public final class ShipWaterPocketExternalWaterCull {
         GL20.glUniform3f(handles.shipWaterTintLoc, r, g, b);
     }
 
+    public static int bindInteriorVolumeSamplersAndUniforms(final ShaderInstance shader, final ClientLevel level,
+        final double cameraX, final double cameraY, final double cameraZ) {
+        if (shader == null || level == null) return 0;
+
+        RenderSystem.assertOnRenderThread();
+
+        if (lastLevel != level) {
+            clear();
+            lastLevel = level;
+        }
+
+        final Vec3 cameraPos = new Vec3(cameraX, cameraY, cameraZ);
+        final List<LoadedShip> ships = selectClosestShips(level, cameraPos, MAX_SHIPS);
+
+        int boundShipCount = 0;
+        for (int slot = 0; slot < MAX_SHIPS; slot++) {
+            if (slot >= ships.size()) {
+                clearInteriorVolumeSlot(shader, slot);
+                continue;
+            }
+
+            final LoadedShip ship = ships.get(slot);
+            final long shipId = ship.getId();
+            final ShipWaterPocketManager.ClientWaterReachableSnapshot snapshot =
+                ShipWaterPocketManager.getClientWaterReachableSnapshot(level, shipId);
+            if (snapshot == null) {
+                clearInteriorVolumeSlot(shader, slot);
+                continue;
+            }
+
+            final ShipMasks masks = SHIP_MASKS.computeIfAbsent(shipId, ShipMasks::new);
+
+            final int minX = snapshot.getMinX();
+            final int minY = snapshot.getMinY();
+            final int minZ = snapshot.getMinZ();
+            final int sizeX = snapshot.getSizeX();
+            final int sizeY = snapshot.getSizeY();
+            final int sizeZ = snapshot.getSizeZ();
+            final long geometryRevision = snapshot.getGeometryRevision();
+
+            final boolean boundsChanged =
+                masks.minX != minX || masks.minY != minY || masks.minZ != minZ ||
+                    masks.sizeX != sizeX || masks.sizeY != sizeY || masks.sizeZ != sizeZ;
+
+            if (boundsChanged || masks.geometryRevision != geometryRevision) {
+                rebuildMask(level, masks, snapshot, minX, minY, minZ, sizeX, sizeY, sizeZ, geometryRevision);
+            } else {
+                ensureMaskTextureStorage(masks, sizeX * sizeY * sizeZ);
+            }
+            applyPendingMaskBuild(masks, geometryRevision);
+
+            if (!isLiveTextureId(masks.maskTexId) || masks.lastMaskUploadRevision != geometryRevision) {
+                clearInteriorVolumeSlot(shader, slot);
+                continue;
+            }
+
+            final AABBdc worldAabb = getShipWorldAabb(ship).orElse(null);
+            if (worldAabb == null) {
+                clearInteriorVolumeSlot(shader, slot);
+                continue;
+            }
+
+            final ShipTransform shipTransform = getShipTransform(ship);
+            masks.worldToShip.set(shipTransform.getWorldToShip());
+
+            final Uniform aabbMin = shader.getUniform("ValkyrienAir_ShipAabbMin" + slot);
+            if (aabbMin != null) {
+                aabbMin.set((float) worldAabb.minX(), (float) worldAabb.minY(), (float) worldAabb.minZ(), 0.0f);
+                aabbMin.upload();
+            }
+
+            final Uniform aabbMax = shader.getUniform("ValkyrienAir_ShipAabbMax" + slot);
+            if (aabbMax != null) {
+                aabbMax.set((float) worldAabb.maxX(), (float) worldAabb.maxY(), (float) worldAabb.maxZ(), 0.0f);
+                aabbMax.upload();
+            }
+
+            final Uniform gridSize = shader.getUniform("ValkyrienAir_GridSize" + slot);
+            if (gridSize != null) {
+                gridSize.set((float) sizeX, (float) sizeY, (float) sizeZ, 0.0f);
+                gridSize.upload();
+            }
+
+            final Uniform worldToShip = shader.getUniform("ValkyrienAir_WorldToShip" + slot);
+            if (worldToShip != null) {
+                worldToShip.set(masks.worldToShip);
+                worldToShip.upload();
+            }
+
+            shader.setSampler("ValkyrienAir_Mask" + slot, masks.maskTexId);
+            boundShipCount++;
+        }
+
+        final Uniform shipCount = shader.getUniform("ValkyrienAir_ShipCount");
+        if (shipCount != null) {
+            shipCount.set(boundShipCount);
+            shipCount.upload();
+        }
+
+        return boundShipCount;
+    }
+
+    private static void clearInteriorVolumeSlot(final ShaderInstance shader, final int slot) {
+        final Uniform aabbMin = shader.getUniform("ValkyrienAir_ShipAabbMin" + slot);
+        if (aabbMin != null) {
+            aabbMin.set(0.0f, 0.0f, 0.0f, 0.0f);
+            aabbMin.upload();
+        }
+
+        final Uniform aabbMax = shader.getUniform("ValkyrienAir_ShipAabbMax" + slot);
+        if (aabbMax != null) {
+            aabbMax.set(0.0f, 0.0f, 0.0f, 0.0f);
+            aabbMax.upload();
+        }
+
+        final Uniform gridSize = shader.getUniform("ValkyrienAir_GridSize" + slot);
+        if (gridSize != null) {
+            gridSize.set(0.0f, 0.0f, 0.0f, 0.0f);
+            gridSize.upload();
+        }
+
+        final Uniform worldToShip = shader.getUniform("ValkyrienAir_WorldToShip" + slot);
+        if (worldToShip != null) {
+            worldToShip.set(IDENTITY_MAT4);
+            worldToShip.upload();
+        }
+    }
+
     private static void bindShaderHandles(final ShaderInstance shader) {
         if (shader == null) {
             SHADER.shader = null;

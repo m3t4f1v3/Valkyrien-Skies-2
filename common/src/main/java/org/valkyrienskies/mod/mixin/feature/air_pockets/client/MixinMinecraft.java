@@ -9,6 +9,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.valkyrienskies.mod.air_pockets.client.ShipWaterPocketCurrentShipRenderContext;
 import org.valkyrienskies.mod.air_pockets.client.ShipWaterPocketExternalWaterCull;
 import org.valkyrienskies.mod.air_pockets.client.ShipWaterPocketExternalWaterCullRenderContext;
+import org.valkyrienskies.mod.air_pockets.client.ShipInteriorFogRenderer;
 import org.valkyrienskies.mod.air_pockets.client.ShipWaterPocketLiquidOverlay;
 import org.valkyrienskies.mod.common.air_pockets.ShipWaterPocketManager;
 
@@ -31,6 +32,7 @@ public abstract class MixinMinecraft {
         ShipWaterPocketExternalWaterCull.clear();
         ShipWaterPocketExternalWaterCullRenderContext.clear();
         ShipWaterPocketCurrentShipRenderContext.clear();
+        ShipInteriorFogRenderer.clear();
         ShipWaterPocketLiquidOverlay.clear();
     }
 }
