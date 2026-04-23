@@ -39,6 +39,8 @@ public final class ShipInteriorFogRenderer {
     private static long lastDiagLogAtMs = 0L;
     private static long lastInteriorFogActiveAtMs = 0L;
     private static final long INTERIOR_FOG_GRACE_PERIOD_MS = 250L;
+    private static long lastExteriorWaterGateUpdateAtNs = 0L;
+    private static float smoothedExteriorWaterGate = 0.0f;
 
     private ShipInteriorFogRenderer() {
     }
@@ -247,7 +249,7 @@ public final class ShipInteriorFogRenderer {
         final float fogDensity = 0.045f;
         final float fogStart = 2.0f;
         setVec2(effect, "FogParams", fogDensity, fogStart);
-        setFloat(effect, "ExteriorWaterGate", computeExteriorWaterGate(camera));
+        setFloat(effect, "ExteriorWaterGate", getSmoothedExteriorWaterGate(camera));
         setMat4(effect, "InverseProjMat", new Matrix4f(projectionMatrix).invert());
         setVec3(effect, "CameraWorldPos",
             (float) camera.getPosition().x,
@@ -264,6 +266,7 @@ public final class ShipInteriorFogRenderer {
 
     private static void compositeFogToMain(final RenderTarget mainTarget) {
         fogCompositePass.process(0.0f);
+        mainTarget.bindWrite(false);
     }
 
     private static int sampleWaterFogColor(final Camera camera) {
@@ -272,13 +275,55 @@ public final class ShipInteriorFogRenderer {
         return BiomeColors.getAverageWaterColor(mc.level, TMP_BLOCK_POS);
     }
 
+    private static float getSmoothedExteriorWaterGate(final Camera camera) {
+        final long nowNs = System.nanoTime();
+        final float deltaSeconds;
+        if (lastExteriorWaterGateUpdateAtNs == 0L) {
+            deltaSeconds = 0.0f;
+        } else {
+            deltaSeconds = (nowNs - lastExteriorWaterGateUpdateAtNs) / 1_000_000_000.0f;
+        }
+        lastExteriorWaterGateUpdateAtNs = nowNs;
+
+        final float targetGate = computeExteriorWaterGate(camera);
+        final float riseRatePerSecond = 8.0f;
+        final float fallRatePerSecond = 1.25f;
+        final float maxDelta = (targetGate > smoothedExteriorWaterGate ? riseRatePerSecond : fallRatePerSecond) * deltaSeconds;
+        smoothedExteriorWaterGate = Mth.approach(smoothedExteriorWaterGate, targetGate, maxDelta);
+        return smoothedExteriorWaterGate;
+    }
+
     private static float computeExteriorWaterGate(final Camera camera) {
         final Minecraft mc = Minecraft.getInstance();
         if (mc.level == null) return 0.0f;
 
-        final Vector3f look = camera.getLookVector();
-        final float lookLenSq = look.x() * look.x() + look.y() * look.y() + look.z() * look.z();
-        if (lookLenSq <= 1.0e-6f) return 0.0f;
+        final Vector3f look = new Vector3f(camera.getLookVector());
+        if (look.lengthSquared() <= 1.0e-6f) return 0.0f;
+
+        final Vector3f up = new Vector3f(camera.getUpVector());
+        final Vector3f left = new Vector3f(camera.getLeftVector());
+        final Vector3f[] probeDirections = new Vector3f[] {
+            new Vector3f(look),
+            new Vector3f(look).fma(0.35f, up).normalize(),
+            new Vector3f(look).fma(-0.35f, up).normalize(),
+            new Vector3f(look).fma(0.25f, left).normalize(),
+            new Vector3f(look).fma(-0.25f, left).normalize()
+        };
+
+        float hits = 0.0f;
+        float maxHit = 0.0f;
+        for (final Vector3f probeDirection : probeDirections) {
+            final float hit = computeExteriorWaterGateForDirection(camera, probeDirection);
+            hits += hit;
+            maxHit = Math.max(maxHit, hit);
+        }
+        final float averageHit = hits / probeDirections.length;
+        return Math.max(averageHit, maxHit * 0.9f);
+    }
+
+    private static float computeExteriorWaterGateForDirection(final Camera camera, final Vector3f look) {
+        final Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null) return 0.0f;
 
         final double startX = camera.getPosition().x;
         final double startY = camera.getPosition().y;

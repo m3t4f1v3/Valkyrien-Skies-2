@@ -39,7 +39,8 @@ void main() {
     if (sceneDepth >= 1.0) {
         vec3 skyWorldPos = reconstructWorldPos(0.99999);
         vec3 skyRayDir = normalize(skyWorldPos - CameraWorldPos);
-        float skyGate = exteriorGate * clamp((-skyRayDir.y + 0.15) / 0.4, 0.0, 1.0);
+        float downwardBias = clamp((-skyRayDir.y + 0.15) / 0.5, 0.0, 1.0);
+        float skyGate = clamp(exteriorGate * mix(0.95, 1.0, downwardBias), 0.0, 1.0);
         vec3 skyFoggedColor = mix(sceneColor.rgb, FogColor, skyGate);
         fragColor = vec4(skyFoggedColor, 1.0);
         return;

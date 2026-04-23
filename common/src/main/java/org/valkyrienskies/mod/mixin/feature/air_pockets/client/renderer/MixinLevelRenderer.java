@@ -75,7 +75,7 @@ public abstract class MixinLevelRenderer {
         RenderSystem.setProjectionMatrix(projectionMatrix, VertexSorting.DISTANCE_TO_ORIGIN);
         RenderSystem.applyModelViewMatrix();
         try {
-            //ShipWaterPocketLiquidOverlay.render(camPos.x, camPos.y, camPos.z);
+            ShipWaterPocketLiquidOverlay.render(camPos.x, camPos.y, camPos.z);
             ShipInteriorFogRenderer.render(camera, projectionMatrix, poseStack.last().pose());
         } finally {
             modelViewStack.popPose();
