@@ -118,7 +118,9 @@ tasks.register('buildCommonForgeRefmap') {
     def commonClassesDir = project(':common').layout.buildDirectory.dir('classes/java/main')
     def commonRefmapFile = project(':common').layout.buildDirectory.file('classes/java/main/valkyrienskies-common-refmap.json')
     def srgFile = layout.buildDirectory.file('moddev/artifacts/intermediateToNamed.srg')
+    def mergedMcJar = layout.buildDirectory.file("moddev/artifacts/forge-${rootProject.minecraft_version}-${rootProject.forge_version}-merged.jar")
     def outputFile = forgeRefmapOverrideDir.map { it.file('valkyrienskies-common-refmap.json') }
+    def shadowMappingsFile = forgeRefmapOverrideDir.map { it.file('valkyrienskies-shadow-mappings.json') }
     // Loom's resolved layered mappings live in ~/.gradle/caches/fabric-loom/<mc>/loom.mappings.*-v2/mappings.tiny
     def loomMappingsTiny = fileTree(
         dir: "${System.getProperty('user.home')}/.gradle/caches/fabric-loom/${rootProject.minecraft_version}",
@@ -141,9 +143,11 @@ tasks.register('buildCommonForgeRefmap') {
     dependsOn(tasks.named('createMinecraftArtifacts'))
     inputs.file(commonRefmapFile)
     inputs.file(srgFile)
+    inputs.file(mergedMcJar)
     inputs.files(loomMappingsJar)
     inputs.files(mcpConfigZip)
     outputs.file(outputFile)
+    outputs.file(shadowMappingsFile)
     doLast {
         def jars = loomMappingsJar.files.toList()
         if (jars.isEmpty()) {
@@ -154,12 +158,14 @@ tasks.register('buildCommonForgeRefmap') {
             throw new GradleException("No mcp_config zip found under ~/.gradle/caches/modules-2/files-2.1/de.oceanlabs.mcp/mcp_config — did :forge's createMinecraftArtifacts resolve mcp_config?")
         }
         generateCommonForgeRefmap(
-            commonClassesDir: commonClassesDir.get().asFile,
-            commonRefmapFile: commonRefmapFile.get().asFile,
-            srgFile         : srgFile.get().asFile,
-            loomMappingsJar : jars[0],
-            mcpConfigZip    : mcpZips[0],
-            outputFile      : outputFile.get().asFile,
+            commonClassesDir   : commonClassesDir.get().asFile,
+            commonRefmapFile   : commonRefmapFile.get().asFile,
+            srgFile            : srgFile.get().asFile,
+            loomMappingsJar    : jars[0],
+            mcpConfigZip       : mcpZips[0],
+            mergedMcJar        : mergedMcJar.get().asFile,
+            outputFile         : outputFile.get().asFile,
+            shadowMappingsFile : shadowMappingsFile.get().asFile,
         )
     }
 }
@@ -168,6 +174,7 @@ processResources {
     dependsOn(tasks.named('buildCommonForgeRefmap'))
     from(forgeRefmapOverrideDir) {
         include 'valkyrienskies-common-refmap.json'
+        include 'valkyrienskies-shadow-mappings.json'
     }
 }
 
@@ -376,4 +383,19 @@ jar {
     manifest.attributes([
             'MixinConfigs': "${mod_id}-common.mixins.json,${mod_id}-forge.mixins.json"
     ])
+}
+
+// After reobfJar, rewrite @Shadow member names (and their call sites within
+// each mixin class) from mojmap to SRG in the prod jar. Mixin's runtime
+// transformMethodRef only rewrites the owner of invokes to @Shadow'd methods,
+// not their name (it requires isSynthetic/isConformed, which plain @Shadow
+// never satisfies), so injectors would call e.g. ArgumentTypeInfos.register
+// on a SRG-named prod class that only has m_235386_ → NoSuchMethodError.
+// ForgeGradle mods dodge this because MixinGradle's AP rewrites the names at
+// compile time; our multi-loader setup has no equivalent.
+// Dev still uses the un-rewritten synced common classes, so runClient is
+// unaffected.
+apply from: 'rewrite-mixin-shadows.gradle'
+tasks.named('reobfJar').configure {
+    finalizedBy('rewriteMixinShadowsInJar')
 }
