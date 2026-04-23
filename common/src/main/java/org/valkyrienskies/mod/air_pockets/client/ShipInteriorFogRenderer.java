@@ -16,6 +16,8 @@ import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.material.FogType;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.joml.Matrix4f;
 import org.lwjgl.opengl.GL11;
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod;
@@ -23,6 +25,8 @@ import org.valkyrienskies.mod.common.air_pockets.ShipWaterPocketManager;
 import org.valkyrienskies.mod.common.config.VSGameConfig;
 
 public final class ShipInteriorFogRenderer {
+    private static final Logger LOGGER = LogManager.getLogger("ValkyrienAir ShipInteriorFog");
+    private static final long DIAG_LOG_INTERVAL_MS = 3000L;
 
     private static final ResourceLocation INTERIOR_MASK_SHADER_ID =
         new ResourceLocation(ValkyrienSkiesMod.MOD_ID, "ship_interior_mask");
@@ -36,37 +40,66 @@ public final class ShipInteriorFogRenderer {
     private static ShaderInstance fogShader;
 
     private static final BlockPos.MutableBlockPos TMP_BLOCK_POS = new BlockPos.MutableBlockPos();
+    private static long lastDiagLogAtMs = 0L;
 
     private ShipInteriorFogRenderer() {
     }
 
     public static void render(final Camera camera, final Matrix4f projectionMatrix, final Matrix4f modelViewMatrix) {
-        if (!VSGameConfig.COMMON.getEnableAirPockets()) return;
+        if (!VSGameConfig.COMMON.getEnableAirPockets()) {
+            logDiag("Skipped interior fog render: air pockets disabled");
+            return;
+        }
 
         final Minecraft mc = Minecraft.getInstance();
-        if (mc.level == null || camera == null) return;
-        if (camera.getFluidInCamera() != FogType.NONE) return;
-        if (!shouldRenderInteriorWaterFog(
-            ShipWaterPocketManager.isWorldPosInShipAirPocket(
-                mc.level, camera.getPosition().x, camera.getPosition().y, camera.getPosition().z
-            ),
-            ShipWaterPocketManager.isWorldPosInShipWorldFluidSuppressionZone(
-                mc.level, camera.getPosition().x, camera.getPosition().y, camera.getPosition().z
-            )
-        )) {
+        if (mc.level == null || camera == null) {
+            logDiag("Skipped interior fog render: missing level/camera");
+            return;
+        }
+        final FogType cameraFogType = camera.getFluidInCamera();
+        if (cameraFogType != FogType.NONE) {
+            logDiag("Skipped interior fog render: camera fluid={}", cameraFogType);
+            return;
+        }
+
+        final boolean inShipAirPocket = ShipWaterPocketManager.isWorldPosInShipAirPocket(
+            mc.level, camera.getPosition().x, camera.getPosition().y, camera.getPosition().z
+        );
+        final boolean inWorldFluidSuppressionZone = ShipWaterPocketManager.isWorldPosInShipWorldFluidSuppressionZone(
+            mc.level, camera.getPosition().x, camera.getPosition().y, camera.getPosition().z
+        );
+        if (!shouldRenderInteriorWaterFog(inShipAirPocket, inWorldFluidSuppressionZone)) {
+            logDiag(
+                "Skipped interior fog render: inShipAirPocket={} inWorldFluidSuppressionZone={}",
+                inShipAirPocket,
+                inWorldFluidSuppressionZone
+            );
             return;
         }
 
         final RenderTarget mainTarget = mc.getMainRenderTarget();
         ensureTargets(mainTarget.width, mainTarget.height);
         ensureShaders(mc);
-        if (interiorMaskTarget == null || fogTarget == null || interiorMaskShader == null || fogShader == null) return;
+        if (interiorMaskTarget == null || fogTarget == null || interiorMaskShader == null || fogShader == null) {
+            logDiag(
+                "Skipped interior fog render: targets/shaders missing maskTarget={} fogTarget={} maskShader={} fogShader={}",
+                interiorMaskTarget != null,
+                fogTarget != null,
+                interiorMaskShader != null,
+                fogShader != null
+            );
+            return;
+        }
 
         final int boundShips = renderInteriorMask(mc, camera, projectionMatrix, modelViewMatrix, mainTarget);
-        if (boundShips <= 0) return;
+        if (boundShips <= 0) {
+            logDiag("Skipped interior fog render: no bound ships for mask");
+            return;
+        }
 
-        renderFog(mainTarget, camera);
+        renderFog(mainTarget, camera, projectionMatrix);
         compositeFogToMain(mainTarget);
+        logDiag("Rendered interior fog: boundShips={}", boundShips);
     }
 
     public static void clear() {
@@ -121,8 +154,18 @@ public final class ShipInteriorFogRenderer {
         try {
             return new ShaderInstance(mc.getResourceManager(), id.toString(), DefaultVertexFormat.POSITION);
         } catch (final Exception ex) {
+            LOGGER.warn("Failed to load interior fog shader {}", id, ex);
             return null;
         }
+    }
+
+    private static void logDiag(final String message, final Object... args) {
+        final long now = System.currentTimeMillis();
+        if (now - lastDiagLogAtMs < DIAG_LOG_INTERVAL_MS) {
+            return;
+        }
+        lastDiagLogAtMs = now;
+        LOGGER.info(message, args);
     }
 
     private static int renderInteriorMask(final Minecraft mc, final Camera camera, final Matrix4f projectionMatrix,
@@ -140,6 +183,7 @@ public final class ShipInteriorFogRenderer {
         final Matrix4f inverseProjection = new Matrix4f(projectionMatrix).invert();
         final Matrix4f inverseView = new Matrix4f(modelViewMatrix).invert();
 
+        interiorMaskShader.apply();
         final int boundShips = ShipWaterPocketExternalWaterCull.bindInteriorVolumeSamplersAndUniforms(
             interiorMaskShader,
             mc.level,
@@ -156,9 +200,9 @@ public final class ShipInteriorFogRenderer {
 
         setMat4(interiorMaskShader, "InverseProjMat", inverseProjection);
         setMat4(interiorMaskShader, "InverseViewMat", inverseView);
-        setVec2(interiorMaskShader, "ScreenSize", mainTarget.width, mainTarget.height);
         interiorMaskShader.setSampler("SceneDepthSampler", mainTarget.getDepthTextureId());
 
+        RenderSystem.setShader(() -> interiorMaskShader);
         interiorMaskShader.apply();
         drawFullscreenQuad();
         interiorMaskShader.clear();
@@ -169,12 +213,12 @@ public final class ShipInteriorFogRenderer {
         return boundShips;
     }
 
-    private static void renderFog(final RenderTarget mainTarget, final Camera camera) {
+    private static void renderFog(final RenderTarget mainTarget, final Camera camera, final Matrix4f projectionMatrix) {
         fogTarget.bindWrite(true);
         fogTarget.clear(Minecraft.ON_OSX);
 
+        fogShader.apply();
         final int waterColor = sampleWaterFogColor(camera);
-        setVec2(fogShader, "ScreenSize", mainTarget.width, mainTarget.height);
         setVec3(fogShader, "FogColor",
             ((waterColor >> 16) & 0xFF) / 255.0f,
             ((waterColor >> 8) & 0xFF) / 255.0f,
@@ -183,6 +227,7 @@ public final class ShipInteriorFogRenderer {
         final float fogDensity = 0.045f;
         final float fogStart = 2.0f;
         setVec2(fogShader, "FogParams", fogDensity, fogStart);
+        setMat4(fogShader, "InverseProjMat", new Matrix4f(projectionMatrix).invert());
 
         fogShader.setSampler("SceneColorSampler", mainTarget.getColorTextureId());
         fogShader.setSampler("SceneDepthSampler", mainTarget.getDepthTextureId());
@@ -190,6 +235,7 @@ public final class ShipInteriorFogRenderer {
 
         RenderSystem.disableDepthTest();
         RenderSystem.depthMask(false);
+        RenderSystem.setShader(() -> fogShader);
         fogShader.apply();
         drawFullscreenQuad();
         fogShader.clear();
@@ -200,6 +246,8 @@ public final class ShipInteriorFogRenderer {
         mainTarget.bindWrite(true);
         RenderSystem.disableDepthTest();
         RenderSystem.depthMask(false);
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
         RenderSystem.setShader(GameRenderer::getPositionTexShader);
         RenderSystem.setShaderTexture(0, fogTarget.getColorTextureId());
 
@@ -211,6 +259,7 @@ public final class ShipInteriorFogRenderer {
         bufferBuilder.vertex(-1.0, 1.0, 0.0).uv(0.0f, 1.0f).endVertex();
         BufferUploader.drawWithShader(bufferBuilder.end());
 
+        RenderSystem.disableBlend();
         RenderSystem.depthMask(true);
     }
 

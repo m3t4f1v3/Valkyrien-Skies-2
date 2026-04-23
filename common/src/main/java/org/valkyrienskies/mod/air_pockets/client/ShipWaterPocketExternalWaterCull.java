@@ -556,7 +556,16 @@ public final class ShipWaterPocketExternalWaterCull {
             }
 
             final ShipTransform shipTransform = getShipTransform(ship);
-            masks.worldToShip.set(shipTransform.getWorldToShip());
+            final Matrix4dc worldToShipMatrix = shipTransform.getWorldToShip();
+            final double biasedM30 = worldToShipMatrix.m30() - (double) minX;
+            final double biasedM31 = worldToShipMatrix.m31() - (double) minY;
+            final double biasedM32 = worldToShipMatrix.m32() - (double) minZ;
+            masks.worldToShip.set(
+                (float) worldToShipMatrix.m00(), (float) worldToShipMatrix.m01(), (float) worldToShipMatrix.m02(), (float) worldToShipMatrix.m03(),
+                (float) worldToShipMatrix.m10(), (float) worldToShipMatrix.m11(), (float) worldToShipMatrix.m12(), (float) worldToShipMatrix.m13(),
+                (float) worldToShipMatrix.m20(), (float) worldToShipMatrix.m21(), (float) worldToShipMatrix.m22(), (float) worldToShipMatrix.m23(),
+                (float) biasedM30, (float) biasedM31, (float) biasedM32, (float) worldToShipMatrix.m33()
+            );
 
             final Uniform aabbMin = shader.getUniform("ValkyrienAir_ShipAabbMin" + slot);
             if (aabbMin != null) {
