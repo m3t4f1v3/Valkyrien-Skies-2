@@ -4834,9 +4834,23 @@ object ShipWaterPocketManager {
 
                 val fluidMatches = holeFluid != null && (componentFloodFluid == null || componentFloodFluid == holeFluid)
                 val surfaceY = openingSample.estimatedSurfaceY
+                val x0 = lx.toDouble()
+                val y0 = ly.toDouble()
+                val z0 = lz.toDouble()
+                val x1 = x0 + 1.0
+                val y1 = y0 + 1.0
+                val z1 = z0 + 1.0
+                val openingBottomY = when (outDirCode) {
+                    0 -> minOf(worldYAtLocal(x0, y0, z0), worldYAtLocal(x0, y1, z0), worldYAtLocal(x0, y0, z1), worldYAtLocal(x0, y1, z1))
+                    1 -> minOf(worldYAtLocal(x1, y0, z0), worldYAtLocal(x1, y1, z0), worldYAtLocal(x1, y0, z1), worldYAtLocal(x1, y1, z1))
+                    2 -> minOf(worldYAtLocal(x0, y0, z0), worldYAtLocal(x1, y0, z0), worldYAtLocal(x0, y0, z1), worldYAtLocal(x1, y0, z1))
+                    3 -> minOf(worldYAtLocal(x0, y1, z0), worldYAtLocal(x1, y1, z0), worldYAtLocal(x0, y1, z1), worldYAtLocal(x1, y1, z1))
+                    4 -> minOf(worldYAtLocal(x0, y0, z0), worldYAtLocal(x1, y0, z0), worldYAtLocal(x0, y1, z0), worldYAtLocal(x1, y1, z0))
+                    else -> minOf(worldYAtLocal(x0, y0, z1), worldYAtLocal(x1, y0, z1), worldYAtLocal(x0, y1, z1), worldYAtLocal(x1, y1, z1))
+                }
                 val openingBelowSurface =
-                    surfaceY != null && openingSample.faceTopWorldY <= surfaceY + FLOOD_OPENING_LEVEL_EPS
-                val openingSubmerged = openingSample.isIngressQualified() && fluidMatches && openingBelowSurface
+                    surfaceY == null || openingBottomY <= surfaceY + FLOOD_OPENING_LEVEL_EPS
+                val openingSubmerged = openingSample.isSubmergedAny() && fluidMatches && openingBelowSurface
 
                 if (openingSubmerged) {
                     // Submerged hull opening: water can enter. Track the highest submerged opening as the fill level.
@@ -5199,8 +5213,7 @@ object ShipWaterPocketManager {
 
                 fun canFillPressurized(i: Int): Boolean {
                     if (!open.get(i) || !interior.get(i) || out.get(i)) return false
-                    if (!submerged.get(i)) return false
-                    if (hasAirVent) return true
+                    if (!pressurizedPlane.isFinite()) return false
 
                     val lx = i % sizeX
                     val t = i / sizeX
@@ -5735,7 +5748,6 @@ object ShipWaterPocketManager {
                     var seedMissing = false
                     val candidateIdxs = IntArray(tail)
                     val candidateLayerKey = IntArray(tail)
-                    val candidateDistSq = IntArray(tail)
                     var candidateCount = 0
                     for (i in 0 until tail) {
                         val idx = queue[i]
@@ -5761,7 +5773,6 @@ object ShipWaterPocketManager {
 
                         candidateIdxs[candidateCount] = idx
                         candidateLayerKey[candidateCount] = layerKey
-                        candidateDistSq[candidateCount] = 0
                         candidateCount++
                     }
                     if (firstMissingIdx < 0) return
@@ -5796,8 +5807,6 @@ object ShipWaterPocketManager {
                         val dx = if (lx >= anchorX) lx - anchorX else anchorX - lx
                         val dy = if (ly >= anchorY) ly - anchorY else anchorY - ly
                         val dz = if (lz >= anchorZ) lz - anchorZ else anchorZ - lz
-                        candidateDistSq[i] = dx * dx + dy * dy + dz * dz
-
                         val layerKey = candidateLayerKey[i]
                         if (layerKey > maxLayerKey) maxLayerKey = layerKey
                         if (layerKey < minLayerKey) minLayerKey = layerKey
@@ -5814,8 +5823,6 @@ object ShipWaterPocketManager {
                     val distToMax = kotlin.math.abs(maxLayerKey - anchorLayerKey)
                     val distToMin = kotlin.math.abs(anchorLayerKey - minLayerKey)
                     val firstLayerKey = if (distToMax >= distToMin) maxLayerKey else minLayerKey
-                    val layerStep = if (firstLayerKey == maxLayerKey) -1 else 1
-
                     val frontAnchorIdxs = IntArray(MAX_VIRTUAL_INGRESS_FRONTS)
                     val frontWeights = IntArray(MAX_VIRTUAL_INGRESS_FRONTS)
                     var frontCount = 0
@@ -6104,13 +6111,21 @@ object ShipWaterPocketManager {
                             if (emitted.get(idx)) continue
                             val layer = candidateLayerKey[i] - minLayerKey
                             if (layer !in 0 until layerCount) continue
-                            val distSq = candidateDistSq[i]
+                            val lx = idx % sizeX
+                            val t = idx / sizeX
+                            val ly = t % sizeY
+                            val lz = t / sizeY
+                            val dx = if (lx >= anchorX) lx - anchorX else anchorX - lx
+                            val dy = if (ly >= anchorY) ly - anchorY else anchorY - ly
+                            val dz = if (lz >= anchorZ) lz - anchorZ else anchorZ - lz
+                            val distSq = dx * dx + dy * dy + dz * dz
                             val key = ((distSq.toLong() and 0xffff_ffffL) shl 32) or (idx.toLong() and 0xffff_ffffL)
                             val at = countsByLayer[layer]
                             buckets[layer][at] = key
                             countsByLayer[layer] = at + 1
                         }
 
+                        val layerStep = if (firstLayerKey == maxLayerKey) -1 else 1
                         var layerKey = firstLayerKey
                         while (layerKey in minLayerKey..maxLayerKey) {
                             val layer = layerKey - minLayerKey
