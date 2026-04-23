@@ -9,10 +9,13 @@ import net.minecraft.client.renderer.BiomeColors;
 import net.minecraft.client.renderer.EffectInstance;
 import net.minecraft.client.renderer.PostPass;
 import net.minecraft.core.BlockPos;
+import net.minecraft.util.Mth;
 import net.minecraft.world.level.material.FogType;
+import net.minecraft.world.level.material.FluidState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.joml.Matrix4f;
+import org.joml.Vector3f;
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod;
 import org.valkyrienskies.mod.common.air_pockets.ShipWaterPocketManager;
 import org.valkyrienskies.mod.common.config.VSGameConfig;
@@ -242,6 +245,7 @@ public final class ShipInteriorFogRenderer {
         final float fogDensity = 0.045f;
         final float fogStart = 2.0f;
         setVec2(effect, "FogParams", fogDensity, fogStart);
+        setFloat(effect, "ExteriorWaterGate", computeExteriorWaterGate(camera));
         setMat4(effect, "InverseProjMat", new Matrix4f(projectionMatrix).invert());
         effect.setSampler("SceneDepthSampler", mainTarget::getDepthTextureId);
         effect.setSampler("InteriorMaskSampler", interiorMaskTarget::getColorTextureId);
@@ -256,6 +260,49 @@ public final class ShipInteriorFogRenderer {
         final Minecraft mc = Minecraft.getInstance();
         TMP_BLOCK_POS.set(camera.getBlockPosition());
         return BiomeColors.getAverageWaterColor(mc.level, TMP_BLOCK_POS);
+    }
+
+    private static float computeExteriorWaterGate(final Camera camera) {
+        final Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null) return 0.0f;
+
+        final Vector3f look = camera.getLookVector();
+        final float lookLenSq = look.x() * look.x() + look.y() * look.y() + look.z() * look.z();
+        if (lookLenSq <= 1.0e-6f) return 0.0f;
+
+        final double startX = camera.getPosition().x;
+        final double startY = camera.getPosition().y;
+        final double startZ = camera.getPosition().z;
+        final double maxTraceDistance = 64.0;
+        final double fluidProbeDistance = 3.0;
+        final double dryStep = 0.25;
+        final double fluidStep = 0.25;
+
+        double exitDistance = -1.0;
+        for (double travel = 0.0; travel <= maxTraceDistance; travel += dryStep) {
+            final double sampleX = startX + look.x() * travel;
+            final double sampleY = startY + look.y() * travel;
+            final double sampleZ = startZ + look.z() * travel;
+            if (!ShipWaterPocketManager.isWorldPosInShipAirPocket(mc.level, sampleX, sampleY, sampleZ)) {
+                exitDistance = travel;
+                break;
+            }
+        }
+        if (exitDistance < 0.0) return 0.0f;
+
+        final double fluidProbeEnd = Math.min(maxTraceDistance, exitDistance + fluidProbeDistance);
+        for (double travel = exitDistance; travel <= fluidProbeEnd; travel += fluidStep) {
+            final double sampleX = startX + look.x() * travel;
+            final double sampleY = startY + look.y() * travel;
+            final double sampleZ = startZ + look.z() * travel;
+            TMP_BLOCK_POS.set(Mth.floor(sampleX), Mth.floor(sampleY), Mth.floor(sampleZ));
+            final FluidState fluidState = mc.level.getFluidState(TMP_BLOCK_POS);
+            if (!fluidState.isEmpty()) {
+                return 1.0f;
+            }
+        }
+
+        return 0.0f;
     }
 
     static boolean shouldRenderInteriorWaterFog(final boolean inShipAirPocket, final boolean inWorldFluidSuppressionZone) {
@@ -281,6 +328,13 @@ public final class ShipInteriorFogRenderer {
         final Uniform uniform = effect.getUniform(uniformName);
         if (uniform != null) {
             uniform.set(x, y, z);
+        }
+    }
+
+    private static void setFloat(final EffectInstance effect, final String uniformName, final float value) {
+        final Uniform uniform = effect.getUniform(uniformName);
+        if (uniform != null) {
+            uniform.set(value);
         }
     }
 }

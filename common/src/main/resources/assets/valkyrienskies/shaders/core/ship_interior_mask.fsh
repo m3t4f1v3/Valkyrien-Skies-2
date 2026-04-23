@@ -92,8 +92,9 @@ bool va_testAir(sampler2D mask, int voxelIdx, ivec3 isize) {
 bool va_testWaterReachable(sampler2D mask, int voxelIdx, ivec3 isize) {
     int volume = isize.x * isize.y * isize.z;
     int occBase = volume * VA_OCC_WORDS_PER_VOXEL;
-    int airBase = occBase + ((volume + 31) >> 5);
-    int wordIndex = airBase + (voxelIdx >> 5);
+    int airWordCount = (volume + 31) >> 5;
+    int waterBase = occBase + airWordCount + airWordCount;
+    int wordIndex = waterBase + (voxelIdx >> 5);
     int bit = voxelIdx & 31;
     uint word = va_fetchWord(mask, wordIndex);
     return ((word >> uint(bit)) & 1u) != 0u;

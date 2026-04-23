@@ -44,6 +44,7 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.joml.Vector3f;
 import org.joml.Matrix4dc;
 import org.joml.Matrix4f;
 import org.joml.primitives.AABBdc;
@@ -789,6 +790,9 @@ public final class ShipWaterPocketExternalWaterCull {
         final int voxelY = Mth.floor(camShipY);
         final int voxelZ = Mth.floor(camShipZ);
         final boolean cpuAir = inGrid && isAirVoxelSet(masks, voxelX, voxelY, voxelZ);
+        final boolean cpuWaterReachable = inGrid && isWaterReachableVoxelSet(masks, voxelX, voxelY, voxelZ);
+        final int nearbyWaterReachable = inGrid ? countNearbyWaterReachableVoxels(masks, voxelX, voxelY, voxelZ, 3) : 0;
+        final RayProbeResult rayProbe = probeLookRayBoundary(masks, cameraX, cameraY, cameraZ);
 
         diag.append(" | slot=").append(slot)
             .append(" ship=").append(shipId)
@@ -800,10 +804,77 @@ public final class ShipWaterPocketExternalWaterCull {
             .append(" voxel=(").append(voxelX).append(",").append(voxelY).append(",").append(voxelZ).append(")")
             .append(" inGrid=").append(inGrid)
             .append(" cpuAir=").append(cpuAir)
+            .append(" cpuWater=").append(cpuWaterReachable)
+            .append(" nearWater=").append(nearbyWaterReachable)
+            .append(" rayExit=").append(rayProbe.exitFound)
+            .append(" rayDist=").append(formatDiagDouble(rayProbe.exitDistance))
+            .append(" rayVoxel=(").append(rayProbe.voxelX).append(",").append(rayProbe.voxelY).append(",").append(rayProbe.voxelZ).append(")")
+            .append(" rayNearWater=").append(rayProbe.nearbyWaterCount)
             .append(" grid=(").append(sizeX).append(",").append(sizeY).append(",").append(sizeZ).append(")")
             .append(" tex=").append(masks.maskTexId)
             .append(" uploadRev=").append(masks.lastMaskUploadRevision)
             .append(" geomRev=").append(geometryRevision);
+    }
+
+    private static RayProbeResult probeLookRayBoundary(final ShipMasks masks, final double cameraX, final double cameraY,
+        final double cameraZ) {
+        final Minecraft mc = Minecraft.getInstance();
+        if (mc.gameRenderer == null || mc.gameRenderer.getMainCamera() == null) {
+            return RayProbeResult.EMPTY;
+        }
+        final Vector3f look = mc.gameRenderer.getMainCamera().getLookVector();
+        final double lookLenSq = (double) look.x * look.x + (double) look.y * look.y + (double) look.z * look.z;
+        if (lookLenSq <= 1.0e-6) {
+            return RayProbeResult.EMPTY;
+        }
+
+        final double maxDistance = 64.0;
+        final double step = 0.25;
+        double lastInsideDistance = -1.0;
+        int lastVoxelX = Integer.MIN_VALUE;
+        int lastVoxelY = Integer.MIN_VALUE;
+        int lastVoxelZ = Integer.MIN_VALUE;
+
+        for (double travel = 0.0; travel <= maxDistance; travel += step) {
+            final double worldX = cameraX + look.x * travel;
+            final double worldY = cameraY + look.y * travel;
+            final double worldZ = cameraZ + look.z * travel;
+            final double shipX =
+                masks.worldToShip.m00() * worldX + masks.worldToShip.m10() * worldY + masks.worldToShip.m20() * worldZ + masks.worldToShip.m30();
+            final double shipY =
+                masks.worldToShip.m01() * worldX + masks.worldToShip.m11() * worldY + masks.worldToShip.m21() * worldZ + masks.worldToShip.m31();
+            final double shipZ =
+                masks.worldToShip.m02() * worldX + masks.worldToShip.m12() * worldY + masks.worldToShip.m22() * worldZ + masks.worldToShip.m32();
+
+            if (shipX < 0.0 || shipY < 0.0 || shipZ < 0.0 || shipX >= masks.sizeX || shipY >= masks.sizeY || shipZ >= masks.sizeZ) {
+                break;
+            }
+
+            final int voxelX = Mth.floor(shipX);
+            final int voxelY = Mth.floor(shipY);
+            final int voxelZ = Mth.floor(shipZ);
+            if (!isAirVoxelSet(masks, voxelX, voxelY, voxelZ)) {
+                break;
+            }
+
+            lastInsideDistance = travel;
+            lastVoxelX = voxelX;
+            lastVoxelY = voxelY;
+            lastVoxelZ = voxelZ;
+        }
+
+        if (lastInsideDistance < 0.0) {
+            return RayProbeResult.EMPTY;
+        }
+
+        return new RayProbeResult(
+            true,
+            lastInsideDistance,
+            lastVoxelX,
+            lastVoxelY,
+            lastVoxelZ,
+            countNearbyWaterReachableVoxels(masks, lastVoxelX, lastVoxelY, lastVoxelZ, 3)
+        );
     }
 
     private static boolean isAirVoxelSet(final ShipMasks masks, final int voxelX, final int voxelY, final int voxelZ) {
@@ -819,6 +890,41 @@ public final class ShipWaterPocketExternalWaterCull {
         final int bit = voxelIdx & 31;
         final int word = masks.maskData[wordIndex];
         return ((word >>> bit) & 1) != 0;
+    }
+
+    private static boolean isWaterReachableVoxelSet(final ShipMasks masks, final int voxelX, final int voxelY, final int voxelZ) {
+        if (masks.maskData == null) return false;
+        if (voxelX < 0 || voxelY < 0 || voxelZ < 0) return false;
+        if (voxelX >= masks.sizeX || voxelY >= masks.sizeY || voxelZ >= masks.sizeZ) return false;
+
+        final int volume = masks.sizeX * masks.sizeY * masks.sizeZ;
+        final int airWordCount = (volume + 31) >> 5;
+        final int voxelIdx = voxelX + masks.sizeX * (voxelY + masks.sizeY * voxelZ);
+        final int wordIndex = volume * OCC_WORDS_PER_VOXEL + airWordCount + (voxelIdx >> 5);
+        if (wordIndex < 0 || wordIndex >= masks.maskData.length) return false;
+
+        final int bit = voxelIdx & 31;
+        final int word = masks.maskData[wordIndex];
+        return ((word >>> bit) & 1) != 0;
+    }
+
+    private static int countNearbyWaterReachableVoxels(final ShipMasks masks, final int centerX, final int centerY, final int centerZ,
+        final int radius) {
+        int count = 0;
+        for (int dz = -radius; dz <= radius; dz++) {
+            for (int dy = -radius; dy <= radius; dy++) {
+                for (int dx = -radius; dx <= radius; dx++) {
+                    if (isWaterReachableVoxelSet(masks, centerX + dx, centerY + dy, centerZ + dz)) {
+                        count++;
+                    }
+                }
+            }
+        }
+        return count;
+    }
+
+    private record RayProbeResult(boolean exitFound, double exitDistance, int voxelX, int voxelY, int voxelZ, int nearbyWaterCount) {
+        private static final RayProbeResult EMPTY = new RayProbeResult(false, 0.0, Integer.MIN_VALUE, Integer.MIN_VALUE, Integer.MIN_VALUE, 0);
     }
 
     private static String formatDiagDouble(final double value) {
@@ -1486,14 +1592,36 @@ public final class ShipWaterPocketExternalWaterCull {
 
         final BitSet interiorSnapshot =
             snapshot.getInterior() == null ? new BitSet() : (BitSet) snapshot.getInterior().clone();
+        final BitSet openSnapshot =
+            snapshot.getOpen() == null ? new BitSet() : (BitSet) snapshot.getOpen().clone();
         final BitSet waterReachableSnapshot =
             snapshot.getWaterReachable() == null ? new BitSet() : (BitSet) snapshot.getWaterReachable().clone();
+        final BitSet submergedBoundarySnapshot = new BitSet(volume);
+        for (int waterIdx = waterReachableSnapshot.nextSetBit(0); waterIdx >= 0 && waterIdx < volume;
+             waterIdx = waterReachableSnapshot.nextSetBit(waterIdx + 1)) {
+            if (!ShipWaterPocketLiquidOverlay.isOutsideSubmergedFluid(openSnapshot, interiorSnapshot, waterReachableSnapshot, waterIdx)) {
+                continue;
+            }
+            if (ShipWaterPocketLiquidOverlay.touchesOverlayBoundary(
+                openSnapshot,
+                interiorSnapshot,
+                waterReachableSnapshot,
+                null,
+                null,
+                waterIdx,
+                sizeX,
+                sizeY,
+                sizeZ
+            )) {
+                submergedBoundarySnapshot.set(waterIdx);
+            }
+        }
 
         final Supplier<int[]> task = () -> {
             final int[] occWords =
                 ShipWaterPocketAsyncCull.buildOccMaskWords(shapeSnapshot, sizeX, sizeY, sizeZ, SUB);
             final int[] airWords = ShipWaterPocketAsyncCull.buildAirMaskWords(interiorSnapshot, volume);
-            final int[] waterWords = ShipWaterPocketAsyncCull.buildAirMaskWords(waterReachableSnapshot, volume);
+            final int[] waterWords = ShipWaterPocketAsyncCull.buildAirMaskWords(submergedBoundarySnapshot, volume);
             final int[] out = new int[occWords.length + airWords.length + waterWords.length];
             System.arraycopy(occWords, 0, out, 0, occWords.length);
             System.arraycopy(airWords, 0, out, occWords.length, airWords.length);

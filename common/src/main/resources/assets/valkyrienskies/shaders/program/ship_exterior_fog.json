@@ -19,6 +19,7 @@
     { "name": "OutSize", "type": "float", "count": 2, "values": [1.0, 1.0] },
     { "name": "FogColor", "type": "float", "count": 3, "values": [0.1, 0.3, 0.5] },
     { "name": "FogParams", "type": "float", "count": 2, "values": [0.045, 2.0] },
+    { "name": "ExteriorWaterGate", "type": "float", "count": 1, "values": [1.0] },
     { "name": "InverseProjMat", "type": "matrix4x4", "count": 16, "values": [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0] }
   ]
 }
