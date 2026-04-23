@@ -17,6 +17,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
@@ -25,6 +26,7 @@ import java.util.concurrent.CompletableFuture;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.renderer.EffectInstance;
 import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraft.client.renderer.texture.AbstractTexture;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
@@ -129,8 +131,10 @@ public final class ShipWaterPocketExternalWaterCull {
     private static Method fabricHandlerGetSprites = null;
 
     private static final Matrix4f IDENTITY_MAT4 = new Matrix4f();
+    private static final long INTERIOR_VOLUME_DIAG_LOG_INTERVAL_MS = 3000L;
 
     private static ClientLevel lastLevel = null;
+    private static long lastInteriorVolumeDiagLogAtMs = 0L;
 
     private static final class ShipMasks {
         private final long shipId;
@@ -604,6 +608,223 @@ public final class ShipWaterPocketExternalWaterCull {
         return boundShipCount;
     }
 
+    public static int bindInteriorVolumeSamplersAndUniforms(final EffectInstance effect, final ClientLevel level,
+        final double cameraX, final double cameraY, final double cameraZ) {
+        if (effect == null || level == null) return 0;
+
+        RenderSystem.assertOnRenderThread();
+
+        if (lastLevel != level) {
+            clear();
+            lastLevel = level;
+        }
+
+        final Vec3 cameraPos = new Vec3(cameraX, cameraY, cameraZ);
+        final List<LoadedShip> ships = selectClosestShips(level, cameraPos, MAX_SHIPS);
+
+        int boundShipCount = 0;
+        final boolean shouldLogDiag = shouldLogInteriorVolumeDiag();
+        final StringBuilder diag = shouldLogDiag
+            ? new StringBuilder("Interior volume effect bind camera=(")
+                .append(formatDiagDouble(cameraX)).append(",")
+                .append(formatDiagDouble(cameraY)).append(",")
+                .append(formatDiagDouble(cameraZ)).append(")")
+            : null;
+        for (int slot = 0; slot < MAX_SHIPS; slot++) {
+            if (slot >= ships.size()) {
+                clearInteriorVolumeSlot(effect, slot);
+                continue;
+            }
+
+            final LoadedShip ship = ships.get(slot);
+            final long shipId = ship.getId();
+            final ShipWaterPocketManager.ClientWaterReachableSnapshot snapshot =
+                ShipWaterPocketManager.getClientWaterReachableSnapshot(level, shipId);
+            if (snapshot == null) {
+                clearInteriorVolumeSlot(effect, slot);
+                continue;
+            }
+
+            final ShipMasks masks = SHIP_MASKS.computeIfAbsent(shipId, ShipMasks::new);
+
+            final int minX = snapshot.getMinX();
+            final int minY = snapshot.getMinY();
+            final int minZ = snapshot.getMinZ();
+            final int sizeX = snapshot.getSizeX();
+            final int sizeY = snapshot.getSizeY();
+            final int sizeZ = snapshot.getSizeZ();
+            final long geometryRevision = snapshot.getGeometryRevision();
+
+            final boolean boundsChanged =
+                masks.minX != minX || masks.minY != minY || masks.minZ != minZ ||
+                    masks.sizeX != sizeX || masks.sizeY != sizeY || masks.sizeZ != sizeZ;
+
+            if (boundsChanged || masks.geometryRevision != geometryRevision) {
+                rebuildMask(level, masks, snapshot, minX, minY, minZ, sizeX, sizeY, sizeZ, geometryRevision);
+            } else {
+                ensureMaskTextureStorage(masks, sizeX * sizeY * sizeZ);
+            }
+            applyPendingMaskBuild(masks, geometryRevision);
+
+            if (!isLiveTextureId(masks.maskTexId) || masks.lastMaskUploadRevision != geometryRevision) {
+                clearInteriorVolumeSlot(effect, slot);
+                continue;
+            }
+
+            final AABBdc worldAabb = getShipWorldAabb(ship).orElse(null);
+            if (worldAabb == null) {
+                clearInteriorVolumeSlot(effect, slot);
+                continue;
+            }
+
+            final ShipTransform shipTransform = getShipTransform(ship);
+            final Matrix4dc worldToShipMatrix = shipTransform.getWorldToShip();
+            final double biasedM30 = worldToShipMatrix.m30() - (double) minX;
+            final double biasedM31 = worldToShipMatrix.m31() - (double) minY;
+            final double biasedM32 = worldToShipMatrix.m32() - (double) minZ;
+            final double camShipX =
+                worldToShipMatrix.m00() * cameraX + worldToShipMatrix.m10() * cameraY + worldToShipMatrix.m20() * cameraZ + biasedM30;
+            final double camShipY =
+                worldToShipMatrix.m01() * cameraX + worldToShipMatrix.m11() * cameraY + worldToShipMatrix.m21() * cameraZ + biasedM31;
+            final double camShipZ =
+                worldToShipMatrix.m02() * cameraX + worldToShipMatrix.m12() * cameraY + worldToShipMatrix.m22() * cameraZ + biasedM32;
+            masks.worldToShip.set(
+                (float) worldToShipMatrix.m00(), (float) worldToShipMatrix.m01(), (float) worldToShipMatrix.m02(), (float) worldToShipMatrix.m03(),
+                (float) worldToShipMatrix.m10(), (float) worldToShipMatrix.m11(), (float) worldToShipMatrix.m12(), (float) worldToShipMatrix.m13(),
+                (float) worldToShipMatrix.m20(), (float) worldToShipMatrix.m21(), (float) worldToShipMatrix.m22(), (float) worldToShipMatrix.m23(),
+                (float) biasedM30, (float) biasedM31, (float) biasedM32, (float) worldToShipMatrix.m33()
+            );
+
+            final Uniform aabbMin = effect.getUniform("ValkyrienAir_ShipAabbMin" + slot);
+            if (aabbMin != null) {
+                aabbMin.set((float) worldAabb.minX(), (float) worldAabb.minY(), (float) worldAabb.minZ(), 0.0f);
+            }
+
+            final Uniform aabbMax = effect.getUniform("ValkyrienAir_ShipAabbMax" + slot);
+            if (aabbMax != null) {
+                aabbMax.set((float) worldAabb.maxX(), (float) worldAabb.maxY(), (float) worldAabb.maxZ(), 0.0f);
+            }
+
+            final Uniform gridSize = effect.getUniform("ValkyrienAir_GridSize" + slot);
+            if (gridSize != null) {
+                gridSize.set((float) sizeX, (float) sizeY, (float) sizeZ, 0.0f);
+            }
+
+            final Uniform worldToShip = effect.getUniform("ValkyrienAir_WorldToShip" + slot);
+            if (worldToShip != null) {
+                worldToShip.set(masks.worldToShip);
+            }
+
+            effect.setSampler("ValkyrienAir_Mask" + slot, () -> masks.maskTexId);
+            boundShipCount++;
+
+            if (shouldLogDiag) {
+                appendInteriorVolumeDiag(
+                    diag,
+                    slot,
+                    shipId,
+                    worldAabb,
+                    sizeX,
+                    sizeY,
+                    sizeZ,
+                    geometryRevision,
+                    masks,
+                    cameraX,
+                    cameraY,
+                    cameraZ,
+                    camShipX,
+                    camShipY,
+                    camShipZ
+                );
+            }
+        }
+
+        final Uniform shipCount = effect.getUniform("ValkyrienAir_ShipCount");
+        if (shipCount != null) {
+            shipCount.set(boundShipCount);
+        }
+
+        if (shouldLogDiag) {
+            diag.append(" boundShips=").append(boundShipCount);
+            LOGGER.info(diag.toString());
+        }
+
+        return boundShipCount;
+    }
+
+    private static boolean shouldLogInteriorVolumeDiag() {
+        final long now = System.currentTimeMillis();
+        if (now - lastInteriorVolumeDiagLogAtMs < INTERIOR_VOLUME_DIAG_LOG_INTERVAL_MS) {
+            return false;
+        }
+        lastInteriorVolumeDiagLogAtMs = now;
+        return true;
+    }
+
+    private static void appendInteriorVolumeDiag(
+        final StringBuilder diag,
+        final int slot,
+        final long shipId,
+        final AABBdc worldAabb,
+        final int sizeX,
+        final int sizeY,
+        final int sizeZ,
+        final long geometryRevision,
+        final ShipMasks masks,
+        final double cameraX,
+        final double cameraY,
+        final double cameraZ,
+        final double camShipX,
+        final double camShipY,
+        final double camShipZ
+    ) {
+        final boolean inAabb =
+            cameraX >= worldAabb.minX() && cameraX <= worldAabb.maxX() &&
+                cameraY >= worldAabb.minY() && cameraY <= worldAabb.maxY() &&
+                cameraZ >= worldAabb.minZ() && cameraZ <= worldAabb.maxZ();
+        final boolean inGrid =
+            camShipX >= 0.0 && camShipY >= 0.0 && camShipZ >= 0.0 &&
+                camShipX < sizeX && camShipY < sizeY && camShipZ < sizeZ;
+        final int voxelX = Mth.floor(camShipX);
+        final int voxelY = Mth.floor(camShipY);
+        final int voxelZ = Mth.floor(camShipZ);
+        final boolean cpuAir = inGrid && isAirVoxelSet(masks, voxelX, voxelY, voxelZ);
+
+        diag.append(" | slot=").append(slot)
+            .append(" ship=").append(shipId)
+            .append(" aabb=").append(inAabb)
+            .append(" camShip=(")
+            .append(formatDiagDouble(camShipX)).append(",")
+            .append(formatDiagDouble(camShipY)).append(",")
+            .append(formatDiagDouble(camShipZ)).append(")")
+            .append(" voxel=(").append(voxelX).append(",").append(voxelY).append(",").append(voxelZ).append(")")
+            .append(" inGrid=").append(inGrid)
+            .append(" cpuAir=").append(cpuAir)
+            .append(" grid=(").append(sizeX).append(",").append(sizeY).append(",").append(sizeZ).append(")")
+            .append(" tex=").append(masks.maskTexId)
+            .append(" uploadRev=").append(masks.lastMaskUploadRevision)
+            .append(" geomRev=").append(geometryRevision);
+    }
+
+    private static boolean isAirVoxelSet(final ShipMasks masks, final int voxelX, final int voxelY, final int voxelZ) {
+        if (masks.maskData == null) return false;
+        if (voxelX < 0 || voxelY < 0 || voxelZ < 0) return false;
+        if (voxelX >= masks.sizeX || voxelY >= masks.sizeY || voxelZ >= masks.sizeZ) return false;
+
+        final int volume = masks.sizeX * masks.sizeY * masks.sizeZ;
+        final int voxelIdx = voxelX + masks.sizeX * (voxelY + masks.sizeY * voxelZ);
+        final int wordIndex = volume * OCC_WORDS_PER_VOXEL + (voxelIdx >> 5);
+        if (wordIndex < 0 || wordIndex >= masks.maskData.length) return false;
+
+        final int bit = voxelIdx & 31;
+        final int word = masks.maskData[wordIndex];
+        return ((word >>> bit) & 1) != 0;
+    }
+
+    private static String formatDiagDouble(final double value) {
+        return String.format(Locale.ROOT, "%.2f", value);
+    }
+
     private static void clearInteriorVolumeSlot(final ShaderInstance shader, final int slot) {
         final Uniform aabbMin = shader.getUniform("ValkyrienAir_ShipAabbMin" + slot);
         if (aabbMin != null) {
@@ -627,6 +848,28 @@ public final class ShipWaterPocketExternalWaterCull {
         if (worldToShip != null) {
             worldToShip.set(IDENTITY_MAT4);
             worldToShip.upload();
+        }
+    }
+
+    private static void clearInteriorVolumeSlot(final EffectInstance effect, final int slot) {
+        final Uniform aabbMin = effect.getUniform("ValkyrienAir_ShipAabbMin" + slot);
+        if (aabbMin != null) {
+            aabbMin.set(0.0f, 0.0f, 0.0f, 0.0f);
+        }
+
+        final Uniform aabbMax = effect.getUniform("ValkyrienAir_ShipAabbMax" + slot);
+        if (aabbMax != null) {
+            aabbMax.set(0.0f, 0.0f, 0.0f, 0.0f);
+        }
+
+        final Uniform gridSize = effect.getUniform("ValkyrienAir_GridSize" + slot);
+        if (gridSize != null) {
+            gridSize.set(0.0f, 0.0f, 0.0f, 0.0f);
+        }
+
+        final Uniform worldToShip = effect.getUniform("ValkyrienAir_WorldToShip" + slot);
+        if (worldToShip != null) {
+            worldToShip.set(IDENTITY_MAT4);
         }
     }
 

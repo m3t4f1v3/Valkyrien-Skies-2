@@ -1,6 +1,6 @@
 #version 150
 
-uniform sampler2D SceneColorSampler;
+uniform sampler2D DiffuseSampler;
 uniform sampler2D SceneDepthSampler;
 uniform sampler2D InteriorMaskSampler;
 uniform vec3 FogColor;
@@ -17,7 +17,7 @@ vec3 reconstructViewPos(float depth) {
 }
 
 void main() {
-    vec4 sceneColor = texture(SceneColorSampler, texCoord);
+    vec4 sceneColor = texture(DiffuseSampler, texCoord);
     float sceneDepth = texture(SceneDepthSampler, texCoord).r;
     float dryFraction = texture(InteriorMaskSampler, texCoord).r;
 
