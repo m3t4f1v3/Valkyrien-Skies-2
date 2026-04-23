@@ -37,6 +37,8 @@ public final class ShipInteriorFogRenderer {
 
     private static final BlockPos.MutableBlockPos TMP_BLOCK_POS = new BlockPos.MutableBlockPos();
     private static long lastDiagLogAtMs = 0L;
+    private static long lastInteriorFogActiveAtMs = 0L;
+    private static final long INTERIOR_FOG_GRACE_PERIOD_MS = 250L;
 
     private ShipInteriorFogRenderer() {
     }
@@ -247,6 +249,14 @@ public final class ShipInteriorFogRenderer {
         setVec2(effect, "FogParams", fogDensity, fogStart);
         setFloat(effect, "ExteriorWaterGate", computeExteriorWaterGate(camera));
         setMat4(effect, "InverseProjMat", new Matrix4f(projectionMatrix).invert());
+        setVec3(effect, "CameraWorldPos",
+            (float) camera.getPosition().x,
+            (float) camera.getPosition().y,
+            (float) camera.getPosition().z
+        );
+        setVec3(effect, "CameraLookVector", camera.getLookVector().x(), camera.getLookVector().y(), camera.getLookVector().z());
+        setVec3(effect, "CameraUpVector", camera.getUpVector().x(), camera.getUpVector().y(), camera.getUpVector().z());
+        setVec3(effect, "CameraLeftVector", camera.getLeftVector().x(), camera.getLeftVector().y(), camera.getLeftVector().z());
         effect.setSampler("SceneDepthSampler", mainTarget::getDepthTextureId);
         effect.setSampler("InteriorMaskSampler", interiorMaskTarget::getColorTextureId);
         fogPass.process(0.0f);
@@ -306,7 +316,12 @@ public final class ShipInteriorFogRenderer {
     }
 
     static boolean shouldRenderInteriorWaterFog(final boolean inShipAirPocket, final boolean inWorldFluidSuppressionZone) {
-        return inShipAirPocket && inWorldFluidSuppressionZone;
+        final long now = System.currentTimeMillis();
+        if (inShipAirPocket || inWorldFluidSuppressionZone) {
+            lastInteriorFogActiveAtMs = now;
+            return true;
+        }
+        return now - lastInteriorFogActiveAtMs <= INTERIOR_FOG_GRACE_PERIOD_MS;
     }
 
     private static void setMat4(final EffectInstance effect, final String uniformName, final Matrix4f value) {

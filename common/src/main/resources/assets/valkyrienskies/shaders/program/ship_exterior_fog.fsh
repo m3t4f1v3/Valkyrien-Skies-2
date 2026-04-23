@@ -7,6 +7,10 @@ uniform vec3 FogColor;
 uniform vec2 FogParams;
 uniform float ExteriorWaterGate;
 uniform mat4 InverseProjMat;
+uniform vec3 CameraWorldPos;
+uniform vec3 CameraLookVector;
+uniform vec3 CameraUpVector;
+uniform vec3 CameraLeftVector;
 
 in vec2 texCoord;
 out vec4 fragColor;
@@ -17,16 +21,26 @@ vec3 reconstructViewPos(float depth) {
     return viewPos.xyz / viewPos.w;
 }
 
+vec3 reconstructWorldPos(float depth) {
+    vec3 viewPos = reconstructViewPos(depth);
+    return CameraWorldPos
+        - CameraLeftVector * viewPos.x
+        + CameraUpVector * viewPos.y
+        - CameraLookVector * viewPos.z;
+}
+
 void main() {
     vec4 sceneColor = texture(DiffuseSampler, texCoord);
     float sceneDepth = texture(SceneDepthSampler, texCoord).r;
     vec4 interiorMask = texture(InteriorMaskSampler, texCoord);
     float dryFraction = interiorMask.r;
-    float waterVisible = interiorMask.g;
     float exteriorGate = clamp(ExteriorWaterGate, 0.0, 1.0);
 
     if (sceneDepth >= 1.0) {
-        vec3 skyFoggedColor = mix(sceneColor.rgb, FogColor, exteriorGate);
+        vec3 skyWorldPos = reconstructWorldPos(0.99999);
+        vec3 skyRayDir = normalize(skyWorldPos - CameraWorldPos);
+        float skyGate = exteriorGate * clamp((-skyRayDir.y + 0.15) / 0.4, 0.0, 1.0);
+        vec3 skyFoggedColor = mix(sceneColor.rgb, FogColor, skyGate);
         fragColor = vec4(skyFoggedColor, 1.0);
         return;
     }
