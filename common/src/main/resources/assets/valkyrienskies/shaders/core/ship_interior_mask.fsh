@@ -61,6 +61,7 @@ const int VA_MASK_TEX_WIDTH_SHIFT = 12;
 const int VA_MASK_TEX_WIDTH_MASK = (1 << VA_MASK_TEX_WIDTH_SHIFT) - 1;
 const int VA_OCC_WORDS_PER_VOXEL = 16;
 const int VA_MAX_RAY_STEPS = 64;
+const int VA_EXIT_NEIGHBOR_RADIUS = 2;
 
 vec3 reconstructWorldPos(float depth) {
     vec4 clipPos = vec4(texCoord * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
@@ -83,6 +84,16 @@ bool va_testAir(sampler2D mask, int voxelIdx, ivec3 isize) {
     int volume = isize.x * isize.y * isize.z;
     int occBase = volume * VA_OCC_WORDS_PER_VOXEL;
     int wordIndex = occBase + (voxelIdx >> 5);
+    int bit = voxelIdx & 31;
+    uint word = va_fetchWord(mask, wordIndex);
+    return ((word >> uint(bit)) & 1u) != 0u;
+}
+
+bool va_testWaterReachable(sampler2D mask, int voxelIdx, ivec3 isize) {
+    int volume = isize.x * isize.y * isize.z;
+    int occBase = volume * VA_OCC_WORDS_PER_VOXEL;
+    int airBase = occBase + ((volume + 31) >> 5);
+    int wordIndex = airBase + (voxelIdx >> 5);
     int bit = voxelIdx & 31;
     uint word = va_fetchWord(mask, wordIndex);
     return ((word >> uint(bit)) & 1u) != 0u;
@@ -152,15 +163,45 @@ float va_initialDryDistance(vec3 rayStart, vec3 rayEnd, vec4 aabbMin, vec4 aabbM
     return tExit;
 }
 
-void main() {
-    float sceneDepth = texture(SceneDepthSampler, texCoord).r;
-    if (sceneDepth >= 1.0) {
-        fragColor = vec4(0.0);
-        return;
+float va_waterReachableNearDryExit(vec3 rayStart, vec3 rayEnd, float dryDistance, vec4 aabbMin, vec4 aabbMax, vec4 gridSize, mat4 worldToShip, sampler2D mask) {
+    if (gridSize.x <= 0.0) return 0.0;
+
+    vec3 rayVec = rayEnd - rayStart;
+    float rayLength = length(rayVec);
+    if (rayLength <= 1.0e-4 || dryDistance <= 0.0) return 0.0;
+
+    vec3 rayDir = rayVec / rayLength;
+    float probeDistance = clamp(max(0.0, dryDistance - 0.1), 0.0, rayLength);
+    vec3 probePos = rayStart + rayDir * probeDistance;
+    vec3 shipPos = (worldToShip * vec4(probePos, 1.0)).xyz;
+    ivec3 isize = ivec3(gridSize.xyz);
+
+    if (shipPos.x < 0.0 || shipPos.y < 0.0 || shipPos.z < 0.0) return 0.0;
+    if (shipPos.x >= gridSize.x || shipPos.y >= gridSize.y || shipPos.z >= gridSize.z) return 0.0;
+
+    ivec3 centerVoxel = ivec3(floor(shipPos));
+    for (int dz = -VA_EXIT_NEIGHBOR_RADIUS; dz <= VA_EXIT_NEIGHBOR_RADIUS; dz++) {
+        for (int dy = -VA_EXIT_NEIGHBOR_RADIUS; dy <= VA_EXIT_NEIGHBOR_RADIUS; dy++) {
+            for (int dx = -VA_EXIT_NEIGHBOR_RADIUS; dx <= VA_EXIT_NEIGHBOR_RADIUS; dx++) {
+                ivec3 voxel = centerVoxel + ivec3(dx, dy, dz);
+                if (voxel.x < 0 || voxel.y < 0 || voxel.z < 0) continue;
+                if (voxel.x >= isize.x || voxel.y >= isize.y || voxel.z >= isize.z) continue;
+                int voxelIdx = voxel.x + isize.x * (voxel.y + isize.y * voxel.z);
+                if (va_testWaterReachable(mask, voxelIdx, isize)) {
+                    return 1.0;
+                }
+            }
+        }
     }
 
+    return 0.0;
+}
+
+void main() {
+    float sceneDepth = texture(SceneDepthSampler, texCoord).r;
     vec3 cameraWorldPos = CameraWorldPos;
-    vec3 sceneWorldPos = reconstructWorldPos(sceneDepth);
+    float depthForTrace = min(sceneDepth, 0.99999);
+    vec3 sceneWorldPos = reconstructWorldPos(depthForTrace);
     float sceneDistance = length(sceneWorldPos - cameraWorldPos);
     if (sceneDistance <= 1.0e-4) {
         fragColor = vec4(0.0);
@@ -168,6 +209,7 @@ void main() {
     }
 
     float dryDistance = 0.0;
+    float waterVisible = 0.0;
     if (ValkyrienAir_ShipCount > 0) dryDistance = max(dryDistance, va_initialDryDistance(cameraWorldPos, sceneWorldPos, ValkyrienAir_ShipAabbMin0, ValkyrienAir_ShipAabbMax0, ValkyrienAir_GridSize0, ValkyrienAir_WorldToShip0, ValkyrienAir_Mask0));
     if (ValkyrienAir_ShipCount > 1) dryDistance = max(dryDistance, va_initialDryDistance(cameraWorldPos, sceneWorldPos, ValkyrienAir_ShipAabbMin1, ValkyrienAir_ShipAabbMax1, ValkyrienAir_GridSize1, ValkyrienAir_WorldToShip1, ValkyrienAir_Mask1));
     if (ValkyrienAir_ShipCount > 2) dryDistance = max(dryDistance, va_initialDryDistance(cameraWorldPos, sceneWorldPos, ValkyrienAir_ShipAabbMin2, ValkyrienAir_ShipAabbMax2, ValkyrienAir_GridSize2, ValkyrienAir_WorldToShip2, ValkyrienAir_Mask2));
@@ -178,6 +220,16 @@ void main() {
     if (ValkyrienAir_ShipCount > 7) dryDistance = max(dryDistance, va_initialDryDistance(cameraWorldPos, sceneWorldPos, ValkyrienAir_ShipAabbMin7, ValkyrienAir_ShipAabbMax7, ValkyrienAir_GridSize7, ValkyrienAir_WorldToShip7, ValkyrienAir_Mask7));
     if (ValkyrienAir_ShipCount > 8) dryDistance = max(dryDistance, va_initialDryDistance(cameraWorldPos, sceneWorldPos, ValkyrienAir_ShipAabbMin8, ValkyrienAir_ShipAabbMax8, ValkyrienAir_GridSize8, ValkyrienAir_WorldToShip8, ValkyrienAir_Mask8));
 
+    if (ValkyrienAir_ShipCount > 0) waterVisible = max(waterVisible, va_waterReachableNearDryExit(cameraWorldPos, sceneWorldPos, dryDistance, ValkyrienAir_ShipAabbMin0, ValkyrienAir_ShipAabbMax0, ValkyrienAir_GridSize0, ValkyrienAir_WorldToShip0, ValkyrienAir_Mask0));
+    if (ValkyrienAir_ShipCount > 1) waterVisible = max(waterVisible, va_waterReachableNearDryExit(cameraWorldPos, sceneWorldPos, dryDistance, ValkyrienAir_ShipAabbMin1, ValkyrienAir_ShipAabbMax1, ValkyrienAir_GridSize1, ValkyrienAir_WorldToShip1, ValkyrienAir_Mask1));
+    if (ValkyrienAir_ShipCount > 2) waterVisible = max(waterVisible, va_waterReachableNearDryExit(cameraWorldPos, sceneWorldPos, dryDistance, ValkyrienAir_ShipAabbMin2, ValkyrienAir_ShipAabbMax2, ValkyrienAir_GridSize2, ValkyrienAir_WorldToShip2, ValkyrienAir_Mask2));
+    if (ValkyrienAir_ShipCount > 3) waterVisible = max(waterVisible, va_waterReachableNearDryExit(cameraWorldPos, sceneWorldPos, dryDistance, ValkyrienAir_ShipAabbMin3, ValkyrienAir_ShipAabbMax3, ValkyrienAir_GridSize3, ValkyrienAir_WorldToShip3, ValkyrienAir_Mask3));
+    if (ValkyrienAir_ShipCount > 4) waterVisible = max(waterVisible, va_waterReachableNearDryExit(cameraWorldPos, sceneWorldPos, dryDistance, ValkyrienAir_ShipAabbMin4, ValkyrienAir_ShipAabbMax4, ValkyrienAir_GridSize4, ValkyrienAir_WorldToShip4, ValkyrienAir_Mask4));
+    if (ValkyrienAir_ShipCount > 5) waterVisible = max(waterVisible, va_waterReachableNearDryExit(cameraWorldPos, sceneWorldPos, dryDistance, ValkyrienAir_ShipAabbMin5, ValkyrienAir_ShipAabbMax5, ValkyrienAir_GridSize5, ValkyrienAir_WorldToShip5, ValkyrienAir_Mask5));
+    if (ValkyrienAir_ShipCount > 6) waterVisible = max(waterVisible, va_waterReachableNearDryExit(cameraWorldPos, sceneWorldPos, dryDistance, ValkyrienAir_ShipAabbMin6, ValkyrienAir_ShipAabbMax6, ValkyrienAir_GridSize6, ValkyrienAir_WorldToShip6, ValkyrienAir_Mask6));
+    if (ValkyrienAir_ShipCount > 7) waterVisible = max(waterVisible, va_waterReachableNearDryExit(cameraWorldPos, sceneWorldPos, dryDistance, ValkyrienAir_ShipAabbMin7, ValkyrienAir_ShipAabbMax7, ValkyrienAir_GridSize7, ValkyrienAir_WorldToShip7, ValkyrienAir_Mask7));
+    if (ValkyrienAir_ShipCount > 8) waterVisible = max(waterVisible, va_waterReachableNearDryExit(cameraWorldPos, sceneWorldPos, dryDistance, ValkyrienAir_ShipAabbMin8, ValkyrienAir_ShipAabbMax8, ValkyrienAir_GridSize8, ValkyrienAir_WorldToShip8, ValkyrienAir_Mask8));
+
     float dryFraction = clamp(dryDistance / sceneDistance, 0.0, 1.0);
-    fragColor = vec4(dryFraction, dryFraction, dryFraction, 1.0);
+    fragColor = vec4(dryFraction, waterVisible, 0.0, 1.0);
 }

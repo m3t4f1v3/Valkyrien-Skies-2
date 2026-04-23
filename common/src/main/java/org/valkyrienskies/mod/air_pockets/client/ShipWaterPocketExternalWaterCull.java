@@ -1486,14 +1486,18 @@ public final class ShipWaterPocketExternalWaterCull {
 
         final BitSet interiorSnapshot =
             snapshot.getInterior() == null ? new BitSet() : (BitSet) snapshot.getInterior().clone();
+        final BitSet waterReachableSnapshot =
+            snapshot.getWaterReachable() == null ? new BitSet() : (BitSet) snapshot.getWaterReachable().clone();
 
         final Supplier<int[]> task = () -> {
             final int[] occWords =
                 ShipWaterPocketAsyncCull.buildOccMaskWords(shapeSnapshot, sizeX, sizeY, sizeZ, SUB);
             final int[] airWords = ShipWaterPocketAsyncCull.buildAirMaskWords(interiorSnapshot, volume);
-            final int[] out = new int[occWords.length + airWords.length];
+            final int[] waterWords = ShipWaterPocketAsyncCull.buildAirMaskWords(waterReachableSnapshot, volume);
+            final int[] out = new int[occWords.length + airWords.length + waterWords.length];
             System.arraycopy(occWords, 0, out, 0, occWords.length);
             System.arraycopy(airWords, 0, out, occWords.length, airWords.length);
+            System.arraycopy(waterWords, 0, out, occWords.length + airWords.length, waterWords.length);
             return out;
         };
 
@@ -1518,7 +1522,8 @@ public final class ShipWaterPocketExternalWaterCull {
     private static void ensureMaskTextureStorage(final ShipMasks masks, final int volume) {
         final int occWordCount = volume * OCC_WORDS_PER_VOXEL;
         final int airWordCount = (volume + 31) >> 5;
-        final int wordCount = occWordCount + airWordCount;
+        final int waterWordCount = (volume + 31) >> 5;
+        final int wordCount = occWordCount + airWordCount + waterWordCount;
         final int height = Math.max(1, (wordCount + MASK_TEX_WIDTH - 1) / MASK_TEX_WIDTH);
 
         boolean newOrResized = false;
