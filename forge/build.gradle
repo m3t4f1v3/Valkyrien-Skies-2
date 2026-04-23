@@ -191,7 +191,14 @@ dependencies {
     implementation 'com.google.code.findbugs:jsr305:3.0.2'
 
     // Kotlin runtime for forge — the Kotlin for Forge language provider.
-    implementation "thedarkcolour:kotlinforforge:${kotlin_version}"
+    // compileOnly + vsCoreModRuntime for the same reason vs-core uses that
+    // pair below: moddev legacyforge only feeds additionalRuntimeClasspath
+    // entries into each run's clientLegacyClasspath.txt. Plain implementation
+    // deps don't reach that file, so KFF would be absent at runtime and every
+    // Kotlin class (vs-core's RateLimiter, this module's own .kt files) would
+    // crash with NoClassDefFoundError: kotlin/jvm/internal/Intrinsics.
+    compileOnly "thedarkcolour:kotlinforforge:${kotlin_version}"
+    vsCoreModRuntime "thedarkcolour:kotlinforforge:${kotlin_version}"
 
     // Forge-only mod deps — cross-loader ones live in gradle/mod-dependencies.gradle.
     // (Create itself is declared there as modImplementation with transitive=false,
@@ -225,19 +232,28 @@ dependencies {
     // Modular Force Field System
     modCompileOnly('maven.modrinth:mffs:5.1.18')
 
-    // fastutil is pinned: vs-core's POMs declare it as 8.2.1, MC 1.20.1
-    // bundles 8.5.9 (adds Int2ObjectMap.computeIfAbsent(int, Int2ObjectFunction)
-    // used by the DataFixerUpper bootstrap). moddev's clientLegacyClasspath
-    // resolves the older 8.2.1 ahead of MC's 8.5.9, which crashes MC startup
-    // with NoSuchMethodError. Match :common/:fabric — exclude fastutil from
-    // vs-core so MC's version wins.
+    // vs-core deps are compileOnly here — `implementation` would drop them
+    // into moddev's `clientLegacyClasspath.txt`, i.e. the MC-BOOTSTRAP
+    // module layer. That layer doesn't see KotlinForForge's Kotlin runtime
+    // (which lives on the mod/TRANSFORM layer), so vs-core's Kotlin code
+    // (RateLimiter, ...) hits `NoClassDefFoundError: kotlin/jvm/internal/
+    // Intrinsics` at classload. Runtime is instead supplied via the
+    // vsCoreModRuntime configuration (see below), which moddev wires into
+    // each run's additionalRuntimeClasspath — that is the transform layer
+    // next to KFF.
+    //
+    // The `fastutil`/`netty-buffer` excludes match :common/:fabric: vs-core's
+    // POMs request fastutil 8.2.1, but MC 1.20.1 bundles 8.5.9
+    // (Int2ObjectMap.computeIfAbsent(int, Int2ObjectFunction) is new in
+    // 8.5.x). If vs-core's transitive wins on the boot layer, MC's
+    // DataFixerUpper bootstrap crashes with NoSuchMethodError.
     def vsCoreExcludes = {
         exclude module: 'fastutil'
         exclude module: 'netty-buffer'
     }
-    implementation("org.valkyrienskies.core:api:${rootProject.vs_core_version}", vsCoreExcludes)
-    implementation("org.valkyrienskies.core:internal:${rootProject.vs_core_version}", vsCoreExcludes)
-    implementation("org.valkyrienskies.core:util:${rootProject.vs_core_version}", vsCoreExcludes)
+    compileOnly("org.valkyrienskies.core:api:${rootProject.vs_core_version}", vsCoreExcludes)
+    compileOnly("org.valkyrienskies.core:internal:${rootProject.vs_core_version}", vsCoreExcludes)
+    compileOnly("org.valkyrienskies.core:util:${rootProject.vs_core_version}", vsCoreExcludes)
     // vs-core's runtime classes go on each dev run's additionalRuntimeClasspath
     // (wired above), which is what feeds modlauncher's transformable classpath
     // so mixins targeting vs-core classes can resolve them. In production
@@ -255,18 +271,54 @@ dependencies {
     vsCoreModRuntime("org.valkyrienskies.core:internal:${rootProject.vs_core_version}", vsCoreNoTransitive)
     vsCoreModRuntime("org.valkyrienskies.core:util:${rootProject.vs_core_version}", vsCoreNoTransitive)
     vsCoreModRuntime("org.valkyrienskies.core:impl:${rootProject.vs_core_version}", vsCoreNoTransitive)
+    // vs-core's internal module injects via javax.inject.Provider (see
+    // VsiCoreFactory). With transitive=false above, nothing else pulls
+    // javax.inject into the dev run's legacy classpath, so VSCoreProviderImpl
+    // crashes with NoClassDefFoundError: javax.inject.Provider at mod
+    // construct-time. :fabric bundles this via embeddedLibraries; we do the
+    // same below for production, and put it on vsCoreModRuntime for dev.
+    vsCoreModRuntime("javax.inject:javax.inject:1")
     // joml-primitives needs to land on the transformable classpath too —
     // ~20 common mixins reference AABBd and friends. moddev otherwise drops
     // this dep from clientLegacyClasspath.txt, and Mixin fails with
     // ClassMetadataNotFoundException: org.joml.primitives.AABBd during apply.
     vsCoreModRuntime("org.joml:joml-primitives:${rootProject.joml_primitives_version}", vsCoreNoTransitive)
+    // vs-core's internal runtime needs jackson (CBOR serialization) + a handful
+    // of other libs. `jarJar`/`embeddedLibraries` only bundle them into the
+    // production mod jar — they don't land on the dev run's legacy classpath,
+    // so runClient crashes with NoClassDefFoundError: CBORMapper / JsonSchema...
+    // The old ForgeGradle setup used `forgeRuntimeLibrary` which did both;
+    // moddev has no equivalent, so we route them through vsCoreModRuntime.
+    // All with transitive=false to avoid pulling kotlin-stdlib / kotlinx
+    // module-info'd jars that JPMS-conflict with KotlinForForge.
+    def jacksonVersion = '2.14.0'
+    vsCoreModRuntime("com.fasterxml.jackson.core:jackson-annotations:${jacksonVersion}", vsCoreNoTransitive)
+    vsCoreModRuntime("com.fasterxml.jackson.core:jackson-core:${jacksonVersion}", vsCoreNoTransitive)
+    vsCoreModRuntime("com.fasterxml.jackson.core:jackson-databind:${jacksonVersion}", vsCoreNoTransitive)
+    vsCoreModRuntime("com.fasterxml.jackson.module:jackson-module-kotlin:${jacksonVersion}-rubyfork", vsCoreNoTransitive)
+    vsCoreModRuntime("com.fasterxml.jackson.module:jackson-module-parameter-names:${jacksonVersion}", vsCoreNoTransitive)
+    vsCoreModRuntime("com.fasterxml.jackson.dataformat:jackson-dataformat-cbor:${jacksonVersion}", vsCoreNoTransitive)
+    // Not jackson-dataformat-yaml: its module-info declares `requires
+    // org.yaml.snakeyaml`, which we don't carry, so JPMS resolution fails at
+    // bootstraplauncher time. The old forgeRuntimeLibrary config also excluded
+    // this one — it's bundled in production via embeddedLibraries but not
+    // needed on the dev classpath.
+    vsCoreModRuntime("com.github.Rubydesic:jackson-kotlin-dsl:1.2.0", vsCoreNoTransitive)
+    vsCoreModRuntime("com.networknt:json-schema-validator:1.0.71", vsCoreNoTransitive)
+    vsCoreModRuntime("com.ethlo.time:itu:1.7.0", vsCoreNoTransitive)
+    vsCoreModRuntime("com.github.victools:jsonschema-module-jackson:4.25.0", vsCoreNoTransitive)
+    vsCoreModRuntime("com.github.victools:jsonschema-generator:4.25.0", vsCoreNoTransitive)
+    vsCoreModRuntime("com.fasterxml:classmate:1.5.1", vsCoreNoTransitive)
+    vsCoreModRuntime("com.flipkart.zjsonpatch:zjsonpatch:0.4.11", vsCoreNoTransitive)
+    vsCoreModRuntime("org.apache.commons:commons-collections4:4.3", vsCoreNoTransitive)
+    vsCoreModRuntime("org.apache.commons:commons-math3:3.6.1", vsCoreNoTransitive)
+    vsCoreModRuntime("com.google.dagger:dagger:2.43.2", vsCoreNoTransitive)
 
     embeddedLibraries("org.valkyrienskies.core:api:${rootProject.vs_core_version}")
     embeddedLibraries("org.valkyrienskies.core:internal:${rootProject.vs_core_version}")
     embeddedLibraries("org.valkyrienskies.core:util:${rootProject.vs_core_version}")
     embeddedLibraries("org.valkyrienskies.core:impl:${rootProject.vs_core_version}")
-    // embeddedLibraries("javax.inject:javax.inject:1")
-    def jacksonVersion = '2.14.0'
+    embeddedLibraries("javax.inject:javax.inject:1")
     jarJar("com.fasterxml.jackson.core:jackson-annotations:${jacksonVersion}")
     jarJar("com.fasterxml.jackson.core:jackson-core:${jacksonVersion}")
     jarJar("com.fasterxml.jackson.core:jackson-databind:${jacksonVersion}")

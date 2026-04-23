@@ -397,14 +397,17 @@ ext.generateCommonForgeRefmap = { Map args ->
                 // fields, so the lookup above misses. Fabric Yarn assigns
                 // `field_NNNNN` — match that shape, confirm the field type
                 // equals the outer class of the @Mixin target, then map to
-                // the javac-convention `this$0`.
+                // the javac-convention `this$0`. Emit the full form with
+                // class prefix so Mixin's field resolver treats it as a
+                // direct descriptor lookup rather than a name search (which
+                // skips synthetic fields).
                 if (!resolved && f2.name.startsWith('field_')) {
                     for (def tc in targetClasses) {
                         def dollarIdx = tc.lastIndexOf('$')
                         if (dollarIdx < 0) continue
                         def outerInternal = tc.substring(0, dollarIdx)
                         if (f2.desc == "L${outerInternal};") {
-                            entries[f2.name] = "this\$0:${f2.desc}"
+                            entries[f2.name] = "L${tc};this\$0:${f2.desc}"
                             resolved = true
                             break
                         }
@@ -452,12 +455,17 @@ ext.generateCommonForgeRefmap = { Map args ->
     // Prune empty class buckets
     translatedMappings = translatedMappings.findAll { !it.value.isEmpty() }
 
-    // Top-level `mappings` is kept empty so Mixin falls back to the literal
-    // annotation values in dev (moddev legacyforge runs with mojmap at dev),
-    // where `getSingleplayerServer` matches the dev-time MC directly. Prod
-    // (SRG runtime) reads `data.searge` and gets the translated SRG names.
+    // Populate BOTH top-level `mappings` and `data.searge` with the same
+    // SRG-flavored entries. In dev, moddev launches with
+    // `-Dmixin.env.remapRefMap=true` plus a `refMapRemappingFile` pointing at
+    // intermediateToNamed.srg — Mixin reads the refmap and remaps SRG values
+    // back to mojmap at runtime. That remapping consults the top-level
+    // `mappings` (not data.searge) in dev, so an empty top-level would
+    // leave Mixin with nothing to translate and fall back to the raw
+    // annotation literals, which for fabric-intermediary names (field_NNN,
+    // method_NNN) don't match either mojmap or SRG runtime members.
     def newRefmap = [
-        mappings: [:],
+        mappings: translatedMappings,
         data    : [searge: translatedMappings]
     ]
 
