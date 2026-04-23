@@ -1,20 +1,32 @@
 package org.valkyrienskies.mod.air_pockets.client
 
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.mockkStatic
+import io.mockk.unmockkStatic
 import java.util.BitSet
 import kotlin.math.abs
 import net.minecraft.SharedConstants
+import net.minecraft.client.multiplayer.ClientLevel
 import net.minecraft.server.Bootstrap
+import net.minecraft.core.BlockPos
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
+import net.minecraft.world.level.chunk.ChunkAccess
+import net.minecraft.world.level.chunk.ChunkStatus
 import net.minecraft.world.level.material.Fluids
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
+import org.valkyrienskies.mod.common.isBlockInShipyard
+import org.valkyrienskies.mod.mixinducks.feature.air_pockets.ship_water_pockets.LevelChunkDuck
+import org.valkyrienskies.mod.util.FluidStateManager
 
 class ShipWaterPocketLiquidOverlayTest {
     companion object {
@@ -110,9 +122,8 @@ class ShipWaterPocketLiquidOverlayTest {
         val open = bitSetOf(0, 1)
         val interior = bitSetOf(1)
         val overlaySolids = bitSetOf(2)
-        val waterReachable = bitSetOf(2)
 
-        val boundary = ShipWaterPocketLiquidOverlay.buildOverlayBoundaryMask(open, interior, waterReachable, overlaySolids, null, 3, 1, 1)
+        val boundary = ShipWaterPocketLiquidOverlay.buildOverlayBoundaryMask(open, interior, overlaySolids, null, 3, 1, 1)
 
         assertTrue(boundary.get(0))
         assertFalse(boundary.get(1))
@@ -124,13 +135,11 @@ class ShipWaterPocketLiquidOverlayTest {
         val open = bitSetOf(0, 1)
         val interior = BitSet()
         val overlaySolids = bitSetOf(1)
-        val waterReachable = bitSetOf(1)
         val fullCellOverlaySolids = bitSetOf(1)
 
         val boundary = ShipWaterPocketLiquidOverlay.buildOverlayBoundaryMask(
             open,
             interior,
-            waterReachable,
             overlaySolids,
             fullCellOverlaySolids,
             2,
@@ -203,6 +212,52 @@ class ShipWaterPocketLiquidOverlayTest {
             Fluids.FLOWING_WATER.defaultFluidState().ownHeight,
             ShipWaterPocketLiquidOverlay.rawExteriorFluidHeight(Fluids.FLOWING_WATER.defaultFluidState())
         )
+    }
+
+    @Test
+    fun `raw exterior fluid scan stops before shipyard cells`() {
+        val level = mockk<ClientLevel>()
+        val chunk = mockk<ChunkAccess>(moreInterfaces = arrayOf(LevelChunkDuck::class))
+        val fluidData = FluidStateManager.ChunkFluidData()
+        val cache = FluidStateManager.QueryCache()
+        val samplePos = BlockPos(3, 10, 5)
+        val scanPos = BlockPos.MutableBlockPos()
+
+        fluidData.setFluidState(samplePos, Fluids.WATER.defaultFluidState())
+        fluidData.setFluidState(BlockPos(3, 11, 5), Fluids.WATER.defaultFluidState())
+        fluidData.setFluidState(BlockPos(3, 12, 5), Fluids.WATER.defaultFluidState())
+
+        every { level.minBuildHeight } returns -64
+        every { level.maxBuildHeight } returns 320
+        every { level.getChunk(0, 0, ChunkStatus.FULL, false) } returns chunk
+        every { (chunk as LevelChunkDuck).`vs$getFluidData`() } returns fluidData
+        every { chunk.getFluidState(any()) } answers {
+            val pos = firstArg<BlockPos>()
+            if (pos.y in 10..12) Fluids.WATER.defaultFluidState() else Fluids.EMPTY.defaultFluidState()
+        }
+
+        mockkStatic("org.valkyrienskies.mod.common.VSGameUtilsKt")
+        try {
+            every { level.isBlockInShipyard(any<BlockPos>()) } answers {
+                secondArg<BlockPos>().y >= 12
+            }
+
+            val sampleData = FluidStateManager.getFluidData(level, samplePos, cache)
+            assertNotNull(sampleData)
+
+            assertEquals(
+                11,
+                ShipWaterPocketLiquidOverlay.scanRawExteriorFluidColumnTopY(
+                    level,
+                    samplePos,
+                    sampleData!!.sourceFluid(),
+                    cache,
+                    scanPos
+                )
+            )
+        } finally {
+            unmockkStatic("org.valkyrienskies.mod.common.VSGameUtilsKt")
+        }
     }
 
     @Test

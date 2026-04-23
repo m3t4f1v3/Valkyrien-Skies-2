@@ -65,7 +65,7 @@ try {
     println "VS-CORE DEBUG: Candidate paths: ${candidatePaths}"
     println "VS-CORE DEBUG: Resolved path: ${core?.absolutePath ?: '<not found>'}"
     println "VS-CORE DEBUG: Exists? ${core?.isDirectory() ?: false}"
-    if (core?.isDirectory()) {
+    if (false) {//(core?.isDirectory()) {
         includeBuild(core) {
             dependencySubstitution {
                 // Tell Gradle: "Whenever someone asks for 'org.valkyrienskies.core:api',

@@ -769,13 +769,21 @@ public final class ShipWaterPocketLiquidOverlay {
         }
 
         fluidPos.set(blockX, blockY, blockZ);
-        final FluidStateManager.FluidData sampleData = findExteriorFluidData(level, fluidPos, fluidQueryCache);
-        if (sampleData == null) {
-            cacheFluidSurfacePoint(pointKey, chunkRevision, FLUID_SURFACE_MISS);
-            return null;
+        FluidState sampleState = getRawExteriorFluidState(level, fluidPos, fluidQueryCache);
+        if (sampleState == null) {
+            fluidPos.move(0, -1, 0);
+            sampleState = getRawExteriorFluidState(level, fluidPos, fluidQueryCache);
+            if (sampleState == null) {
+                fluidPos.move(0, 2, 0);
+                sampleState = getRawExteriorFluidState(level, fluidPos, fluidQueryCache);
+                if (sampleState == null) {
+                    cacheFluidSurfacePoint(pointKey, chunkRevision, FLUID_SURFACE_MISS);
+                    return null;
+                }
+            }
         }
 
-        final long key = BlockPos.asLong(fluidPos.getX(), sampleData.topY(), fluidPos.getZ());
+        final long key = BlockPos.asLong(fluidPos.getX(), fluidPos.getY(), fluidPos.getZ());
         final ChunkTrackedFluidSurface cached = FLUID_SURFACE_CACHE.get(key);
         if (cached != null) {
             if (cached.chunkRevision == chunkRevision) {
@@ -785,9 +793,15 @@ public final class ShipWaterPocketLiquidOverlay {
             FLUID_SURFACE_CACHE.remove(key);
         }
 
-        final Fluid canonicalFluid = sampleData.sourceFluid();
-        scanPos.set(fluidPos.getX(), sampleData.topY(), fluidPos.getZ());
-        final FluidState topFluid = sampleData.surface();
+        final Fluid canonicalFluid = canonicalSource(sampleState.getType());
+        final int topY = scanRawExteriorFluidColumnTopY(level, fluidPos, canonicalFluid, fluidQueryCache, scanPos);
+        scanPos.set(fluidPos.getX(), topY, fluidPos.getZ());
+
+        final FluidState topFluid = getRawExteriorFluidState(level, scanPos, fluidQueryCache);
+        if (topFluid == null) {
+            cacheFluidSurfacePoint(pointKey, chunkRevision, FLUID_SURFACE_MISS);
+            return null;
+        }
 
         final FluidSurfaceSample sample = new FluidSurfaceSample(
             canonicalFluid,
@@ -810,27 +824,26 @@ public final class ShipWaterPocketLiquidOverlay {
         FLUID_SURFACE_POINT_CACHE.put(pointKey, new ChunkTrackedFluidSurface(chunkRevision, sample));
     }
 
-    private static @Nullable FluidStateManager.FluidData findExteriorFluidData(
+    static int scanRawExteriorFluidColumnTopY(
         final net.minecraft.client.multiplayer.ClientLevel level,
-        final BlockPos.MutableBlockPos pos,
-        final FluidStateManager.QueryCache fluidQueryCache
+        final BlockPos pos,
+        final Fluid canonicalFluid,
+        final FluidStateManager.QueryCache fluidQueryCache,
+        final BlockPos.MutableBlockPos scanPos
     ) {
-        final FluidStateManager.FluidData sameY = getExteriorFluidData(level, pos, fluidQueryCache);
-        if (sameY != null) {
-            return sameY;
+        scanPos.set(pos);
+        final int maxYExclusive = level.getMaxBuildHeight();
+        while (scanPos.getY() < maxYExclusive) {
+            final FluidState current = getRawExteriorFluidState(level, scanPos, fluidQueryCache);
+            if (current == null || canonicalSource(current.getType()) != canonicalFluid) {
+                break;
+            }
+            scanPos.move(0, 1, 0);
         }
-
-        pos.move(0, -1, 0);
-        final FluidStateManager.FluidData below = getExteriorFluidData(level, pos, fluidQueryCache);
-        if (below != null) {
-            return below;
-        }
-
-        pos.move(0, 2, 0);
-        return getExteriorFluidData(level, pos, fluidQueryCache);
+        return scanPos.getY() - 1;
     }
 
-    private static @Nullable FluidStateManager.FluidData getExteriorFluidData(
+    private static @Nullable FluidState getRawExteriorFluidState(
         final net.minecraft.client.multiplayer.ClientLevel level,
         final BlockPos pos,
         final FluidStateManager.QueryCache fluidQueryCache
@@ -838,7 +851,8 @@ public final class ShipWaterPocketLiquidOverlay {
         if (VSGameUtilsKt.isBlockInShipyard(level, pos)) {
             return null;
         }
-        return FluidStateManager.getFluidData(level, pos, fluidQueryCache);
+        final FluidState rawFluid = FluidStateManager.getFluidState(level, pos, fluidQueryCache);
+        return shouldUseExteriorFluidSample(false, rawFluid.isEmpty()) ? rawFluid : null;
     }
 
     private static void ensureExteriorFluidCacheLevel(final net.minecraft.client.multiplayer.ClientLevel level) {

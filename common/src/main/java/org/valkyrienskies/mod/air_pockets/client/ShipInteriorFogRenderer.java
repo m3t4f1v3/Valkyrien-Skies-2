@@ -16,8 +16,6 @@ import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.material.FogType;
-import net.minecraft.world.level.material.FluidState;
-import net.minecraft.world.level.material.Fluids;
 import org.joml.Matrix4f;
 import org.lwjgl.opengl.GL11;
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod;
@@ -48,19 +46,14 @@ public final class ShipInteriorFogRenderer {
         final Minecraft mc = Minecraft.getInstance();
         if (mc.level == null || camera == null) return;
         if (camera.getFluidInCamera() != FogType.NONE) return;
-        if (!ShipWaterPocketManager.isWorldPosInShipAirPocket(
-            mc.level, camera.getPosition().x, camera.getPosition().y, camera.getPosition().z)) {
-            return;
-        }
-
-        final FluidState exteriorFluid = ShipWaterPocketManager.overrideWaterFluidState(
-            mc.level,
-            camera.getPosition().x,
-            camera.getPosition().y,
-            camera.getPosition().z,
-            Fluids.EMPTY.defaultFluidState()
-        );
-        if (exteriorFluid.isEmpty() || !exteriorFluid.is(Fluids.WATER)) {
+        if (!shouldRenderInteriorWaterFog(
+            ShipWaterPocketManager.isWorldPosInShipAirPocket(
+                mc.level, camera.getPosition().x, camera.getPosition().y, camera.getPosition().z
+            ),
+            ShipWaterPocketManager.isWorldPosInShipWorldFluidSuppressionZone(
+                mc.level, camera.getPosition().x, camera.getPosition().y, camera.getPosition().z
+            )
+        )) {
             return;
         }
 
@@ -235,6 +228,10 @@ public final class ShipInteriorFogRenderer {
         bufferBuilder.vertex(1.0, 1.0, 0.0).endVertex();
         bufferBuilder.vertex(-1.0, 1.0, 0.0).endVertex();
         BufferUploader.drawWithShader(bufferBuilder.end());
+    }
+
+    static boolean shouldRenderInteriorWaterFog(final boolean inShipAirPocket, final boolean inWorldFluidSuppressionZone) {
+        return inShipAirPocket && inWorldFluidSuppressionZone;
     }
 
     private static void setMat4(final ShaderInstance shader, final String uniformName, final Matrix4f value) {
