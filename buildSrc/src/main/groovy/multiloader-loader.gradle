@@ -2,16 +2,13 @@ plugins {
     id 'multiloader-common'
 }
 
-def commonProject = project(':common')
-def commonKotlinClasses = commonProject.layout.buildDirectory.dir('classes/kotlin/main')
-
 configurations {
     embeddedLibraries {
         canBeResolved = true
         canBeConsumed = false
         transitive = false
     }
-    commonJava {
+    commonNamed {
         canBeResolved = true
         canBeConsumed = false
     }
@@ -23,15 +20,19 @@ configurations {
 
 dependencies {
     compileOnly 'org.jspecify:jspecify:1.0.0'
-    commonJava project(path: ':common', configuration: 'commonJava')
+    commonNamed project(path: ':common', configuration: 'namedElements')
     commonResources project(path: ':common', configuration: 'commonResources')
-}
-
-tasks.named('compileJava', JavaCompile) {
-    dependsOn(configurations.commonJava)
-    dependsOn(commonProject.tasks.named('compileKotlin'))
-    classpath += commonProject.files(commonKotlinClasses)
-    source(configurations.commonJava)
+    compileOnly(project(path: ':common', configuration: 'namedElements')) {
+        transitive = false
+    }
+    runtimeOnly(project(path: ':common', configuration: 'namedElements')) {
+        transitive = false
+    }
+    // :common is intentionally NOT embedded here. Loader projects merge
+    // common's classes into their main output via sourceSets.main.output.dir
+    // and common's resources via processResources { from(commonResources) }.
+    // Re-embedding the namedElements jar would duplicate every class +
+    // resource and trip reobfJar's strict duplicate check.
 }
 
 processResources {
@@ -39,24 +40,14 @@ processResources {
     from(configurations.commonResources)
 }
 
-tasks.named('javadoc', Javadoc).configure {
-    dependsOn(configurations.commonJava)
-    dependsOn(commonProject.tasks.named('compileKotlin'))
-    classpath += commonProject.files(commonKotlinClasses)
-    source(configurations.commonJava)
-}
-
 tasks.named('sourcesJar', Jar) {
-    dependsOn(configurations.commonJava)
-    from(configurations.commonJava)
     dependsOn(configurations.commonResources)
     from(configurations.commonResources)
 }
 
 tasks.named('jar', Jar) {
-    dependsOn(commonProject.tasks.named('compileKotlin'))
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-    from(commonKotlinClasses)
+    exclude 'LICENSE_*'
     from({
         configurations.embeddedLibraries.collect { zipTree(it) }
     })

@@ -20,7 +20,7 @@ dependencies {
     modImplementation "net.fabricmc:fabric-language-kotlin:${kotlin_fabric_version}"
 
     // Needed for Kotlin compilation in :fabric; runtime is provided via compiled outputs.
-    compileOnly(project(':common')) {
+    compileOnly(project(path: ':common', configuration: 'namedElements')) {
         transitive = false
     }
 
@@ -83,6 +83,26 @@ tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile).configureEach
     }
 }
 
+// Fabric prod jar must embed :common's class files and its AP-generated
+// refmap. Source: the remapped common jar (produced by :common:remapJar),
+// NOT the raw build/classes dir — remapJar is where loom rewrites @Shadow
+// method names like `register` to their intermediary form (`method_10017`).
+// Fabric's own remapJar would fail to do this rewrite because the common
+// refmap (keyed per-mixin-class) is opaque to it at fabric-remap time.
+def commonClassesFabric = layout.buildDirectory.dir('common-classes-for-fabric')
+def commonRemappedJar = project(':common').tasks.named('remapJar').flatMap { it.archiveFile }
+tasks.register('syncCommonClassesForFabric', Sync) {
+    from({ zipTree(commonRemappedJar.get().asFile) })
+    into(commonClassesFabric)
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    dependsOn(project(':common').tasks.named('remapJar'))
+}
+
+sourceSets.main.output.dir(
+    commonClassesFabric,
+    builtBy: tasks.named('syncCommonClassesForFabric')
+)
+
 tasks.named('runClient').configure {
     dependsOn(project(':common').tasks.named('compileKotlin'))
 }
@@ -94,7 +114,9 @@ tasks.named('runServer').configure {
 loom {
     accessWidenerPath.set(project(':common').file("src/main/resources/${mod_id}-common.accesswidener"))
     mixin {
-        defaultRefmapName.set("${mod_id}.refmap.json")
+        // Must NOT collide with :common's refmap filename — loom's remapJar
+        // merge would otherwise drop one, leaving mixin annotations unremapped.
+        defaultRefmapName.set("${mod_id}-fabric-refmap.json")
     }
     runs {
         client {

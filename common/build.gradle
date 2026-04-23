@@ -40,7 +40,10 @@ dependencies {
 loom {
     accessWidenerPath = file('src/main/resources/valkyrienskies-common.accesswidener')
     mixin {
-        defaultRefmapName.set("${mod_id}.refmap.json")
+        // Must NOT collide with :fabric's refmap filename — loom's remapJar
+        // merge would otherwise drop one of them, leaving common-mixin
+        // @Shadow method names unremapped in the fabric prod jar.
+        defaultRefmapName.set("${mod_id}-common-refmap.json")
     }
 }
 

@@ -53,7 +53,7 @@ ext.modDep = { Map spec ->
 
 // Fabric ships sodium; forge runs the embeddium fork (same package surface).
 modDep common: { "maven.modrinth:sodium:${sodium_version}" },
-       fabric: { "maven.modrinth:sodium:${sodium_version}" },
+       fabric: { [coord: "maven.modrinth:sodium:${sodium_version}", scope: ['modCompileOnly', 'modRuntimeOnly']] },
        forge:  { "maven.modrinth:embeddium:${embeddium_version}" }
 
 // ========================================================================
@@ -65,7 +65,7 @@ modDep common: { [coord: "com.simibubi.create:create-fabric:${create_fabric_vers
        fabric: { [coord: "com.simibubi.create:create-fabric:${create_fabric_version}",
                   exclude: [[group: 'com.github.AlphaMode', module: 'fakeconfigtoml']]] },
        forge:  { [coord: "com.simibubi.create:create-${minecraft_version}:${create_version}:slim",
-                  scope: 'modImplementation',
+                  scope: 'modCompileOnly',
                   transitive: false] }
 
 modDep common: { "maven.modrinth:create-utilities:${create_utilities_version}" },
@@ -188,3 +188,7 @@ modDep common: { "com.github.iPortalTeam.ImmersivePortalsMod:q_misc_util:${immpt
        fabric: { "com.github.iPortalTeam.ImmersivePortalsMod:q_misc_util:${immptl_version}" }
 modDep common: { "com.github.iPortalTeam.ImmersivePortalsMod:build:${immptl_version}" },
        fabric: { "com.github.iPortalTeam.ImmersivePortalsMod:build:${immptl_version}" }
+
+modDep common: { "com.jamieswhiteshirt:reach-entity-attributes:${reach_entity_attributes_version}" },
+       fabric: { "com.jamieswhiteshirt:reach-entity-attributes:${reach_entity_attributes_version}" },
+       forge:  { "com.jamieswhiteshirt:reach-entity-attributes:${reach_entity_attributes_version}" }
