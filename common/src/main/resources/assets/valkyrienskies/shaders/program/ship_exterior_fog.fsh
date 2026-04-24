@@ -5,83 +5,69 @@ uniform sampler2D SceneDepthSampler;
 uniform sampler2D InteriorMaskSampler;
 uniform vec3 FogColor;
 uniform vec2 FogParams;
-uniform float ExteriorWaterGate;
-uniform vec3 ExteriorWaterGateRow0;
-uniform vec3 ExteriorWaterGateRow1;
-uniform vec3 ExteriorWaterGateRow2;
 uniform float SkyFogStrength;
+uniform float WaterLevel;
 uniform mat4 InverseProjMat;
+uniform mat4 InverseViewMat;
 uniform vec3 CameraWorldPos;
-uniform vec3 CameraLookVector;
-uniform vec3 CameraUpVector;
-uniform vec3 CameraLeftVector;
 
 in vec2 texCoord;
 out vec4 fragColor;
 
-vec3 reconstructViewPos(float depth) {
+vec3 reconstructWorldPos(float depth) {
     vec4 clipPos = vec4(texCoord * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
     vec4 viewPos = InverseProjMat * clipPos;
-    return viewPos.xyz / viewPos.w;
+    viewPos /= viewPos.w;
+    // modelViewMatrix at this stage is rotation + bob-view + damage-tilt, with no world translation
+    // (world geometry is rendered camera-relative). Inverting gets us a camera-relative world pos
+    // that correctly undoes the bob / tilt offset; add CameraWorldPos to land in actual world space.
+    vec3 cameraRelative = (InverseViewMat * vec4(viewPos.xyz, 1.0)).xyz;
+    return CameraWorldPos + cameraRelative;
 }
 
-vec3 reconstructWorldPos(float depth) {
-    vec3 viewPos = reconstructViewPos(depth);
-    return CameraWorldPos
-        - CameraLeftVector * viewPos.x
-        + CameraUpVector * viewPos.y
-        - CameraLookVector * viewPos.z;
-}
-
-float sampleExteriorGate(vec2 uv) {
-    vec2 clampedUv = clamp(uv, 0.0, 1.0);
-    float scaledX = clampedUv.x * 2.0;
-    float scaledY = (1.0 - clampedUv.y) * 2.0;
-
-    float fracX = fract(scaledX);
-    float fracY = fract(scaledY);
-    int cellX = int(floor(scaledX));
-    int cellY = int(floor(scaledY));
-    cellX = clamp(cellX, 0, 1);
-    cellY = clamp(cellY, 0, 1);
-
-    vec3 rowA = cellY == 0 ? ExteriorWaterGateRow0 : ExteriorWaterGateRow1;
-    vec3 rowB = cellY == 0 ? ExteriorWaterGateRow1 : ExteriorWaterGateRow2;
-
-    float topA = rowA[cellX];
-    float topB = rowA[cellX + 1];
-    float bottomA = rowB[cellX];
-    float bottomB = rowB[cellX + 1];
-    float top = mix(topA, topB, fracX);
-    float bottom = mix(bottomA, bottomB, fracX);
-    return clamp(mix(top, bottom, fracY), 0.0, 1.0);
+// Length of segment AB that lies below y = WaterLevel.
+float submergedLength(vec3 a, vec3 b) {
+    bool aUnder = a.y < WaterLevel;
+    bool bUnder = b.y < WaterLevel;
+    if (!aUnder && !bUnder) return 0.0;
+    float fullLen = length(b - a);
+    if (aUnder && bUnder) return fullLen;
+    float t = clamp((WaterLevel - a.y) / (b.y - a.y), 0.0, 1.0);
+    return aUnder ? t * fullLen : (1.0 - t) * fullLen;
 }
 
 void main() {
     vec4 sceneColor = texture(DiffuseSampler, texCoord);
     float sceneDepth = texture(SceneDepthSampler, texCoord).r;
-    vec4 interiorMask = texture(InteriorMaskSampler, texCoord);
-    float dryFraction = interiorMask.r;
-    float exteriorGate = sampleExteriorGate(texCoord);
-    float fallbackExteriorGate = clamp(ExteriorWaterGate, 0.0, 1.0);
+    // Binary signal from the interior-mask pass: 1.0 if the scene fragment's voxel is inside some
+    // ship's air pocket (direct mask lookup at the scene world position), 0.0 otherwise.
+    float sceneInPocket = texture(InteriorMaskSampler, texCoord).r;
 
     if (sceneDepth >= 1.0) {
-        vec3 skyWorldPos = reconstructWorldPos(0.99999);
-        vec3 skyRayDir = normalize(skyWorldPos - CameraWorldPos);
-        float downwardBias = clamp((-skyRayDir.y + 0.15) / 0.5, 0.0, 1.0);
-        float skyGate = clamp(max(exteriorGate, fallbackExteriorGate * 0.35) * mix(0.95, 1.0, downwardBias) * SkyFogStrength, 0.0, 1.0);
-        vec3 skyFoggedColor = mix(sceneColor.rgb, FogColor, skyGate);
-        fragColor = vec4(skyFoggedColor, 1.0);
+        // Sky: same fog integration as regular pixels — fog amount is driven by the submerged length
+        // of the view ray, not a binary "camera underwater" flag. That way dipping just under the
+        // surface doesn't slam the entire sky to the fog color; only the actual water between the
+        // camera and the surface contributes.
+        vec3 skyPoint = reconstructWorldPos(0.99999);
+        float wetDistance = submergedLength(CameraWorldPos, skyPoint);
+        float fogDistance = max(0.0, wetDistance - FogParams.y);
+        float skyFog = (1.0 - exp(-FogParams.x * fogDistance)) * clamp(SkyFogStrength, 0.0, 1.0);
+        fragColor = vec4(mix(sceneColor.rgb, FogColor, skyFog), 1.0);
         return;
     }
 
-    vec3 viewPos = reconstructViewPos(sceneDepth);
-    float sceneDistance = length(viewPos);
-    float dryDistance = clamp(dryFraction, 0.0, 1.0) * sceneDistance;
-    float fogDistance = max(0.0, sceneDistance - dryDistance - FogParams.y);
+    // Scene fragment lives inside a ship's air pocket — don't touch the pixel.
+    if (sceneInPocket > 0.5) {
+        fragColor = sceneColor;
+        return;
+    }
+
+    // Fog amount comes from the length of the camera→scene ray that lies below the waterline.
+    vec3 sceneWorldPos = reconstructWorldPos(sceneDepth);
+    float wetDistance = submergedLength(CameraWorldPos, sceneWorldPos);
+    float fogDistance = max(0.0, wetDistance - FogParams.y);
     float fogAmount = 1.0 - exp(-FogParams.x * fogDistance);
-    fogAmount *= max(0.0, 1.0 - clamp(dryFraction, 0.0, 1.0));
-    fogAmount *= exteriorGate;
+
     vec3 foggedColor = mix(sceneColor.rgb, FogColor, fogAmount);
     fragColor = vec4(foggedColor, 1.0);
 }
