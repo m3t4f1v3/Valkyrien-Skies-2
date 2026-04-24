@@ -19,9 +19,11 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
+import org.joml.Vector4f;
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod;
 import org.valkyrienskies.mod.common.air_pockets.ShipWaterPocketManager;
 import org.valkyrienskies.mod.common.config.VSGameConfig;
+import org.valkyrienskies.mod.util.FluidStateManager;
 
 public final class ShipInteriorFogRenderer {
     private static final Logger LOGGER = LogManager.getLogger("ValkyrienAir ShipInteriorFog");
@@ -44,6 +46,13 @@ public final class ShipInteriorFogRenderer {
     private static final long INTERIOR_FOG_GRACE_PERIOD_MS = 250L;
     private static long lastExteriorWaterGateUpdateAtNs = 0L;
     private static float smoothedExteriorWaterGate = 0.0f;
+    private static final int PROBE_GRID_SIZE = 3;
+    private static final float[] smoothedExteriorWaterGateGrid = new float[PROBE_GRID_SIZE * PROBE_GRID_SIZE];
+    private static final String[] EXTERIOR_WATER_GATE_ROW_UNIFORMS = {
+        "ExteriorWaterGateRow0",
+        "ExteriorWaterGateRow1",
+        "ExteriorWaterGateRow2"
+    };
 
     private static final class ExteriorFluidSample {
         private final BlockPos pos;
@@ -54,6 +63,16 @@ public final class ShipInteriorFogRenderer {
             this.pos = pos;
             this.fluidState = fluidState;
             this.fluid = fluid;
+        }
+    }
+
+    private static final class ProbeExteriorResult {
+        private final float gate;
+        private final ExteriorFluidSample fluidSample;
+
+        private ProbeExteriorResult(final float gate, final ExteriorFluidSample fluidSample) {
+            this.gate = gate;
+            this.fluidSample = fluidSample;
         }
     }
 
@@ -259,7 +278,7 @@ public final class ShipInteriorFogRenderer {
         fogTarget.clear(Minecraft.ON_OSX);
 
         final EffectInstance effect = fogPass.getEffect();
-        final ExteriorFluidSample fluidSample = findExteriorFluidSample(camera);
+        final ExteriorFluidSample fluidSample = findExteriorFluidSample(camera, projectionMatrix);
         final int fogColor = sampleExteriorFogColor(camera);
         setVec3(effect, "FogColor",
             ((fogColor >> 16) & 0xFF) / 255.0f,
@@ -273,7 +292,11 @@ public final class ShipInteriorFogRenderer {
         final float fogStart = 2.0f;
         setVec2(effect, "FogParams", fogDensity, fogStart);
         setFloat(effect, "SkyFogStrength", fogStrengthScale);
-        setFloat(effect, "ExteriorWaterGate", getSmoothedExteriorWaterGate(camera));
+        final float[] gateGrid = getSmoothedExteriorWaterGateGrid(camera, projectionMatrix);
+        setVec3(effect, EXTERIOR_WATER_GATE_ROW_UNIFORMS[0], gateGrid[0], gateGrid[1], gateGrid[2]);
+        setVec3(effect, EXTERIOR_WATER_GATE_ROW_UNIFORMS[1], gateGrid[3], gateGrid[4], gateGrid[5]);
+        setVec3(effect, EXTERIOR_WATER_GATE_ROW_UNIFORMS[2], gateGrid[6], gateGrid[7], gateGrid[8]);
+        setFloat(effect, "ExteriorWaterGate", smoothedExteriorWaterGate);
         setMat4(effect, "InverseProjMat", new Matrix4f(projectionMatrix).invert());
         setVec3(effect, "CameraWorldPos",
             (float) camera.getPosition().x,
@@ -299,7 +322,7 @@ public final class ShipInteriorFogRenderer {
             return 0x3F76E4;
         }
 
-        final ExteriorFluidSample fluidSample = findExteriorFluidSample(camera);
+        final ExteriorFluidSample fluidSample = findExteriorFluidSample(camera, null);
         if (fluidSample == null) {
             TMP_BLOCK_POS.set(camera.getBlockPosition());
             return ShipWaterPocketFluidVisualHelper.getFluidFogColor(
@@ -379,7 +402,7 @@ public final class ShipInteriorFogRenderer {
         return 1.0f;
     }
 
-    private static float getSmoothedExteriorWaterGate(final Camera camera) {
+    private static float[] getSmoothedExteriorWaterGateGrid(final Camera camera, final Matrix4f projectionMatrix) {
         final long nowNs = System.nanoTime();
         final float deltaSeconds;
         if (lastExteriorWaterGateUpdateAtNs == 0L) {
@@ -389,81 +412,103 @@ public final class ShipInteriorFogRenderer {
         }
         lastExteriorWaterGateUpdateAtNs = nowNs;
 
-        final float targetGate = computeExteriorWaterGate(camera);
+        final float[] targetGrid = computeExteriorWaterGateGrid(camera, projectionMatrix);
         final float riseRatePerSecond = 8.0f;
         final float fallRatePerSecond = 1.25f;
-        final float maxDelta = (targetGate > smoothedExteriorWaterGate ? riseRatePerSecond : fallRatePerSecond) * deltaSeconds;
-        smoothedExteriorWaterGate = Mth.approach(smoothedExteriorWaterGate, targetGate, maxDelta);
-        return smoothedExteriorWaterGate;
-    }
-
-    private static float computeExteriorWaterGate(final Camera camera) {
-        final Minecraft mc = Minecraft.getInstance();
-        if (mc.level == null) return 0.0f;
-
-        final Vector3f look = new Vector3f(camera.getLookVector());
-        if (look.lengthSquared() <= 1.0e-6f) return 0.0f;
-
-        final Vector3f up = new Vector3f(camera.getUpVector());
-        final Vector3f left = new Vector3f(camera.getLeftVector());
-        final Vector3f[] probeDirections = new Vector3f[] {
-            new Vector3f(look),
-            new Vector3f(look).fma(0.35f, up).normalize(),
-            new Vector3f(look).fma(-0.35f, up).normalize(),
-            new Vector3f(look).fma(0.25f, left).normalize(),
-            new Vector3f(look).fma(-0.25f, left).normalize()
-        };
-
-        float hits = 0.0f;
-        float maxHit = 0.0f;
-        for (final Vector3f probeDirection : probeDirections) {
-            final float hit = computeExteriorWaterGateForDirection(camera, probeDirection);
-            hits += hit;
-            maxHit = Math.max(maxHit, hit);
+        float sum = 0.0f;
+        float max = 0.0f;
+        for (int i = 0; i < smoothedExteriorWaterGateGrid.length; i++) {
+            final float targetGate = targetGrid[i];
+            final float maxDelta =
+                (targetGate > smoothedExteriorWaterGateGrid[i] ? riseRatePerSecond : fallRatePerSecond) * deltaSeconds;
+            smoothedExteriorWaterGateGrid[i] = Mth.approach(smoothedExteriorWaterGateGrid[i], targetGate, maxDelta);
+            sum += smoothedExteriorWaterGateGrid[i];
+            max = Math.max(max, smoothedExteriorWaterGateGrid[i]);
         }
-        final float averageHit = hits / probeDirections.length;
-        return Math.max(averageHit, maxHit * 0.9f);
+        smoothedExteriorWaterGate = Math.max(sum / smoothedExteriorWaterGateGrid.length, max * 0.9f);
+        return smoothedExteriorWaterGateGrid.clone();
     }
 
-    private static ExteriorFluidSample findExteriorFluidSample(final Camera camera) {
-        final Vector3f look = new Vector3f(camera.getLookVector());
-        if (look.lengthSquared() <= 1.0e-6f) return null;
-
-        final Vector3f up = new Vector3f(camera.getUpVector());
-        final Vector3f left = new Vector3f(camera.getLeftVector());
-        final Vector3f[] probeDirections = new Vector3f[] {
-            new Vector3f(look),
-            new Vector3f(look).fma(0.35f, up).normalize(),
-            new Vector3f(look).fma(-0.35f, up).normalize(),
-            new Vector3f(look).fma(0.25f, left).normalize(),
-            new Vector3f(look).fma(-0.25f, left).normalize()
-        };
-
-        for (final Vector3f probeDirection : probeDirections) {
-            final ExteriorFluidSample sample = findExteriorFluidSampleForDirection(camera, probeDirection);
-            if (sample != null) {
-                return sample;
+    private static float[] computeExteriorWaterGateGrid(final Camera camera, final Matrix4f projectionMatrix) {
+        final Matrix4f inverseProjection =
+            projectionMatrix != null ? new Matrix4f(projectionMatrix).invert() : null;
+        final float[] grid = new float[PROBE_GRID_SIZE * PROBE_GRID_SIZE];
+        for (int row = 0; row < PROBE_GRID_SIZE; row++) {
+            for (int col = 0; col < PROBE_GRID_SIZE; col++) {
+                final float u = col / (float) (PROBE_GRID_SIZE - 1);
+                final float v = 1.0f - row / (float) (PROBE_GRID_SIZE - 1);
+                final ProbeExteriorResult result = findExteriorFluidSampleForScreenUv(camera, inverseProjection, u, v);
+                grid[row * PROBE_GRID_SIZE + col] = result != null ? result.gate : 0.0f;
             }
         }
+        return grid;
+    }
 
+    private static ExteriorFluidSample findExteriorFluidSample(final Camera camera, final Matrix4f projectionMatrix) {
+        final Matrix4f inverseProjection =
+            projectionMatrix != null ? new Matrix4f(projectionMatrix).invert() : null;
+        for (int row = 0; row < PROBE_GRID_SIZE; row++) {
+            for (int col = 0; col < PROBE_GRID_SIZE; col++) {
+                final float u = col / (float) (PROBE_GRID_SIZE - 1);
+                final float v = 1.0f - row / (float) (PROBE_GRID_SIZE - 1);
+                final ProbeExteriorResult result = findExteriorFluidSampleForScreenUv(camera, inverseProjection, u, v);
+                if (result != null && result.fluidSample != null) {
+                    return result.fluidSample;
+                }
+            }
+        }
         return null;
     }
 
-    private static float computeExteriorWaterGateForDirection(final Camera camera, final Vector3f look) {
-        return findExteriorFluidSampleForDirection(camera, look) != null ? 1.0f : 0.0f;
+    private static ProbeExteriorResult findExteriorFluidSampleForScreenUv(final Camera camera, final Matrix4f inverseProjection,
+        final float u, final float v) {
+        final Vector3f look = computeProbeDirection(camera, inverseProjection, u, v);
+        if (look == null || look.lengthSquared() <= 1.0e-6f) {
+            return null;
+        }
+        return findExteriorFluidSampleForDirection(camera, look);
     }
 
-    private static ExteriorFluidSample findExteriorFluidSampleForDirection(final Camera camera, final Vector3f look) {
+    private static Vector3f computeProbeDirection(final Camera camera, final Matrix4f inverseProjection, final float u,
+        final float v) {
+        if (inverseProjection == null) {
+            final Vector3f look = new Vector3f(camera.getLookVector());
+            final Vector3f up = new Vector3f(camera.getUpVector());
+            final Vector3f left = new Vector3f(camera.getLeftVector());
+            return new Vector3f(look)
+                .fma((v - 0.5f) * 0.7f, up)
+                .fma((u - 0.5f) * 0.5f, left)
+                .normalize();
+        }
+
+        final Vector4f clipPos = new Vector4f(u * 2.0f - 1.0f, v * 2.0f - 1.0f, 1.0f, 1.0f);
+        inverseProjection.transform(clipPos);
+        if (Math.abs(clipPos.w) <= 1.0e-6f) {
+            return null;
+        }
+        clipPos.div(clipPos.w);
+
+        return new Vector3f(camera.getLookVector()).mul(-clipPos.z)
+            .fma(clipPos.y, new Vector3f(camera.getUpVector()))
+            .fma(-clipPos.x, new Vector3f(camera.getLeftVector()))
+            .normalize();
+    }
+
+    private static ProbeExteriorResult findExteriorFluidSampleForDirection(final Camera camera, final Vector3f look) {
         final Minecraft mc = Minecraft.getInstance();
         if (mc.level == null) return null;
+        ShipWaterPocketLiquidOverlay.ensureExteriorFluidCacheLevel(mc.level);
 
         final double startX = camera.getPosition().x;
         final double startY = camera.getPosition().y;
         final double startZ = camera.getPosition().z;
         final double maxTraceDistance = 64.0;
-        final double fluidProbeDistance = 3.0;
         final double dryStep = 0.25;
-        final double fluidStep = 0.25;
+        final double outsideSampleOffset = 0.2;
+        final double surfaceSlack = 0.1;
+        final BlockPos.MutableBlockPos fluidPos = new BlockPos.MutableBlockPos();
+        final BlockPos.MutableBlockPos scanPos = new BlockPos.MutableBlockPos();
+        final FluidStateManager.QueryCache fluidQueryCache = new FluidStateManager.QueryCache();
 
         double exitDistance = -1.0;
         for (double travel = 0.0; travel <= maxTraceDistance; travel += dryStep) {
@@ -477,19 +522,28 @@ public final class ShipInteriorFogRenderer {
         }
         if (exitDistance < 0.0) return null;
 
-        final double fluidProbeEnd = Math.min(maxTraceDistance, exitDistance + fluidProbeDistance);
-        for (double travel = exitDistance; travel <= fluidProbeEnd; travel += fluidStep) {
-            final double sampleX = startX + look.x() * travel;
-            final double sampleY = startY + look.y() * travel;
-            final double sampleZ = startZ + look.z() * travel;
-            TMP_BLOCK_POS.set(Mth.floor(sampleX), Mth.floor(sampleY), Mth.floor(sampleZ));
-            final FluidState fluidState = mc.level.getFluidState(TMP_BLOCK_POS);
-            if (!fluidState.isEmpty()) {
-                return new ExteriorFluidSample(TMP_BLOCK_POS.immutable(), fluidState, fluidState.getType());
-            }
+        final double sampleDistance = Math.min(maxTraceDistance, exitDistance + outsideSampleOffset);
+        final double sampleX = startX + look.x() * sampleDistance;
+        final double sampleY = startY + look.y() * sampleDistance;
+        final double sampleZ = startZ + look.z() * sampleDistance;
+        final ShipWaterPocketLiquidOverlay.FluidSurfaceSample surfaceSample =
+            ShipWaterPocketLiquidOverlay.findExteriorFluidSurface(
+                mc.level,
+                fluidPos,
+                scanPos,
+                fluidQueryCache,
+                sampleX,
+                sampleY,
+                sampleZ
+            );
+        if (surfaceSample == null || sampleY > surfaceSample.surfaceY + surfaceSlack) {
+            return null;
         }
 
-        return null;
+        return new ProbeExteriorResult(
+            1.0f,
+            new ExteriorFluidSample(surfaceSample.pos, surfaceSample.fluidState, surfaceSample.fluid)
+        );
     }
 
     static boolean shouldRenderInteriorWaterFog(final boolean inShipAirPocket, final boolean inWorldFluidSuppressionZone) {

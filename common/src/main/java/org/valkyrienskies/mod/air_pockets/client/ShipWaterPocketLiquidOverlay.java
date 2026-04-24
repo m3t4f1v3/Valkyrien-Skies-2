@@ -94,7 +94,6 @@ public final class ShipWaterPocketLiquidOverlay {
     private static final int SHAPE_MAX_COMPONENTS = 64;
     private static final byte SHAPE_COMPONENT_SOLID = -1;
     private static final byte SHAPE_COMPONENT_UNASSIGNED = -2;
-
     private static final float[] CLIP_X0 = new float[6];
     private static final float[] CLIP_Y0 = new float[6];
     private static final float[] CLIP_Z0 = new float[6];
@@ -124,11 +123,11 @@ public final class ShipWaterPocketLiquidOverlay {
         }
     }
 
-    private static final class FluidSurfaceSample {
-        private final Fluid fluid;
-        private final FluidState fluidState;
-        private final BlockPos pos;
-        private final double surfaceY;
+    static final class FluidSurfaceSample {
+        final Fluid fluid;
+        final FluidState fluidState;
+        final BlockPos pos;
+        final double surfaceY;
 
         private FluidSurfaceSample(final Fluid fluid, final FluidState fluidState, final BlockPos pos, final double surfaceY) {
             this.fluid = fluid;
@@ -194,7 +193,6 @@ public final class ShipWaterPocketLiquidOverlay {
     private static final Long2ObjectOpenHashMap<ChunkTrackedFluidSurface> FLUID_SURFACE_CACHE = new Long2ObjectOpenHashMap<>();
     private static final Long2ObjectOpenHashMap<ChunkTrackedFluidSurface> FLUID_SURFACE_POINT_CACHE =
         new Long2ObjectOpenHashMap<>();
-
     public static void clear() {
         SHIP_CACHE.clear();
         SHAPE_TEMPLATE_CACHE.clear();
@@ -687,7 +685,7 @@ public final class ShipWaterPocketLiquidOverlay {
         return renderType == RenderType.translucent() || renderType == RenderType.cutout() || renderType == RenderType.cutoutMipped();
     }
 
-    private static @Nullable FluidSurfaceSample findExteriorFluidSurface(final net.minecraft.client.multiplayer.ClientLevel level,
+    static @Nullable FluidSurfaceSample findExteriorFluidSurface(final net.minecraft.client.multiplayer.ClientLevel level,
         final BlockPos.MutableBlockPos fluidPos, final BlockPos.MutableBlockPos scanPos,
         final FluidStateManager.QueryCache fluidQueryCache, final double worldX, final double worldY, final double worldZ) {
         FluidSurfaceSample best = null;
@@ -857,7 +855,7 @@ public final class ShipWaterPocketLiquidOverlay {
         return shouldUseExteriorFluidSample(false, rawFluid.isEmpty()) ? rawFluid : null;
     }
 
-    private static void ensureExteriorFluidCacheLevel(final net.minecraft.client.multiplayer.ClientLevel level) {
+    static void ensureExteriorFluidCacheLevel(final net.minecraft.client.multiplayer.ClientLevel level) {
         if (lastSurfaceCacheLevel == level) return;
         lastSurfaceCacheLevel = level;
         clearExteriorFluidCaches();
