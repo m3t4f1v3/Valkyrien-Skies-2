@@ -62,6 +62,7 @@ class BuoyancyHandlerAttachment : ShipPhysicsListener {
         var diagForceSlewClampCount = 0L
         var diagLeverClampCount = 0L
         var diagDampingClampCount = 0L
+        var diagZeroLiquidOverlapCount = 0L
 
         companion object {
             const val WATER_DENSITY = 1000.0
@@ -105,12 +106,37 @@ class BuoyancyHandlerAttachment : ShipPhysicsListener {
         }
 
         val overlapRaw = physShip.liquidOverlap
-        if (!isFinite(overlapRaw)) return
+        if (!isFinite(overlapRaw)) {
+            val count = ++buoyancyData.diagZeroLiquidOverlapCount
+            if (count <= 4L || count % 512L == 0L) {
+                LOGGER.info(
+                    "Pocket buoyancy suppressed shipId={} because liquidOverlap is non-finite: liquidOverlap={} displacedVolume={} count={}",
+                    physShip.id,
+                    overlapRaw,
+                    displacedRaw,
+                    count,
+                )
+            }
+            buoyancyData.lastAppliedBuoyancyForce = 0.0
+            return
+        }
         val overlap = clamp(overlapRaw, 0.0, 1.0)
         if (abs(overlap - overlapRaw) > 1.0e-9) {
             logClamp("overlap", overlapRaw, overlap)
         }
         if (overlap <= BuoyancyData.OVERLAP_EPS) {
+            val count = ++buoyancyData.diagZeroLiquidOverlapCount
+            if (count <= 4L || count % 512L == 0L) {
+                LOGGER.info(
+                    "Pocket buoyancy suppressed shipId={} liquidOverlap={} displacedVolume={} smoothedDisplacedVolume={} fluidDensity={} count={}",
+                    physShip.id,
+                    overlapRaw,
+                    displacedRaw,
+                    buoyancyData.smoothedDisplacedVolume,
+                    buoyancyData.buoyancyFluidDensity,
+                    count,
+                )
+            }
             buoyancyData.lastAppliedBuoyancyForce = 0.0
             return
         }

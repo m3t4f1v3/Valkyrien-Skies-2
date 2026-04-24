@@ -214,6 +214,8 @@ object ShipWaterPocketManager {
     private val persistedStatesSaved = AtomicLong(0)
     private val persistedSignatureMismatches = AtomicLong(0)
     private val componentTraversalOverflowCount = AtomicLong(0)
+    private val buoyancyUpdatedCount = AtomicLong(0)
+    private val buoyancyRefreshSkippedCount = AtomicLong(0)
 
     private fun mixHash64(acc: Long, value: Long): Long {
         var h = acc xor value
@@ -2359,6 +2361,29 @@ object ShipWaterPocketManager {
             }
             if (waterSolveUpdated) {
                 updateVsBuoyancyFromPockets(ship, state)
+                if (state.buoyancy.submergedAirVolume > 1.0e-6) {
+                    val count = buoyancyUpdatedCount.incrementAndGet()
+                    logThrottledDiag(
+                        count,
+                        "Updated pocket buoyancy shipId={} displaced={} floodFluid={} applyTick={}",
+                        ship.id,
+                        state.buoyancy.submergedAirVolume,
+                        state.floodFluid,
+                        state.lastWaterSolveApplyTick,
+                    )
+                }
+            } else if (state.buoyancy.submergedAirVolume > 1.0e-6 && !floodingChunksReady) {
+                val count = buoyancyRefreshSkippedCount.incrementAndGet()
+                logThrottledDiag(
+                    count,
+                    "Pocket buoyancy refresh skipped shipId={} displaced={} shipChunksLoaded={} worldChunksLoaded={} dirty={} waterSolveInFlight={}",
+                    ship.id,
+                    state.buoyancy.submergedAirVolume,
+                    shipChunksLoaded,
+                    worldChunksLoaded,
+                    state.dirty,
+                    state.waterSolveJobInFlight,
+                )
             }
             if (shipChunksLoaded &&
                 state.sizeX > 0 && state.sizeY > 0 && state.sizeZ > 0 &&

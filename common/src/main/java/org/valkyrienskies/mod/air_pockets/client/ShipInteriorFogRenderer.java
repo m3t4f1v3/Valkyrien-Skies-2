@@ -73,11 +73,11 @@ public final class ShipInteriorFogRenderer {
             mc.level, camera.getPosition().x, camera.getPosition().y, camera.getPosition().z
         );
         if (!shouldRenderInteriorWaterFog(inShipAirPocket, inWorldFluidSuppressionZone)) {
-            logDiag(
-                "Skipped interior fog render: inShipAirPocket={} inWorldFluidSuppressionZone={}",
-                inShipAirPocket,
-                inWorldFluidSuppressionZone
-            );
+//            logDiag(
+//                "Skipped interior fog render: inShipAirPocket={} inWorldFluidSuppressionZone={}",
+//                inShipAirPocket,
+//                inWorldFluidSuppressionZone
+//            );
             return;
         }
 
@@ -86,26 +86,26 @@ public final class ShipInteriorFogRenderer {
         ensurePasses(mc, mainTarget);
         if (interiorMaskTarget == null || fogTarget == null || interiorMaskPass == null || fogPass == null
             || fogCompositePass == null) {
-            logDiag(
-                "Skipped interior fog render: targets/passes missing maskTarget={} fogTarget={} maskPass={} fogPass={} compositePass={}",
-                interiorMaskTarget != null,
-                fogTarget != null,
-                interiorMaskPass != null,
-                fogPass != null,
-                fogCompositePass != null
-            );
+//            logDiag(
+//                "Skipped interior fog render: targets/passes missing maskTarget={} fogTarget={} maskPass={} fogPass={} compositePass={}",
+//                interiorMaskTarget != null,
+//                fogTarget != null,
+//                interiorMaskPass != null,
+//                fogPass != null,
+//                fogCompositePass != null
+//            );
             return;
         }
 
         final int boundShips = renderInteriorMask(mc, camera, projectionMatrix, modelViewMatrix, mainTarget);
         if (boundShips <= 0) {
-            logDiag("Skipped interior fog render: no bound ships for mask");
+            //logDiag("Skipped interior fog render: no bound ships for mask");
             return;
         }
 
         renderFog(mainTarget, camera, projectionMatrix);
         compositeFogToMain(mainTarget);
-        logDiag("Rendered interior fog: boundShips={}", boundShips);
+        //logDiag("Rendered interior fog: boundShips={}", boundShips);
     }
 
     public static boolean shouldSuppressLiquidOverlay(final Camera camera) {
@@ -322,18 +322,18 @@ public final class ShipInteriorFogRenderer {
 
     private static boolean canRenderInteriorWaterFog(final Camera camera) {
         if (!VSGameConfig.COMMON.getEnableAirPockets()) {
-            logDiag("Skipped interior fog render: air pockets disabled");
+            //logDiag("Skipped interior fog render: air pockets disabled");
             return false;
         }
 
         final Minecraft mc = Minecraft.getInstance();
         if (mc.level == null || camera == null) {
-            logDiag("Skipped interior fog render: missing level/camera");
+            //logDiag("Skipped interior fog render: missing level/camera");
             return false;
         }
         final FogType cameraFogType = camera.getFluidInCamera();
         if (cameraFogType != FogType.NONE) {
-            logDiag("Skipped interior fog render: camera fluid={}", cameraFogType);
+            //logDiag("Skipped interior fog render: camera fluid={}", cameraFogType);
             return false;
         }
         return true;
