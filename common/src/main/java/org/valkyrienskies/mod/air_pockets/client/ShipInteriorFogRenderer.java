@@ -296,19 +296,21 @@ public final class ShipInteriorFogRenderer {
         final ExteriorFluidSample fluidSample = findExteriorFluidSample(camera);
         if (fluidSample == null) {
             TMP_BLOCK_POS.set(camera.getBlockPosition());
-            return ShipWaterPocketFluidVisualHelper.getFluidTintColor(
+            return ShipWaterPocketFluidVisualHelper.getFluidFogColor(
                 mc.level,
                 TMP_BLOCK_POS,
                 net.minecraft.world.level.material.Fluids.WATER,
-                net.minecraft.world.level.material.Fluids.WATER.defaultFluidState()
+                net.minecraft.world.level.material.Fluids.WATER.defaultFluidState(),
+                camera
             );
         }
 
-        return ShipWaterPocketFluidVisualHelper.getFluidTintColor(
+        return ShipWaterPocketFluidVisualHelper.getFluidFogColor(
             mc.level,
             fluidSample.pos,
             fluidSample.fluid,
-            fluidSample.fluidState
+            fluidSample.fluidState,
+            camera
         );
     }
 
