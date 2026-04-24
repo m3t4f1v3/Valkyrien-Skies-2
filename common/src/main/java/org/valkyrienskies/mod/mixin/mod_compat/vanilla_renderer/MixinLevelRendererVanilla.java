@@ -372,4 +372,15 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
         this.minecraft.getProfiler().pop();
         renderType.clearRenderState();
     }
+
+    @Override
+    public VisibleChunkData vs$captureShipVisibleChunks() {
+        return new VisibleChunkData(new WeakHashMap<>(this.shipRenderChunks), vs$visibileShipChunks);
+    }
+
+    @Override
+    public void vs$reloadShipVisibleChunks(VisibleChunkData data) {
+        this.vs$visibileShipChunks = data.visibileShipChunks();
+        this.shipRenderChunks.putAll(data.shipRenderChunks());
+    }
 }
