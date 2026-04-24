@@ -375,12 +375,20 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
 
     @Override
     public VisibleChunkData vs$captureShipVisibleChunks() {
-        return new VisibleChunkData(new WeakHashMap<>(this.shipRenderChunks), vs$visibileShipChunks);
+        WeakHashMap<ClientShip, ObjectList<RenderChunkInfo>> temp = new WeakHashMap<>();
+        shipRenderChunks.forEach((ship, chunks) -> {
+            ObjectArrayList<RenderChunkInfo> subTemp = new ObjectArrayList<>();
+            chunks.forEach(subTemp::add);
+            temp.put(ship, subTemp);
+        });
+        return new VisibleChunkData(temp, vs$visibileShipChunks);
     }
 
     @Override
     public void vs$reloadShipVisibleChunks(VisibleChunkData data) {
         this.vs$visibileShipChunks = data.visibileShipChunks();
+        shipRenderChunks.forEach((ship, chunks) -> chunks.clear());
+        shipRenderChunks.clear();
         this.shipRenderChunks.putAll(data.shipRenderChunks());
     }
 }
