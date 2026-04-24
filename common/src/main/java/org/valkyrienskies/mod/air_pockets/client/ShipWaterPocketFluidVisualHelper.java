@@ -154,6 +154,9 @@ public final class ShipWaterPocketFluidVisualHelper {
         if (canonical == Fluids.WATER) {
             return BiomeColors.getAverageWaterColor(level, pos);
         }
+        if (canonical == Fluids.LAVA) {
+            return 0xFF6A00;
+        }
 
         final Integer forgeTint = queryForgeFluidTint(level, pos, canonical, fluidState);
         if (forgeTint != null) return forgeTint.intValue() & 0xFFFFFF;

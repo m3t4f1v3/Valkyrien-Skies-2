@@ -10,6 +10,7 @@ import net.minecraft.client.renderer.PostPass;
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.material.Fluid;
+import net.minecraft.world.level.material.Fluids;
 import net.minecraft.world.level.material.FogType;
 import net.minecraft.world.level.material.FluidState;
 import org.apache.logging.log4j.LogManager;
@@ -58,22 +59,11 @@ public final class ShipInteriorFogRenderer {
     }
 
     public static void render(final Camera camera, final Matrix4f projectionMatrix, final Matrix4f modelViewMatrix) {
-        if (!VSGameConfig.COMMON.getEnableAirPockets()) {
-            logDiag("Skipped interior fog render: air pockets disabled");
+        if (!canRenderInteriorWaterFog(camera)) {
             return;
         }
 
         final Minecraft mc = Minecraft.getInstance();
-        if (mc.level == null || camera == null) {
-            logDiag("Skipped interior fog render: missing level/camera");
-            return;
-        }
-        final FogType cameraFogType = camera.getFluidInCamera();
-        if (cameraFogType != FogType.NONE) {
-            logDiag("Skipped interior fog render: camera fluid={}", cameraFogType);
-            return;
-        }
-
         final boolean inShipAirPocket = ShipWaterPocketManager.isWorldPosInShipAirPocket(
             mc.level, camera.getPosition().x, camera.getPosition().y, camera.getPosition().z
         );
@@ -114,6 +104,21 @@ public final class ShipInteriorFogRenderer {
         renderFog(mainTarget, camera, projectionMatrix);
         compositeFogToMain(mainTarget);
         logDiag("Rendered interior fog: boundShips={}", boundShips);
+    }
+
+    public static boolean shouldSuppressLiquidOverlay(final Camera camera) {
+        if (!canRenderInteriorWaterFog(camera)) {
+            return false;
+        }
+        final Minecraft mc = Minecraft.getInstance();
+        return shouldRenderInteriorWaterFog(
+            ShipWaterPocketManager.isWorldPosInShipAirPocket(
+                mc.level, camera.getPosition().x, camera.getPosition().y, camera.getPosition().z
+            ),
+            ShipWaterPocketManager.isWorldPosInShipWorldFluidSuppressionZone(
+                mc.level, camera.getPosition().x, camera.getPosition().y, camera.getPosition().z
+            )
+        );
     }
 
     public static void clear() {
@@ -252,13 +257,14 @@ public final class ShipInteriorFogRenderer {
         fogTarget.clear(Minecraft.ON_OSX);
 
         final EffectInstance effect = fogPass.getEffect();
+        final ExteriorFluidSample fluidSample = findExteriorFluidSample(camera);
         final int fogColor = sampleExteriorFogColor(camera);
         setVec3(effect, "FogColor",
             ((fogColor >> 16) & 0xFF) / 255.0f,
             ((fogColor >> 8) & 0xFF) / 255.0f,
             (fogColor & 0xFF) / 255.0f
         );
-        final float fogDensity = 0.045f;
+        final float fogDensity = isLavaFluid(fluidSample) ? VSGameConfig.CLIENT.getUnderwater().getLavaFogDensity() : VSGameConfig.CLIENT.getUnderwater().getWaterFogDensity();
         final float fogStart = 2.0f;
         setVec2(effect, "FogParams", fogDensity, fogStart);
         setFloat(effect, "ExteriorWaterGate", getSmoothedExteriorWaterGate(camera));
@@ -304,6 +310,33 @@ public final class ShipInteriorFogRenderer {
             fluidSample.fluid,
             fluidSample.fluidState
         );
+    }
+
+    private static boolean canRenderInteriorWaterFog(final Camera camera) {
+        if (!VSGameConfig.COMMON.getEnableAirPockets()) {
+            logDiag("Skipped interior fog render: air pockets disabled");
+            return false;
+        }
+
+        final Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null || camera == null) {
+            logDiag("Skipped interior fog render: missing level/camera");
+            return false;
+        }
+        final FogType cameraFogType = camera.getFluidInCamera();
+        if (cameraFogType != FogType.NONE) {
+            logDiag("Skipped interior fog render: camera fluid={}", cameraFogType);
+            return false;
+        }
+        return true;
+    }
+
+    private static boolean isLavaFluid(final ExteriorFluidSample fluidSample) {
+        if (fluidSample == null) {
+            return false;
+        }
+        final Fluid fluid = fluidSample.fluid;
+        return fluid == Fluids.LAVA || fluid == Fluids.FLOWING_LAVA;
     }
 
     private static float getSmoothedExteriorWaterGate(final Camera camera) {

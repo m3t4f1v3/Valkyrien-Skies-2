@@ -28,6 +28,9 @@ object VSGameConfig {
         @ConfigCategory(title = "Connectivity")
         val Connectivity = CONNECTIVITY()
 
+        @ConfigCategory(title = "Underwater")
+        val Underwater = UNDERWATER()
+
         @ConfigEntry(description = "Renders the VS2 debug HUD with TPS")
         var renderDebugText = false
 
@@ -70,6 +73,23 @@ object VSGameConfig {
                 description = "Enable client connectivity; increases client load, but allows for client-sided sealed space visuals, like occluding water in a submarine."
             )
             var enableClientConnectivity = false
+        }
+
+        class UNDERWATER {
+            @ConfigEntry(description = "Enable the flat-face overlay of fluids outside of ships")
+            var enableFluidOverlay = true
+
+            @ConfigEntry(description = "Enable the custom fog shader for fluids outside of ships")
+            var enableCustomFluidFog = true
+
+            @ConfigEntry(description = "Fade overlay when camera is in custom fog")
+            var fadeFluidOverlayInCustomFog = true
+
+            @ConfigEntry(description = "Custom water fog density")
+            var waterFogDensity = 0.045f
+
+            @ConfigEntry(description = "Custom lava fog density")
+            var lavaFogDensity = 0.45f
         }
 
         @ConfigEntry(

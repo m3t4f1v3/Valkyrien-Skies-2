@@ -19,6 +19,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.valkyrienskies.mod.air_pockets.client.ShipInteriorFogRenderer;
 import org.valkyrienskies.mod.air_pockets.client.ShipWaterPocketLiquidOverlay;
 import org.valkyrienskies.mod.air_pockets.client.ShipWaterPocketExternalWaterCullRenderContext;
+import org.valkyrienskies.mod.common.config.VSGameConfig;
 
 // Some renderers can overwrite LevelRenderer's chunk-layer rendering, which makes INVOKE-based injections into that
 // method fragile. We track active world *fluid* passes here and drive shader uniform updates from ShaderInstance#apply.
@@ -75,8 +76,12 @@ public abstract class MixinLevelRenderer {
         RenderSystem.setProjectionMatrix(projectionMatrix, VertexSorting.DISTANCE_TO_ORIGIN);
         RenderSystem.applyModelViewMatrix();
         try {
-            ShipWaterPocketLiquidOverlay.render(camPos.x, camPos.y, camPos.z);
-            ShipInteriorFogRenderer.render(camera, projectionMatrix, poseStack.last().pose());
+            if (VSGameConfig.CLIENT.getUnderwater().getEnableFluidOverlay() && !(VSGameConfig.CLIENT.getUnderwater().getEnableCustomFluidFog() && VSGameConfig.CLIENT.getUnderwater().getFadeFluidOverlayInCustomFog() && ShipInteriorFogRenderer.shouldSuppressLiquidOverlay(camera))) {
+                ShipWaterPocketLiquidOverlay.render(camPos.x, camPos.y, camPos.z);
+            }
+            if (VSGameConfig.CLIENT.getUnderwater().getEnableCustomFluidFog()) {
+                ShipInteriorFogRenderer.render(camera, projectionMatrix, poseStack.last().pose());
+            }
         } finally {
             modelViewStack.popPose();
             RenderSystem.applyModelViewMatrix();
