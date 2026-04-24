@@ -6,6 +6,7 @@ uniform sampler2D InteriorMaskSampler;
 uniform vec3 FogColor;
 uniform vec2 FogParams;
 uniform float ExteriorWaterGate;
+uniform float SkyFogStrength;
 uniform mat4 InverseProjMat;
 uniform vec3 CameraWorldPos;
 uniform vec3 CameraLookVector;
@@ -40,7 +41,7 @@ void main() {
         vec3 skyWorldPos = reconstructWorldPos(0.99999);
         vec3 skyRayDir = normalize(skyWorldPos - CameraWorldPos);
         float downwardBias = clamp((-skyRayDir.y + 0.15) / 0.5, 0.0, 1.0);
-        float skyGate = clamp(exteriorGate * mix(0.95, 1.0, downwardBias), 0.0, 1.0);
+        float skyGate = clamp(exteriorGate * mix(0.95, 1.0, downwardBias) * SkyFogStrength, 0.0, 1.0);
         vec3 skyFoggedColor = mix(sceneColor.rgb, FogColor, skyGate);
         fragColor = vec4(skyFoggedColor, 1.0);
         return;

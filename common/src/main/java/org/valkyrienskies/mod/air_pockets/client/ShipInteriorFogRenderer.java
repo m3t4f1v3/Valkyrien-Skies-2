@@ -5,10 +5,12 @@ import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.shaders.Uniform;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.EffectInstance;
 import net.minecraft.client.renderer.PostPass;
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.Mth;
+import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.level.material.Fluids;
 import net.minecraft.world.level.material.FogType;
@@ -264,9 +266,13 @@ public final class ShipInteriorFogRenderer {
             ((fogColor >> 8) & 0xFF) / 255.0f,
             (fogColor & 0xFF) / 255.0f
         );
-        final float fogDensity = isLavaFluid(fluidSample) ? VSGameConfig.CLIENT.getUnderwater().getLavaFogDensity() : VSGameConfig.CLIENT.getUnderwater().getWaterFogDensity();
+        final float fogStrengthScale = getPotionAdjustedFogStrengthScale(fluidSample);
+        final float fogDensity = (isLavaFluid(fluidSample)
+            ? VSGameConfig.CLIENT.getUnderwater().getLavaFogDensity()
+            : VSGameConfig.CLIENT.getUnderwater().getWaterFogDensity()) * fogStrengthScale;
         final float fogStart = 2.0f;
         setVec2(effect, "FogParams", fogDensity, fogStart);
+        setFloat(effect, "SkyFogStrength", fogStrengthScale);
         setFloat(effect, "ExteriorWaterGate", getSmoothedExteriorWaterGate(camera));
         setMat4(effect, "InverseProjMat", new Matrix4f(projectionMatrix).invert());
         setVec3(effect, "CameraWorldPos",
@@ -339,6 +345,38 @@ public final class ShipInteriorFogRenderer {
         }
         final Fluid fluid = fluidSample.fluid;
         return fluid == Fluids.LAVA || fluid == Fluids.FLOWING_LAVA;
+    }
+
+    //todo: this should also be data driven to support things like TFC water
+    private static boolean isWaterFluid(final ExteriorFluidSample fluidSample) {
+        if (fluidSample == null) {
+            return false;
+        }
+        final Fluid fluid = fluidSample.fluid;
+        return fluid == Fluids.WATER || fluid == Fluids.FLOWING_WATER;
+    }
+
+    private static float getPotionAdjustedFogStrengthScale(final ExteriorFluidSample fluidSample) {
+        if (!VSGameConfig.CLIENT.getUnderwater().getFogEffects()) {
+            return 1.0f;
+        }
+        final Minecraft mc = Minecraft.getInstance();
+        final LocalPlayer player = mc.player;
+        if (player == null || fluidSample == null) {
+            return 1.0f;
+        }
+
+        if (isWaterFluid(fluidSample)) {
+            final float waterVision = Mth.clamp(player.getWaterVision(), 0.0f, 1.0f);
+            final float vanillaWaterVisibility = Math.max(0.25f, waterVision);
+            return Mth.clamp(0.25f / vanillaWaterVisibility, 0.25f, 1.0f);
+        }
+
+        if (isLavaFluid(fluidSample) && player.hasEffect(MobEffects.FIRE_RESISTANCE)) {
+            return 1.0f / 3.0f;
+        }
+
+        return 1.0f;
     }
 
     private static float getSmoothedExteriorWaterGate(final Camera camera) {

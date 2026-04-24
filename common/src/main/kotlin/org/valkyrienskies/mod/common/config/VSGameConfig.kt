@@ -85,11 +85,15 @@ object VSGameConfig {
             @ConfigEntry(description = "Fade overlay when camera is in custom fog")
             var fadeFluidOverlayInCustomFog = true
 
+            //todo: probably data-drive this and lava or just fluids in general
             @ConfigEntry(description = "Custom water fog density")
             var waterFogDensity = 0.045f
 
             @ConfigEntry(description = "Custom lava fog density")
             var lavaFogDensity = 0.45f
+
+            @ConfigEntry(description = "Custom fog effected by vanilla fog modifiers (Water Breathing, Fire Resist, Conduits)")
+            var fogEffects = true
         }
 
         @ConfigEntry(
