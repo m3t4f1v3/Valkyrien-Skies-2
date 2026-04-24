@@ -5,11 +5,11 @@ import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.shaders.Uniform;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.BiomeColors;
 import net.minecraft.client.renderer.EffectInstance;
 import net.minecraft.client.renderer.PostPass;
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.Mth;
+import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.level.material.FogType;
 import net.minecraft.world.level.material.FluidState;
 import org.apache.logging.log4j.LogManager;
@@ -41,6 +41,18 @@ public final class ShipInteriorFogRenderer {
     private static final long INTERIOR_FOG_GRACE_PERIOD_MS = 250L;
     private static long lastExteriorWaterGateUpdateAtNs = 0L;
     private static float smoothedExteriorWaterGate = 0.0f;
+
+    private static final class ExteriorFluidSample {
+        private final BlockPos pos;
+        private final FluidState fluidState;
+        private final Fluid fluid;
+
+        private ExteriorFluidSample(final BlockPos pos, final FluidState fluidState, final Fluid fluid) {
+            this.pos = pos;
+            this.fluidState = fluidState;
+            this.fluid = fluid;
+        }
+    }
 
     private ShipInteriorFogRenderer() {
     }
@@ -240,11 +252,11 @@ public final class ShipInteriorFogRenderer {
         fogTarget.clear(Minecraft.ON_OSX);
 
         final EffectInstance effect = fogPass.getEffect();
-        final int waterColor = sampleWaterFogColor(camera);
+        final int fogColor = sampleExteriorFogColor(camera);
         setVec3(effect, "FogColor",
-            ((waterColor >> 16) & 0xFF) / 255.0f,
-            ((waterColor >> 8) & 0xFF) / 255.0f,
-            (waterColor & 0xFF) / 255.0f
+            ((fogColor >> 16) & 0xFF) / 255.0f,
+            ((fogColor >> 8) & 0xFF) / 255.0f,
+            (fogColor & 0xFF) / 255.0f
         );
         final float fogDensity = 0.045f;
         final float fogStart = 2.0f;
@@ -269,10 +281,29 @@ public final class ShipInteriorFogRenderer {
         mainTarget.bindWrite(false);
     }
 
-    private static int sampleWaterFogColor(final Camera camera) {
+    private static int sampleExteriorFogColor(final Camera camera) {
         final Minecraft mc = Minecraft.getInstance();
-        TMP_BLOCK_POS.set(camera.getBlockPosition());
-        return BiomeColors.getAverageWaterColor(mc.level, TMP_BLOCK_POS);
+        if (mc.level == null) {
+            return 0x3F76E4;
+        }
+
+        final ExteriorFluidSample fluidSample = findExteriorFluidSample(camera);
+        if (fluidSample == null) {
+            TMP_BLOCK_POS.set(camera.getBlockPosition());
+            return ShipWaterPocketFluidVisualHelper.getFluidTintColor(
+                mc.level,
+                TMP_BLOCK_POS,
+                net.minecraft.world.level.material.Fluids.WATER,
+                net.minecraft.world.level.material.Fluids.WATER.defaultFluidState()
+            );
+        }
+
+        return ShipWaterPocketFluidVisualHelper.getFluidTintColor(
+            mc.level,
+            fluidSample.pos,
+            fluidSample.fluid,
+            fluidSample.fluidState
+        );
     }
 
     private static float getSmoothedExteriorWaterGate(final Camera camera) {
@@ -321,9 +352,37 @@ public final class ShipInteriorFogRenderer {
         return Math.max(averageHit, maxHit * 0.9f);
     }
 
+    private static ExteriorFluidSample findExteriorFluidSample(final Camera camera) {
+        final Vector3f look = new Vector3f(camera.getLookVector());
+        if (look.lengthSquared() <= 1.0e-6f) return null;
+
+        final Vector3f up = new Vector3f(camera.getUpVector());
+        final Vector3f left = new Vector3f(camera.getLeftVector());
+        final Vector3f[] probeDirections = new Vector3f[] {
+            new Vector3f(look),
+            new Vector3f(look).fma(0.35f, up).normalize(),
+            new Vector3f(look).fma(-0.35f, up).normalize(),
+            new Vector3f(look).fma(0.25f, left).normalize(),
+            new Vector3f(look).fma(-0.25f, left).normalize()
+        };
+
+        for (final Vector3f probeDirection : probeDirections) {
+            final ExteriorFluidSample sample = findExteriorFluidSampleForDirection(camera, probeDirection);
+            if (sample != null) {
+                return sample;
+            }
+        }
+
+        return null;
+    }
+
     private static float computeExteriorWaterGateForDirection(final Camera camera, final Vector3f look) {
+        return findExteriorFluidSampleForDirection(camera, look) != null ? 1.0f : 0.0f;
+    }
+
+    private static ExteriorFluidSample findExteriorFluidSampleForDirection(final Camera camera, final Vector3f look) {
         final Minecraft mc = Minecraft.getInstance();
-        if (mc.level == null) return 0.0f;
+        if (mc.level == null) return null;
 
         final double startX = camera.getPosition().x;
         final double startY = camera.getPosition().y;
@@ -343,7 +402,7 @@ public final class ShipInteriorFogRenderer {
                 break;
             }
         }
-        if (exitDistance < 0.0) return 0.0f;
+        if (exitDistance < 0.0) return null;
 
         final double fluidProbeEnd = Math.min(maxTraceDistance, exitDistance + fluidProbeDistance);
         for (double travel = exitDistance; travel <= fluidProbeEnd; travel += fluidStep) {
@@ -353,11 +412,11 @@ public final class ShipInteriorFogRenderer {
             TMP_BLOCK_POS.set(Mth.floor(sampleX), Mth.floor(sampleY), Mth.floor(sampleZ));
             final FluidState fluidState = mc.level.getFluidState(TMP_BLOCK_POS);
             if (!fluidState.isEmpty()) {
-                return 1.0f;
+                return new ExteriorFluidSample(TMP_BLOCK_POS.immutable(), fluidState, fluidState.getType());
             }
         }
 
-        return 0.0f;
+        return null;
     }
 
     static boolean shouldRenderInteriorWaterFog(final boolean inShipAirPocket, final boolean inWorldFluidSuppressionZone) {

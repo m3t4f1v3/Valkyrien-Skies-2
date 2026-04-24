@@ -313,9 +313,9 @@ public final class ShipWaterPocketLiquidOverlay {
                     .setCullState(RenderStateShard.NO_CULL)
                     .setLightmapState(RenderStateShard.LIGHTMAP)
                     .setOverlayState(RenderStateShard.OVERLAY)
-                    .setLayeringState(RenderStateShard.VIEW_OFFSET_Z_LAYERING)
+                    .setLayeringState(RenderStateShard.NO_LAYERING)
                     .setDepthTestState(RenderStateShard.LEQUAL_DEPTH_TEST)
-                    .setWriteMaskState(RenderStateShard.COLOR_WRITE)
+                    .setWriteMaskState(RenderStateShard.COLOR_DEPTH_WRITE)
                     .createCompositeState(true)
             );
         }
@@ -432,15 +432,17 @@ public final class ShipWaterPocketLiquidOverlay {
             final int t = outsideIdx / sizeX;
             final int ly = t % sizeY;
             final int lz = t / sizeY;
+            final @Nullable OverlayFaceSample stableSample = resolveOverlayFaceSample(level, snapshot, fluidPos, scanPos,
+                fluidQueryCache, lx + 0.5, ly + 0.5, lz + 0.5, m00, m10, m20, m01, m11, m21, m02, m12, m22, tX, tY, tZ);
             if (lx > 0) {
                 final int n = outsideIdx - 1;
                 final boolean fullCell = isFullCellOverlaySolid(fullCellOverlaySolids, n);
                 final boolean interiorFace = isInteriorOpen(open, interior, n);
                 final boolean solidFace = !open.get(n) && overlaySolids != null && overlaySolids.get(n);
                 if (fullCell || interiorFace || solidFace) {
-                    final @Nullable OverlayFaceSample sample = resolveOverlayFaceSample(level, snapshot, fluidPos, scanPos,
-                        fluidQueryCache, lx + FACE_SAMPLE_OFFSET, ly + 0.5, lz + 0.5, m00, m10, m20, m01, m11, m21, m02, m12,
-                        m22, tX, tY, tZ);
+                    final @Nullable OverlayFaceSample sample = stableSample != null ? stableSample : resolveOverlayFaceSample(level,
+                        snapshot, fluidPos, scanPos, fluidQueryCache, lx + FACE_SAMPLE_OFFSET, ly + 0.5, lz + 0.5, m00, m10, m20,
+                        m01, m11, m21, m02, m12, m22, tX, tY, tZ);
                     if (sample != null) {
                         if (fullCell) {
                             solidPos.set(cache.minX + lx - 1, cache.minY + ly, cache.minZ + lz);
@@ -463,9 +465,9 @@ public final class ShipWaterPocketLiquidOverlay {
                 final boolean interiorFace = isInteriorOpen(open, interior, n);
                 final boolean solidFace = !open.get(n) && overlaySolids != null && overlaySolids.get(n);
                 if (fullCell || interiorFace || solidFace) {
-                    final @Nullable OverlayFaceSample sample = resolveOverlayFaceSample(level, snapshot, fluidPos, scanPos,
-                        fluidQueryCache, lx + 1.0 - FACE_SAMPLE_OFFSET, ly + 0.5, lz + 0.5, m00, m10, m20, m01, m11, m21, m02,
-                        m12, m22, tX, tY, tZ);
+                    final @Nullable OverlayFaceSample sample = stableSample != null ? stableSample : resolveOverlayFaceSample(level,
+                        snapshot, fluidPos, scanPos, fluidQueryCache, lx + 1.0 - FACE_SAMPLE_OFFSET, ly + 0.5, lz + 0.5, m00,
+                        m10, m20, m01, m11, m21, m02, m12, m22, tX, tY, tZ);
                     if (sample != null) {
                         if (fullCell) {
                             solidPos.set(cache.minX + lx + 1, cache.minY + ly, cache.minZ + lz);
@@ -488,9 +490,9 @@ public final class ShipWaterPocketLiquidOverlay {
                 final boolean interiorFace = isInteriorOpen(open, interior, n);
                 final boolean solidFace = !open.get(n) && overlaySolids != null && overlaySolids.get(n);
                 if (fullCell || interiorFace || solidFace) {
-                    final @Nullable OverlayFaceSample sample = resolveOverlayFaceSample(level, snapshot, fluidPos, scanPos,
-                        fluidQueryCache, lx + 0.5, ly + FACE_SAMPLE_OFFSET, lz + 0.5, m00, m10, m20, m01, m11, m21, m02, m12,
-                        m22, tX, tY, tZ);
+                    final @Nullable OverlayFaceSample sample = stableSample != null ? stableSample : resolveOverlayFaceSample(level,
+                        snapshot, fluidPos, scanPos, fluidQueryCache, lx + 0.5, ly + FACE_SAMPLE_OFFSET, lz + 0.5, m00, m10, m20,
+                        m01, m11, m21, m02, m12, m22, tX, tY, tZ);
                     if (sample != null) {
                         if (fullCell) {
                             solidPos.set(cache.minX + lx, cache.minY + ly - 1, cache.minZ + lz);
@@ -513,9 +515,9 @@ public final class ShipWaterPocketLiquidOverlay {
                 final boolean interiorFace = isInteriorOpen(open, interior, n);
                 final boolean solidFace = !open.get(n) && overlaySolids != null && overlaySolids.get(n);
                 if (fullCell || interiorFace || solidFace) {
-                    final @Nullable OverlayFaceSample sample = resolveOverlayFaceSample(level, snapshot, fluidPos, scanPos,
-                        fluidQueryCache, lx + 0.5, ly + 1.0 - FACE_SAMPLE_OFFSET, lz + 0.5, m00, m10, m20, m01, m11, m21, m02,
-                        m12, m22, tX, tY, tZ);
+                    final @Nullable OverlayFaceSample sample = stableSample != null ? stableSample : resolveOverlayFaceSample(level,
+                        snapshot, fluidPos, scanPos, fluidQueryCache, lx + 0.5, ly + 1.0 - FACE_SAMPLE_OFFSET, lz + 0.5, m00, m10,
+                        m20, m01, m11, m21, m02, m12, m22, tX, tY, tZ);
                     if (sample != null) {
                         if (fullCell) {
                             solidPos.set(cache.minX + lx, cache.minY + ly + 1, cache.minZ + lz);
@@ -538,9 +540,9 @@ public final class ShipWaterPocketLiquidOverlay {
                 final boolean interiorFace = isInteriorOpen(open, interior, n);
                 final boolean solidFace = !open.get(n) && overlaySolids != null && overlaySolids.get(n);
                 if (fullCell || interiorFace || solidFace) {
-                    final @Nullable OverlayFaceSample sample = resolveOverlayFaceSample(level, snapshot, fluidPos, scanPos,
-                        fluidQueryCache, lx + 0.5, ly + 0.5, lz + FACE_SAMPLE_OFFSET, m00, m10, m20, m01, m11, m21, m02, m12,
-                        m22, tX, tY, tZ);
+                    final @Nullable OverlayFaceSample sample = stableSample != null ? stableSample : resolveOverlayFaceSample(level,
+                        snapshot, fluidPos, scanPos, fluidQueryCache, lx + 0.5, ly + 0.5, lz + FACE_SAMPLE_OFFSET, m00, m10, m20,
+                        m01, m11, m21, m02, m12, m22, tX, tY, tZ);
                     if (sample != null) {
                         if (fullCell) {
                             solidPos.set(cache.minX + lx, cache.minY + ly, cache.minZ + lz - 1);
@@ -563,9 +565,9 @@ public final class ShipWaterPocketLiquidOverlay {
                 final boolean interiorFace = isInteriorOpen(open, interior, n);
                 final boolean solidFace = !open.get(n) && overlaySolids != null && overlaySolids.get(n);
                 if (fullCell || interiorFace || solidFace) {
-                    final @Nullable OverlayFaceSample sample = resolveOverlayFaceSample(level, snapshot, fluidPos, scanPos,
-                        fluidQueryCache, lx + 0.5, ly + 0.5, lz + 1.0 - FACE_SAMPLE_OFFSET, m00, m10, m20, m01, m11, m21, m02,
-                        m12, m22, tX, tY, tZ);
+                    final @Nullable OverlayFaceSample sample = stableSample != null ? stableSample : resolveOverlayFaceSample(level,
+                        snapshot, fluidPos, scanPos, fluidQueryCache, lx + 0.5, ly + 0.5, lz + 1.0 - FACE_SAMPLE_OFFSET, m00, m10,
+                        m20, m01, m11, m21, m02, m12, m22, tX, tY, tZ);
                     if (sample != null) {
                         if (fullCell) {
                             solidPos.set(cache.minX + lx, cache.minY + ly, cache.minZ + lz + 1);
