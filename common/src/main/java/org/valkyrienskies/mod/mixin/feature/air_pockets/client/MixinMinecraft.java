@@ -6,10 +6,8 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import org.valkyrienskies.mod.air_pockets.client.ShipWaterPocketCurrentShipRenderContext;
-import org.valkyrienskies.mod.air_pockets.client.ShipWaterPocketExternalWaterCull;
-import org.valkyrienskies.mod.air_pockets.client.ShipWaterPocketExternalWaterCullRenderContext;
 import org.valkyrienskies.mod.air_pockets.client.ShipInteriorFogRenderer;
+import org.valkyrienskies.mod.air_pockets.client.ShipWaterPocketExternalWaterCull;
 import org.valkyrienskies.mod.air_pockets.client.ShipWaterPocketLiquidOverlay;
 import org.valkyrienskies.mod.common.air_pockets.ShipWaterPocketManager;
 
@@ -30,8 +28,6 @@ public abstract class MixinMinecraft {
     @Inject(method = "clearLevel", at = @At("TAIL"))
     private void valkyrienair$clearShipWaterPocketRenderer(final CallbackInfo ci) {
         ShipWaterPocketExternalWaterCull.clear();
-        ShipWaterPocketExternalWaterCullRenderContext.clear();
-        ShipWaterPocketCurrentShipRenderContext.clear();
         ShipInteriorFogRenderer.clear();
         ShipWaterPocketLiquidOverlay.clear();
     }

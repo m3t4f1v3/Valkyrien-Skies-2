@@ -42,7 +42,7 @@ public abstract class FireMixin {
         final double origY = pos.getY();
         final double origZ = pos.getZ();
 
-        VSGameUtilsKt.transformToNearbyShipsAndWorld(level, origX, origY, origZ, 3, (x, y, z) -> {
+        VSGameUtilsKt.transformToNearbyShipsAndWorld(level, origX, origY, origZ, 3, (double x, double y, double z) -> {
             final BlockPos newPos = BlockPos.containing(x, y, z);
 
             if (level.isWaterAt(newPos)) {
@@ -102,7 +102,7 @@ public abstract class FireMixin {
         final double origY = pos.getY();
         final double origZ = pos.getZ();
 
-        VSGameUtilsKt.transformToNearbyShipsAndWorld(level, origX, origY, origZ, 1, (x, y, z) -> {
+        VSGameUtilsKt.transformToNearbyShipsAndWorld(level, origX, origY, origZ, 1, (double x, double y, double z) -> {
 
             final BlockPos newPos = BlockPos.containing(x, y, z);
             if (level.isWaterAt(newPos)) {

@@ -4,11 +4,13 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexSorting;
 import net.minecraft.client.Camera;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.RenderType;
+import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
@@ -17,41 +19,43 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.valkyrienskies.mod.air_pockets.client.ShipInteriorFogRenderer;
+import org.valkyrienskies.mod.air_pockets.client.ShipPocketWorldWaterOccluder;
 import org.valkyrienskies.mod.air_pockets.client.ShipWaterPocketLiquidOverlay;
-import org.valkyrienskies.mod.air_pockets.client.ShipWaterPocketExternalWaterCullRenderContext;
 import org.valkyrienskies.mod.common.config.VSGameConfig;
 
-// Some renderers can overwrite LevelRenderer's chunk-layer rendering, which makes INVOKE-based injections into that
-// method fragile. We track active world *fluid* passes here and drive shader uniform updates from ShaderInstance#apply.
 @Mixin(value = LevelRenderer.class, priority = 900)
 public abstract class MixinLevelRenderer {
 
     @Shadow
     private @Nullable ClientLevel level;
 
+    /**
+     * Right before the world translucent chunk layer (water, glass, ice, ...) draws, write
+     * opaque depth (with color writes off) at every pocket-air voxel of every ship. World
+     * translucent then z-fails inside pockets and the pixels keep whatever was already in the
+     * framebuffer — no shader injection required, so this works for vanilla, Sodium, Embeddium
+     * and Iris/Oculus shaderpacks.
+     *
+     * <p>We hook at the HEAD of {@code renderChunkLayer} itself rather than at a specific
+     * {@code INVOKE} call site inside {@code renderLevel}. This is robust against Embeddium /
+     * Iris / Oculus reordering or removing call sites in {@code renderLevel}, and we filter
+     * by {@link RenderType#translucent()} at runtime so this only fires once per frame at the
+     * right moment.</p>
+     */
     @Inject(
         method = "renderChunkLayer(Lnet/minecraft/client/renderer/RenderType;Lcom/mojang/blaze3d/vertex/PoseStack;DDDLorg/joml/Matrix4f;)V",
         at = @At("HEAD"),
-        require = 0
+        require = 1
     )
-    private void valkyrienair$beginWorldTranslucentChunkLayer(final RenderType renderType,
-        final PoseStack poseStack, final double camX, final double camY, final double camZ, final Matrix4f projectionMatrix,
+    private void valkyrienair$renderWorldWaterOccluder(final RenderType renderType, final PoseStack poseStack,
+        final double camX, final double camY, final double camZ, final Matrix4f projectionMatrix,
         final CallbackInfo ci) {
+        if (renderType != RenderType.translucent()) return;
         if (this.level == null) return;
-        if (!ShipWaterPocketExternalWaterCullRenderContext.isFluidChunkLayer(renderType)) return;
-        ShipWaterPocketExternalWaterCullRenderContext.beginWorldFluidChunkLayer(this.level, renderType, camX, camY, camZ);
-    }
-
-    @Inject(
-        method = "renderChunkLayer(Lnet/minecraft/client/renderer/RenderType;Lcom/mojang/blaze3d/vertex/PoseStack;DDDLorg/joml/Matrix4f;)V",
-        at = @At("TAIL"),
-        require = 0
-    )
-    private void valkyrienair$endWorldTranslucentChunkLayer(final RenderType renderType,
-        final PoseStack poseStack, final double camX, final double camY, final double camZ, final Matrix4f projectionMatrix,
-        final CallbackInfo ci) {
-        if (!ShipWaterPocketExternalWaterCullRenderContext.isFluidChunkLayer(renderType)) return;
-        ShipWaterPocketExternalWaterCullRenderContext.endWorldFluidChunkLayer();
+        final Camera camera = Minecraft.getInstance().gameRenderer.getMainCamera();
+        if (camera == null) return;
+        final Vec3 camPos = camera.getPosition();
+        ShipPocketWorldWaterOccluder.render(camPos.x, camPos.y, camPos.z, projectionMatrix, poseStack);
     }
 
     @Inject(
