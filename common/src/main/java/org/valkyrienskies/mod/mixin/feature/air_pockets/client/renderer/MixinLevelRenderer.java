@@ -29,19 +29,7 @@ public abstract class MixinLevelRenderer {
     @Shadow
     private @Nullable ClientLevel level;
 
-    /**
-     * Right before the world translucent chunk layer (water, glass, ice, ...) draws, write
-     * opaque depth (with color writes off) at every pocket-air voxel of every ship. World
-     * translucent then z-fails inside pockets and the pixels keep whatever was already in the
-     * framebuffer — no shader injection required, so this works for vanilla, Sodium, Embeddium
-     * and Iris/Oculus shaderpacks.
-     *
-     * <p>We hook at the HEAD of {@code renderChunkLayer} itself rather than at a specific
-     * {@code INVOKE} call site inside {@code renderLevel}. This is robust against Embeddium /
-     * Iris / Oculus reordering or removing call sites in {@code renderLevel}, and we filter
-     * by {@link RenderType#translucent()} at runtime so this only fires once per frame at the
-     * right moment.</p>
-     */
+    // render RIGHT before where water is rendered, tripwire chosen bc its last
     @Inject(
         method = "renderChunkLayer(Lnet/minecraft/client/renderer/RenderType;Lcom/mojang/blaze3d/vertex/PoseStack;DDDLorg/joml/Matrix4f;)V",
         at = @At("HEAD"),
@@ -59,14 +47,16 @@ public abstract class MixinLevelRenderer {
     }
 
     @Inject(
-        method = "renderLevel(Lcom/mojang/blaze3d/vertex/PoseStack;FJZLnet/minecraft/client/Camera;Lnet/minecraft/client/renderer/GameRenderer;Lnet/minecraft/client/renderer/LightTexture;Lorg/joml/Matrix4f;)V",
+        method = "renderChunkLayer(Lnet/minecraft/client/renderer/RenderType;Lcom/mojang/blaze3d/vertex/PoseStack;DDDLorg/joml/Matrix4f;)V",
         at = @At("TAIL"),
         require = 0
     )
-    private void valkyrienair$renderLiquidOverlay(final PoseStack poseStack, final float partialTick, final long finishNanoTime,
-        final boolean renderBlockOutline, final Camera camera, final GameRenderer gameRenderer, final LightTexture lightTexture,
-        final Matrix4f projectionMatrix, final CallbackInfo ci) {
+    private void valkyrienair$renderLiquidOverlay(final RenderType renderType, final PoseStack poseStack,
+        final double camX, final double camY, final double camZ, final Matrix4f projectionMatrix,
+        final CallbackInfo ci) {
+        Camera camera = Minecraft.getInstance().gameRenderer.getMainCamera();
         if (this.level == null || camera == null) return;
+        if (renderType != RenderType.translucent()) return;
 
         final var camPos = camera.getPosition();
         final Matrix4f oldProjection = new Matrix4f(RenderSystem.getProjectionMatrix());
