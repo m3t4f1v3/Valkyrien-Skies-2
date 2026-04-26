@@ -50,7 +50,7 @@ public abstract class MixinLevelRenderer {
     private void valkyrienair$renderWorldWaterOccluder(final RenderType renderType, final PoseStack poseStack,
         final double camX, final double camY, final double camZ, final Matrix4f projectionMatrix,
         final CallbackInfo ci) {
-        if (renderType != RenderType.translucent()) return;
+        if (renderType != RenderType.tripwire()) return;
         if (this.level == null) return;
         final Camera camera = Minecraft.getInstance().gameRenderer.getMainCamera();
         if (camera == null) return;

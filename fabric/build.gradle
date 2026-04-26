@@ -24,7 +24,7 @@ loom {
     accessWidenerPath = project(":common").loom.accessWidenerPath
     runs {
         client {
-            property "vsk.occluder.debug", "true"
+            property "vsk.occluder.debug", "false"
         }
     }
 }
