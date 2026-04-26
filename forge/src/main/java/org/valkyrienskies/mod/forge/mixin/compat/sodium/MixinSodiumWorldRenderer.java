@@ -6,6 +6,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.valkyrienskies.mod.air_pockets.client.AirPocketRenderHooks;
+import org.valkyrienskies.mod.common.config.VSGameConfig;
 import org.valkyrienskies.mod.compat.SodiumCompat;
 
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -23,8 +24,7 @@ public abstract class MixinSodiumWorldRenderer {
     @Inject(method = "drawChunkLayer", at = @At("TAIL"))
     private void afterChunkLayer(RenderType renderLayer, PoseStack matrixStack, double x, double y, double z,
             CallbackInfo ci) {
-        // todo gate
-        if (renderLayer == RenderType.tripwire()) {
+        if (renderLayer == RenderType.tripwire() && VSGameConfig.CLIENT.getUnderwater().getEnableWaterCulling()) {
             renderSectionManager.renderLayer(ChunkRenderMatrices.from(matrixStack), AirPocketRenderHooks.AIR_POCKET_PASS, x, y, z);
         }
         SodiumCompat.renderShips(renderSectionManager, renderLayer, ChunkRenderMatrices.from(matrixStack), x, y, z);

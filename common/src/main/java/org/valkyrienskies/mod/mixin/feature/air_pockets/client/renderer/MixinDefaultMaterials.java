@@ -6,6 +6,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.valkyrienskies.mod.air_pockets.client.AirPocketRenderHooks;
+import org.valkyrienskies.mod.common.config.VSGameConfig;
 
 import me.jellysquid.mods.sodium.client.render.chunk.terrain.material.DefaultMaterials;
 import me.jellysquid.mods.sodium.client.render.chunk.terrain.material.Material;
@@ -19,12 +20,12 @@ public class MixinDefaultMaterials {
     private static final Material AIR_POCKET = new Material(
             AirPocketRenderHooks.AIR_POCKET_PASS,
             AlphaCutoffParameter.ZERO,
-            true
-    );
+            true);
 
     @Inject(method = "forRenderLayer", at = @At("HEAD"), cancellable = true)
     private static void onForRenderLayer(RenderType layer, CallbackInfoReturnable<Material> cir) {
-        if (layer == RenderType.tripwire()) {
+        if (layer == RenderType.tripwire()
+                && VSGameConfig.CLIENT.getUnderwater().getEnableWaterCulling()) {
             cir.setReturnValue(AIR_POCKET);
         }
     }
