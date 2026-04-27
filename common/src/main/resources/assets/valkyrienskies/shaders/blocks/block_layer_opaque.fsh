@@ -47,20 +47,36 @@ void main() {
     }
 #endif
 
+#ifdef USE_VANILLA_COLOR_FORMAT
+    // Apply per-vertex color. AO shade is applied ahead of time on the CPU.
+    diffuseColor *= v_Color;
+#else
     // Apply per-vertex color
     diffuseColor.rgb *= v_Color.rgb;
 
     vec3 fdx = dFdx(v_WorldPos);
     vec3 fdy = dFdy(v_WorldPos);
-    vec3 n = normalize(cross(fdx, fdy));
-    n = (v_RotationMatrix * vec4(n, 0.0)).xyz;
-    // n *= 0.5;
-    // n += vec3(0.5);
-    float shade = vanillaShadeFromNormal(n);
-    diffuseColor.rgb *= shade;
+    
+    vec3 rawN = cross(fdx, fdy);
+    float len2 = dot(rawN, rawN);
+    float dx2  = dot(fdx, fdx);
+    float dy2  = dot(fdy, fdy);
 
-    // Apply ambient occlusion "shade"
-    // diffuseColor.rgb *= v_Color.a;
+    float denom = dx2 * dy2 + 1e-20;
+    float quality = len2 / denom;
+
+    // rawN = nan -> rawN != rawN
+    if (quality < 5e-4 || !all(equal(rawN, rawN))) {
+        // Apply ambient occlusion "shade"
+        diffuseColor.rgb *= v_Color.a;
+    } else {
+        vec3 n = normalize(rawN);
+        n = (v_RotationMatrix * vec4(n, 0.0)).xyz;
+
+        float shade = vanillaShadeFromNormal(n);
+        diffuseColor.rgb *= shade;
+    }
+#endif
 
     fragColor = _linearFog(diffuseColor, v_FragDistance, u_FogColor, u_FogStart, u_FogEnd);
 }

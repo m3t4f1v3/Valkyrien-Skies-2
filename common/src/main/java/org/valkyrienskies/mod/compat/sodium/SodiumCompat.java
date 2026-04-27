@@ -172,6 +172,12 @@ public class SodiumCompat {
     }
 
     private static GlProgram<ShipThing> createShader(String path, ChunkShaderOptions options) {
+        // ShaderConstants.Builder builder = ShaderConstants.builder();
+        // need to manually parse ts
+        // builder.addAll(options.constants().getDefineStrings());
+        // just for whoever wants it
+        // ShaderConstants constants = builder.build();
+
         ShaderConstants constants = options.constants();
 
         GlShader vertShader = ShaderLoader.loadShader(ShaderType.VERTEX,
