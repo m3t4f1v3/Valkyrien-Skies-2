@@ -41,7 +41,7 @@ public class ViewFinderControllerMixin {
         @Share("ship")LocalRef<ClientShip> ship, @Share("eulerDegrees")LocalRef<Vector3f> eulerAngles){
         if (ship.get() != null) {
             Quaternionf rotation = new Quaternionf().rotationYXZ(yaw * (float) Math.PI / 180.0f, pitch * (float) Math.PI / 180.0f, 0.0f);
-            rotation = rotation.mul(ship.get().getRenderTransform().getWorldToShip().getNormalizedRotation(new Quaternionf()));
+            rotation = ship.get().getRenderTransform().getShipToWorld().getNormalizedRotation(new Quaternionf()).mul(rotation);
             eulerAngles.set(rotation.getEulerAnglesYXZ(new Vector3f()).mul(180.0f / (float) Math.PI));
         }
         original.call(camera, yaw, pitch);
