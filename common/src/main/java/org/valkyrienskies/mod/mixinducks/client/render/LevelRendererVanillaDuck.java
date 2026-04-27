@@ -15,7 +15,7 @@ public interface LevelRendererVanillaDuck {
 
     void vs$reloadShipVisibleChunks(VisibleChunkData data);
 
-    public record VisibleChunkData(WeakHashMap<ClientShip, ObjectList<RenderChunkInfo>> shipRenderChunks, BlockPos2ByteOpenHashMap visibileShipChunks) {
+    public record VisibleChunkData(WeakHashMap<ClientShip, ObjectList<RenderChunkInfo>> shipRenderChunks, BlockPos2ByteOpenHashMap visibleShipChunks) {
 
     }
 }

@@ -386,7 +386,7 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
 
     @Override
     public void vs$reloadShipVisibleChunks(VisibleChunkData data) {
-        this.vs$visibileShipChunks = data.visibileShipChunks();
+        this.vs$visibileShipChunks = data.visibleShipChunks();
         shipRenderChunks.forEach((ship, chunks) -> chunks.clear());
         shipRenderChunks.clear();
         this.shipRenderChunks.putAll(data.shipRenderChunks());

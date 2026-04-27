@@ -88,6 +88,8 @@ dependencies {
     modCompileOnly("maven.modrinth:entity-model-features:3.0.7-fabric-1.20.1")
     modCompileOnly("maven.modrinth:entitytexturefeatures:7.0.6-fabric-1.20.1")
 
+    modCompileOnly("curse.maven:vista-1368607:7929284")
+
     // Create compat
     modImplementation("com.simibubi.create:create-fabric:${create_fabric_version}") {
         exclude group: 'com.github.AlphaMode', module: 'fakeconfigtoml'
