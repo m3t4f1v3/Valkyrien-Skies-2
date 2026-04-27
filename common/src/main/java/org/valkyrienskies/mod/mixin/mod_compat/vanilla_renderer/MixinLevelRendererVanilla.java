@@ -12,6 +12,7 @@ import it.unimi.dsi.fastutil.objects.ObjectList;
 import java.util.ListIterator;
 import java.util.WeakHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.LevelRenderer;
