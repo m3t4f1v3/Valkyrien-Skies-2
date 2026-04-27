@@ -8,6 +8,7 @@ uniform mat4 u_RotationMatrix;
 
 out vec4 v_Color;
 out vec2 v_TexCoord;
+out vec3 v_WorldPos;
 out mat4 v_RotationMatrix;
 
 out float v_MaterialMipBias;
@@ -44,13 +45,14 @@ void main() {
     vec3 translation = u_RegionOffset + _get_draw_translation(_draw_id);
     vec3 position = _vert_position + translation;
 
+    v_WorldPos = position;
+
 #ifdef USE_FOG
     v_FragDistance = getFragDistance(u_FogShape, position);
 #endif
 
     // Transform the vertex position into model-view-projection space
     gl_Position = u_ProjectionMatrix * u_ModelViewMatrix * vec4(position, 1.0);
-    gl_Position += vec4(u_RotationMatrix[0].xyz, 0.0) * 1e-30;
 
     // Add the light color to the vertex color, and pass the texture coordinates to the fragment shader
     v_Color = _vert_color * _sample_lightmap(u_LightTex, _vert_tex_light_coord);

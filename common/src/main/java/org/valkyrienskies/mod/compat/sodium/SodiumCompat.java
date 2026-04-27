@@ -172,13 +172,7 @@ public class SodiumCompat {
     }
 
     private static GlProgram<ShipThing> createShader(String path, ChunkShaderOptions options) {
-        // ShaderConstants.Builder builder = ShaderConstants.builder();
-        // need to manually parse ts
-        // builder.addAll(options.constants().getDefineStrings());
-        // just for whoever wants it
-        // ShaderConstants constants = builder.build();
-
-        ShaderConstants constants = options.constants();
+        ShaderConstants constants = createShipShaderConstants(options);
 
         GlShader vertShader = ShaderLoader.loadShader(ShaderType.VERTEX,
                 new ResourceLocation("valkyrienskies", path + ".vsh"), constants);
@@ -200,5 +194,29 @@ public class SodiumCompat {
             vertShader.delete();
             fragShader.delete();
         }
+    }
+
+    private static ShaderConstants createShipShaderConstants(ChunkShaderOptions options) {
+        ShaderConstants.Builder builder = ShaderConstants.builder();
+
+        for (String define : options.constants().getDefineStrings()) {
+            String[] parts = define.split("\\s+", 3);
+            if (parts.length < 2 || !"#define".equals(parts[0])) {
+                throw new IllegalArgumentException("Unexpected shader define format: " + define);
+            }
+
+            String name = parts[1];
+            if ("USE_VANILLA_COLOR_FORMAT".equals(name)) {
+                continue;
+            }
+
+            if (parts.length == 2) {
+                builder.add(name);
+            } else {
+                builder.add(name, parts[2]);
+            }
+        }
+
+        return builder.build();
     }
 }
