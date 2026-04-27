@@ -324,9 +324,9 @@ object ShipAssembler {
         level.server.executeIf(
             // This condition will return true if all modified chunks have been both loaded AND
             // chunk update packets were sent to players
-            { chunkPoses.all(level::isChunkLoadedForVS) || level.server.tickCount - timeAtExecution > 60 }
+            { chunkPoses.all(level::isChunkLoadedForVS) || level.server.tickCount - timeAtExecution > 20 }
         ) {
-            if (level.server.tickCount - timeAtExecution > 60) {
+            if (level.server.tickCount - timeAtExecution > 20) {
                 ASSEMBLY_LOGGER.warn("Timed out waiting for chunks to start ticking after assembly! Forcibly resuming...")
                 ASSEMBLY_LOGGER.warn("All chunks involved in assembly: $chunkPoses")
                 ASSEMBLY_LOGGER.warn("Chunks that were not loaded: ${chunkPoses.filterNot { level.isChunkLoadedForVS(it) }}")
