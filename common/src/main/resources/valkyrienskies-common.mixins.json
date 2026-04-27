@@ -57,6 +57,7 @@
     "feature.entity_movement_packets.MixinServerEntity",
     "feature.explosions.MixinExplosion",
     "feature.fire_between_ship_and_world.LavaFluidMixin",
+    "feature.fix_blockstate_null_checks.MixinCarvedPumpkinBlock",
     "feature.fluid_escaping_ship_config.MixinFlowingFluid",
     "feature.fluid_escaping_ship_config.MixinVineBlock",
     "feature.get_entities.MixinLevel",
