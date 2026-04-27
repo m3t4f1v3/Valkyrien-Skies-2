@@ -17,6 +17,8 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.LevelRenderer.RenderChunkInfo;
+import net.minecraft.client.renderer.GameRenderer;
+import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraft.client.renderer.ViewArea;
@@ -34,6 +36,7 @@ import org.joml.Vector3d;
 import org.joml.Vector3dc;
 import org.joml.Vector3f;
 import org.joml.primitives.AABBd;
+import org.joml.primitives.AABBdc;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Mutable;
@@ -87,6 +90,36 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
     private Long lastMountedShipId = null;
     @Unique
     private ShipTransform lastTransform = null;
+    @Unique
+    private boolean vs$shipChunkVisibilityDirty = true;
+    @Unique
+    private long vs$lastShipVisibilitySignature = Long.MIN_VALUE;
+    @Unique
+    private int vs$lastShipVisibilityCount = -1;
+    @Unique
+    private boolean vs$emittedShipsStartRenderingThisFrame = false;
+    @Unique
+    private boolean vs$didApplyFrustumThisFrame = false;
+    @Unique
+    private int vs$lastShipFrustumTailCount = 0;
+
+    @Unique
+    private static long vs$quantizeRenderCoord(final double value) {
+        return Math.round(value * 256.0);
+    }
+
+    @Unique
+    private static long vs$shipVisibilitySignature(final ClientShip ship) {
+        long sig = ship.getId();
+        final AABBdc renderAabb = ship.getRenderAABB();
+        sig = 31L * sig + vs$quantizeRenderCoord(renderAabb.minX());
+        sig = 31L * sig + vs$quantizeRenderCoord(renderAabb.minY());
+        sig = 31L * sig + vs$quantizeRenderCoord(renderAabb.minZ());
+        sig = 31L * sig + vs$quantizeRenderCoord(renderAabb.maxX());
+        sig = 31L * sig + vs$quantizeRenderCoord(renderAabb.maxY());
+        sig = 31L * sig + vs$quantizeRenderCoord(renderAabb.maxZ());
+        return sig;
+    }
 
     /**
      * Fix the distance to render chunks, so that MC doesn't think ship chunks are too far away
@@ -120,22 +153,31 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
         final Player player = this.minecraft.player;
         if (player == null || !(VSGameUtilsKt.getShipMountedTo(player) instanceof final ClientShip ship)) {
             this.lastMountedShipId = null;
+            this.vs$shipChunkVisibilityDirty = needsFrustumUpdate || this.vs$shipChunkVisibilityDirty;
             return needsFrustumUpdate;
         }
         final ShipTransform transform = ship.getRenderTransform();
         if (this.lastMountedShipId == null || this.lastMountedShipId.longValue() != ship.getId() || this.lastTransform == null) {
             this.lastMountedShipId = ship.getId();
             this.lastTransform = transform;
+            this.vs$shipChunkVisibilityDirty = true;
             return true;
         }
         final boolean needUpdate = this.lastTransform != transform && !this.lastTransform.getShipToWorld().equals(transform.getShipToWorld());
         this.lastTransform = transform;
+        this.vs$shipChunkVisibilityDirty = needUpdate || needsFrustumUpdate || this.vs$shipChunkVisibilityDirty;
         return needUpdate;
     }
 
     @Override
     public void vs$setNeedsFrustumUpdate() {
         this.needsFrustumUpdate.set(true);
+        this.vs$shipChunkVisibilityDirty = true;
+    }
+
+    @Override
+    public void vs$setShipChunkVisibilityDirty() {
+        this.vs$shipChunkVisibilityDirty = true;
     }
 
     /**
@@ -148,8 +190,40 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
     private void preSetupRender(final Camera camera, final Frustum frustum, final boolean bl, final boolean bl2, final CallbackInfo ci) {
         // Gradually pre-allocate render chunk GPU buffers so they're ready when ships load
         ((IVSViewAreaMethods) viewArea).vs$fillRenderChunkPool();
+        if (!this.vs$didApplyFrustumThisFrame) {
+            this.vs$removeShipFrustumTail();
+        }
         // This mixin never gets called for IP dimensions, instead we'll call it manually
         vs$addShipVisibleChunks(frustum);
+    }
+
+    @Inject(
+        method = "renderLevel",
+        at = @At("HEAD")
+    )
+    private void vs$resetShipRenderFrameState(final PoseStack poseStack, final float partialTick, final long finishNanoTime,
+        final boolean renderBlockOutline, final Camera camera, final GameRenderer gameRenderer,
+        final LightTexture lightTexture, final Matrix4f projectionMatrix, final CallbackInfo ci) {
+        this.vs$emittedShipsStartRenderingThisFrame = false;
+    }
+
+    @Inject(
+        method = "setupRender",
+        at = @At("HEAD")
+    )
+    private void vs$beginSetupRender(final Camera camera, final Frustum frustum, final boolean bl, final boolean bl2,
+        final CallbackInfo ci) {
+        this.vs$didApplyFrustumThisFrame = false;
+    }
+
+    @Inject(
+        method = "applyFrustum",
+        at = @At("TAIL")
+    )
+    private void vs$afterApplyFrustum(final Frustum frustum, final CallbackInfo ci) {
+        this.vs$didApplyFrustumThisFrame = true;
+        this.vs$lastShipFrustumTailCount = 0;
+        this.vs$shipChunkVisibilityDirty = true;
     }
 
     /**
@@ -171,8 +245,53 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
         }
     }
 
+    @Unique
+    private void vs$removeShipFrustumTail() {
+        if (this.vs$lastShipFrustumTailCount <= 0) {
+            return;
+        }
+        final int targetSize = Math.max(0, this.renderChunksInFrustum.size() - this.vs$lastShipFrustumTailCount);
+        while (this.renderChunksInFrustum.size() > targetSize) {
+            this.renderChunksInFrustum.remove(this.renderChunksInFrustum.size() - 1);
+        }
+        this.vs$lastShipFrustumTailCount = 0;
+    }
+
+    @Unique
+    private int vs$appendShipRenderChunksToFrustumList() {
+        final int[] appended = {0};
+        shipRenderChunks.forEach((ship, chunks) -> {
+            for (int i = 0; i < chunks.size(); i++) {
+                renderChunksInFrustum.add(chunks.get(i));
+                appended[0]++;
+            }
+        });
+        return appended[0];
+    }
+
     @Override
     public void vs$addShipVisibleChunks(final Frustum frustum) {
+        long shipVisibilitySignature = 0L;
+        int loadedShipCount = 0;
+        for (final ClientShip shipObject : VSGameUtilsKt.getShipObjectWorld(level).getLoadedShips()) {
+            loadedShipCount++;
+            shipVisibilitySignature = 31L * shipVisibilitySignature + vs$shipVisibilitySignature(shipObject);
+        }
+
+        if (!this.vs$shipChunkVisibilityDirty &&
+            this.vs$lastShipVisibilityCount == loadedShipCount &&
+            this.vs$lastShipVisibilitySignature == shipVisibilitySignature
+        ) {
+            this.vs$lastShipFrustumTailCount = this.vs$appendShipRenderChunksToFrustumList();
+            return;
+        }
+
+        shipRenderChunks.forEach((ship, chunks) -> chunks.clear());
+        vs$visibileShipChunks = new BlockPos2ByteOpenHashMap();
+        this.vs$lastShipVisibilityCount = loadedShipCount;
+        this.vs$lastShipVisibilitySignature = shipVisibilitySignature;
+        this.vs$shipChunkVisibilityDirty = false;
+
         final IVSViewAreaMethods shipViewArea = (IVSViewAreaMethods) viewArea;
         final AABBd tempAABB = new AABBd();
         for (final ClientShip shipObject : VSGameUtilsKt.getShipObjectWorld(level).getLoadedShips()) {
@@ -224,23 +343,17 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
                         }
                         shipRenderChunks.computeIfAbsent(shipObject, k -> new ObjectArrayList<>()).add(newChunkInfo);
                         vs$visibileShipChunks.put(x, y, z, (byte) 1);
-                        renderChunksInFrustum.add(newChunkInfo);
                     }
                 }
             });
         }
+
+        this.vs$lastShipFrustumTailCount = this.vs$appendShipRenderChunksToFrustumList();
     }
 
-    @Inject(
-        method = "*",
-        at = @At(
-            value = "INVOKE",
-            target = "Lit/unimi/dsi/fastutil/objects/ObjectArrayList;clear()V"
-        )
-    )
-    private void clearShipChunks(final CallbackInfo ci) {
-        shipRenderChunks.forEach((ship, chunks) -> chunks.clear());
-        vs$visibileShipChunks = new BlockPos2ByteOpenHashMap();
+    @Override
+    public boolean vs$isShipChunkVisible(final int chunkX, final int sectionY, final int chunkZ) {
+        return vs$visibileShipChunks.contains(chunkX, sectionY, chunkZ);
     }
 
     @WrapOperation(
@@ -256,11 +369,13 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
 
         renderChunkLayer.call(receiver, renderType, poseStack, camX, camY, camZ, matrix4f);
 
-        VSGameEvents.INSTANCE.getShipsStartRendering().emit(new VSGameEvents.ShipStartRenderEvent(
-            receiver, renderType, poseStack, camX, camY, camZ, matrix4f
-        ));
-
         if (!shipRenderChunks.isEmpty()) {
+            if (!this.vs$emittedShipsStartRenderingThisFrame) {
+                this.vs$emittedShipsStartRenderingThisFrame = true;
+                VSGameEvents.INSTANCE.getShipsStartRendering().emit(new VSGameEvents.ShipStartRenderEvent(
+                    receiver, renderType, poseStack, camX, camY, camZ, matrix4f
+                ));
+            }
             renderAllShipChunkLayers(renderType, poseStack, camX, camY, camZ, matrix4f, receiver);
         }
     }

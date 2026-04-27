@@ -1,35 +1,25 @@
 package org.valkyrienskies.mod.mixin.mod_compat.sodium;
 
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
-import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import java.util.SortedSet;
 
-import me.jellysquid.mods.sodium.client.gl.device.CommandList;
-import me.jellysquid.mods.sodium.client.gl.device.RenderDevice;
+import net.minecraft.client.Minecraft;
 import me.jellysquid.mods.sodium.client.render.SodiumWorldRenderer;
-import me.jellysquid.mods.sodium.client.render.chunk.ChunkRenderMatrices;
 import me.jellysquid.mods.sodium.client.render.chunk.RenderSectionManager;
 import me.jellysquid.mods.sodium.client.render.chunk.lists.SortedRenderLists;
-import me.jellysquid.mods.sodium.client.render.chunk.terrain.DefaultTerrainRenderPasses;
-import me.jellysquid.mods.sodium.client.render.chunk.terrain.TerrainRenderPass;
-import me.jellysquid.mods.sodium.client.render.viewport.CameraTransform;
 import me.jellysquid.mods.sodium.client.render.viewport.Viewport;
 import net.minecraft.client.Camera;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderBuffers;
-import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderDispatcher;
-import net.minecraft.client.renderer.entity.layers.RenderLayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.BlockDestructionProgress;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.entity.BlockEntity;
 
-import org.joml.Matrix4f;
-import org.joml.Vector3dc;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -54,6 +44,8 @@ public abstract class MixinSodiumWorldRenderer {
     private RenderSectionManager renderSectionManager;
     @Unique
     private SortedRenderLists currentRenderLists;
+    @Unique
+    private boolean vs$prevFrameHadShips;
 
     @Redirect(
         method = "renderBlockEntity",
@@ -125,20 +117,15 @@ public abstract class MixinSodiumWorldRenderer {
         }
     }
 
-//    /**
-//     * @reason Fix ship ghosts when ships are deleted and camera hasn't moved, and ships not rendering when teleported
-//     * and camera hasn't moved
-//     */
-//    @Inject(method = "updateChunks", at = @At("HEAD"))
-//    private void preUpdateChunks(final CallbackInfo callbackInfo) {
-//        final boolean curFrameHasShips =
-//            !VSGameUtilsKt.getShipObjectWorld(Minecraft.getInstance()).getLoadedShips().isEmpty();
-//        // Mark the graph dirty if ships were loaded this frame or the previous one
-//        if (vs$prevFrameHadShips || curFrameHasShips) {
-//            this.renderSectionManager.markGraphDirty();
-//        }
-//        vs$prevFrameHadShips = curFrameHasShips;
-//    }
+    @Inject(method = "setupTerrain", at = @At("HEAD"))
+    private void preUpdateChunks(final CallbackInfo callbackInfo) {
+        final boolean curFrameHasShips =
+            !VSGameUtilsKt.getShipObjectWorld(Minecraft.getInstance()).getLoadedShips().isEmpty();
+        if (vs$prevFrameHadShips || curFrameHasShips) {
+            this.renderSectionManager.markGraphDirty();
+        }
+        vs$prevFrameHadShips = curFrameHasShips;
+    }
 
     /**
      * Fix entities in ships not rendering when Sodium is installed
