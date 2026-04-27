@@ -12,6 +12,9 @@ dependencies {
     modCompileOnly("maven.modrinth:sodium:${sodium_version}")
     modCompileOnly("maven.modrinth:iris:${iris_version}")
 
+    // Alex Caves
+    modCompileOnly("maven.modrinth:alexs-caves:$alexscaves_version")
+
     // vs-core
     runtimeOnly("org.valkyrienskies.core:impl:${rootProject.vs_core_version}") {
         exclude module: "netty-buffer"
@@ -83,9 +86,9 @@ dependencies {
     modCompileOnly("com.github.iPortalTeam.ImmersivePortalsMod:imm_ptl_core:${immptl_version}")
     modCompileOnly("com.github.iPortalTeam.ImmersivePortalsMod:q_misc_util:${immptl_version}")
     modCompileOnly("com.github.iPortalTeam.ImmersivePortalsMod:build:${immptl_version}")
-    modCompileOnly("com.rbasamoyai:createbigcannons:${createbigcannons_version}+mc.${minecraft_version}-fabric") { transitive = false }
-    modCompileOnly("com.rbasamoyai:createbigcannons:${createbigcannons_version}+mc.${minecraft_version}-forge") { transitive = false }
-    modCompileOnly("com.rbasamoyai:ritchiesprojectilelib:2.1.0+mc.${minecraft_version}-forge")
+    modCompileOnly("com.rbasamoyai:createbigcannons:${createbigcannons_version}+mc.${minecraft_version}-fabric${createbigcannons_build}") { transitive = false }
+    modCompileOnly("com.rbasamoyai:createbigcannons:${createbigcannons_version}+mc.${minecraft_version}-forge${createbigcannons_build}") { transitive = false }
+    modCompileOnly("com.rbasamoyai:ritchiesprojectilelib:${rpl_version}+mc.${minecraft_version}-forge")
 }
 
 architectury {

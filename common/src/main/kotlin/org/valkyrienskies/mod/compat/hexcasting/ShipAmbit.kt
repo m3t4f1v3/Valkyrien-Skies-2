@@ -12,10 +12,9 @@ import org.valkyrienskies.mod.api.positionToShip
 import org.valkyrienskies.mod.api.positionToWorld
 import org.valkyrienskies.mod.common.getLoadedShipManagingPos
 import org.valkyrienskies.mod.common.util.toJOML
-import org.valkyrienskies.mod.compat.hexcasting.hextweaks.HexTweaksCompat
 import java.util.UUID
 
-open class AmbitRemapping(val env: CastingEnvironment) : IsVecInRange, HasEditPermissionsAt {
+open class ShipAmbit(val env: CastingEnvironment) : IsVecInRange, HasEditPermissionsAt {
     private val id = UUID.randomUUID()
     private val key = Key(id)
 
@@ -25,10 +24,8 @@ open class AmbitRemapping(val env: CastingEnvironment) : IsVecInRange, HasEditPe
     override fun onHasEditPermissionsAt(pos: BlockPos, current: Boolean): Boolean {
         if (current) return true
         // Always use Worldspace for permissions
-        env.world.getLoadedShipManagingPos(pos)?.let { ship ->
-            return env.hasEditPermissionsAt(BlockPos.containing(ship.positionToWorld(pos.center)))
-        }
-        return current
+        val ship = env.world.getLoadedShipManagingPos(pos)
+        return env.hasEditPermissionsAt(ship?.let { BlockPos.containing(it.positionToWorld(pos.center)) } ?: pos)
     }
 
     @OptIn(GameTickOnly::class)
@@ -47,14 +44,10 @@ open class AmbitRemapping(val env: CastingEnvironment) : IsVecInRange, HasEditPe
 
         // Is Caster in the Shipyard?
         // Transform Other Position to Caster's Shipyard
-        casterShip?.let { casterShip -> return env.isVecInRange(casterShip.positionToShip(otherPos)) } ?: return env.isVecInRange(otherPos)
+        return env.isVecInRange(casterShip?.positionToShip(otherPos) ?: otherPos)
     }
 
     open fun getCasterPosition(): Vec3? {
-        try { // Since there is no X-Plat way to test if a mod is loaded
-            return HexTweaksCompat.getComputerPosition(env)
-        } catch (_: ClassNotFoundException) {}
-
         return when (env) {
             is CircleCastEnv -> {
                 env.impetus?.blockPos?.center
@@ -66,4 +59,4 @@ open class AmbitRemapping(val env: CastingEnvironment) : IsVecInRange, HasEditPe
     }
 }
 
-class Key(val id: UUID) : Key<AmbitRemapping> {}
+class Key(val id: UUID) : Key<ShipAmbit> {}
