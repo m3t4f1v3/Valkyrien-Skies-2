@@ -12,7 +12,6 @@ import it.unimi.dsi.fastutil.objects.ObjectList;
 import java.util.ListIterator;
 import java.util.WeakHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
-import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.LevelRenderer;
@@ -142,10 +141,10 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
      * Add ship render chunks to [renderChunks]
      */
     @Inject(
-        method = "setupRender",
+        method = "applyFrustum",
         at = @At("RETURN")
     )
-    private void preSetupRender(final Camera camera, final Frustum frustum, final boolean bl, final boolean bl2, final CallbackInfo ci) {
+    private void postApplyFrustum(Frustum frustum, CallbackInfo ci){
         // Gradually pre-allocate render chunk GPU buffers so they're ready when ships load
         ((IVSViewAreaMethods) viewArea).vs$fillRenderChunkPool();
         // This mixin never gets called for IP dimensions, instead we'll call it manually
