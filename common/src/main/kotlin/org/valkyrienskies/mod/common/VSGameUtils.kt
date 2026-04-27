@@ -283,7 +283,7 @@ inline fun Level.transformToNearbyShipsAndWorld(
     }
 
     for (nearbyShip in shipObjectWorld.allShips.getIntersecting(aabb, this!!.dimensionId)) {
-        if (nearbyShip == currentShip) continue
+        if (nearbyShip.id == currentShip?.id) continue
         val posInShip = nearbyShip.worldToShip.transformPosition(posInWorld, temp0)
         cb(posInShip.x(), posInShip.y(), posInShip.z())
     }
