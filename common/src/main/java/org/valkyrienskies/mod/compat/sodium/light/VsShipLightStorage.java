@@ -23,6 +23,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.LightLayer;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.lighting.LayerLightEventListener;
 
 /**
@@ -46,9 +47,16 @@ import net.minecraft.world.level.lighting.LayerLightEventListener;
  */
 public class VsShipLightStorage {
     public static final int BLOCKS_PER_SECTION = 18 * 18 * 18; // 5832
-    public static final int LIGHT_SIZE_BYTES = BLOCKS_PER_SECTION;
-    public static final int SECTION_SIZE_BYTES = ((LIGHT_SIZE_BYTES + 3) / 4) * 4; // 5832
-    public static final int SECTION_SIZE_INTS = SECTION_SIZE_BYTES / 4; // 1458
+    public static final int LIGHT_SIZE_BYTES = BLOCKS_PER_SECTION; // 5832
+    // Solid bitmap: one bit per block in the 18^3 volume, packed in 32-bit words.
+    public static final int SOLID_SIZE_BYTES = ((BLOCKS_PER_SECTION + 31) / 32) * 4; // 732
+    // Layout: [solid bits (732 B)] [light bytes (5832 B)] -- matches Flywheel's layout
+    // so the light_lut.glsl-style smooth lookup logic can be ported verbatim.
+    public static final int SOLID_START_BYTES = 0;
+    public static final int LIGHT_START_BYTES = SOLID_SIZE_BYTES;
+    public static final int SECTION_SIZE_BYTES = SOLID_SIZE_BYTES + LIGHT_SIZE_BYTES; // 6564
+    public static final int SECTION_SIZE_INTS = SECTION_SIZE_BYTES / 4; // 1641
+    public static final int LIGHT_START_INTS = SOLID_SIZE_BYTES / 4; // 183
 
     private static final int DEFAULT_CAPACITY = 64;
     private static final int INVALID = -1;
@@ -141,10 +149,19 @@ public class VsShipLightStorage {
      * Request all world sections that intersect the given world-space AABB.
      * Bails out if the AABB spans more than {@value #MAX_SECTIONS_PER_REQUEST}
      * sections (degenerate or absurdly large ships) to avoid pathological work.
+     *
+     * <p>The AABB is padded by 1 block in each direction before sectioning so
+     * sub-block jitter in the ship's interpolated render transform doesn't
+     * cause the tracked-section set to flip frame-to-frame at boundaries — that
+     * flip would force a LUT rebuild and flicker the lighting on vertices that
+     * happen to land in a section that was just pruned.
      */
     public void requestSectionsInAabb(LevelAccessor level,
             double minX, double minY, double minZ,
             double maxX, double maxY, double maxZ) {
+        minX -= 1.0; minY -= 1.0; minZ -= 1.0;
+        maxX += 1.0; maxY += 1.0; maxZ += 1.0;
+
         int sxMin = SectionPos.blockToSectionCoord((int) Math.floor(minX));
         int syMin = SectionPos.blockToSectionCoord((int) Math.floor(minY));
         int szMin = SectionPos.blockToSectionCoord((int) Math.floor(minZ));
@@ -388,7 +405,37 @@ public class VsShipLightStorage {
         int yMin = SectionPos.sectionToBlockCoord(SectionPos.y(sectionPos));
         int zMin = SectionPos.sectionToBlockCoord(SectionPos.z(sectionPos));
 
+        // Pass 1: solid bitmap. Bit at (x+1) + (z+1)*18 + (y+1)*324 for the
+        // block at world (xMin+x, yMin+y, zMin+z). The bit ordering is the same
+        // as the byte layout so the shader can read either via the same offset
+        // formula.
+        BitSet solid = new BitSet(BLOCKS_PER_SECTION);
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+        int bitIndex = 0;
+        for (int y = -1; y < 17; y++) {
+            for (int z = -1; z < 17; z++) {
+                for (int x = -1; x < 17; x++) {
+                    pos.set(xMin + x, yMin + y, zMin + z);
+                    BlockState state = level.getBlockState(pos);
+                    if (state.canOcclude() && state.isCollisionShapeFullBlock(level, pos)) {
+                        solid.set(bitIndex);
+                    }
+                    bitIndex++;
+                }
+            }
+        }
+        // BitSet.toLongArray returns words in little-endian bit order, which on
+        // a little-endian platform stores correctly for the shader's R32UI reads
+        // at uintOffset = bitOffset >> 5.
+        long[] solidWords = solid.toLongArray();
+        long solidPtr = ptr + SOLID_START_BYTES;
+        for (long w : solidWords) {
+            MemoryUtil.memPutLong(solidPtr, w);
+            solidPtr += Long.BYTES;
+        }
+
+        // Pass 2: per-block light bytes (low nibble = block, high nibble = sky).
+        long lightPtr = ptr + LIGHT_START_BYTES;
         for (int y = -1; y < 17; y++) {
             for (int z = -1; z < 17; z++) {
                 for (int x = -1; x < 17; x++) {
@@ -397,7 +444,7 @@ public class VsShipLightStorage {
                     int s = sky.getLightValue(pos);
                     int offset = (x + 1) + (z + 1) * 18 + (y + 1) * 18 * 18;
                     byte packed = (byte) ((b & 0xF) | ((s & 0xF) << 4));
-                    MemoryUtil.memPutByte(ptr + offset, packed);
+                    MemoryUtil.memPutByte(lightPtr + offset, packed);
                 }
             }
         }

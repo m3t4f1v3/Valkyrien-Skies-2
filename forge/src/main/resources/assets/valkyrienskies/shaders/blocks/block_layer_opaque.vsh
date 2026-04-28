@@ -107,8 +107,11 @@ void main() {
     // Transform the vertex position into model-view-projection space
     gl_Position = u_ProjectionMatrix * u_ModelViewMatrix * vec4(position, 1.0);
 
-    // World-space lighting lookup
-    vec3 cameraRelWorldPos = (u_LocalToCameraRel * vec4(position, 1.0)).xyz;
+    // World-space lighting lookup. Tiny positive bias before flooring so
+    // vertices at exact integer block-corner positions don't oscillate between
+    // adjacent sections frame-to-frame from float-precision noise (which would
+    // read the wrong slot in the per-section buffer and flicker the lighting).
+    vec3 cameraRelWorldPos = (u_LocalToCameraRel * vec4(position, 1.0)).xyz + vec3(1e-3);
     ivec3 worldBlockPos = ivec3(floor(cameraRelWorldPos)) + u_VsRenderOrigin;
 
     vec2 vsLightCoord;

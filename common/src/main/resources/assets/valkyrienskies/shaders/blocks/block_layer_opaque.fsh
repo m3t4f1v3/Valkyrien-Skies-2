@@ -2,27 +2,32 @@
 
 #import <sodium:include/fog.glsl>
 
-in vec4 v_Color; // The interpolated vertex color
-in vec2 v_TexCoord; // The interpolated block texture coordinates
-in float v_FragDistance; // The fragment's distance from the camera
-
+in vec4 v_Color;            // _vert_color carried through; .a holds baked sodium AO
+in vec2 v_TexCoord;
+in float v_FragDistance;
 in float v_MaterialMipBias;
 in float v_MaterialAlphaCutoff;
 in vec3 v_WorldPos;
+in vec3 v_CameraRelWorldPos; // camera-relative WORLD-space pos; +u_VsRenderOrigin == absolute world pos
+in vec2 v_BakedLightCoord;   // _vert_tex_light_coord (baked from shipyard storage)
 in mat4 v_TransformMatrix;
 
-uniform sampler2D u_BlockTex; // The block texture
+uniform sampler2D u_BlockTex;
+uniform sampler2D u_LightTex;
 
-uniform vec4 u_FogColor; // The color of the shader fog
-uniform float u_FogStart; // The starting position of the shader fog
-uniform float u_FogEnd; // The ending position of the shader fog
+uniform vec4 u_FogColor;
+uniform float u_FogStart;
+uniform float u_FogEnd;
 
-out vec4 fragColor; // The output fragment for the color framebuffer
+uniform ivec3 u_VsRenderOrigin;
+uniform usamplerBuffer u_VsLightSections;
+uniform usamplerBuffer u_VsLightLut;
 
-#define MINECRAFT_LIGHT_X   (0.6)
-#define MINECRAFT_LIGHT_Z   (0.8)
-#define MINECRAFT_LIGHT_Y   (0.5)
+out vec4 fragColor;
 
+#define MINECRAFT_LIGHT_X (0.6)
+#define MINECRAFT_LIGHT_Z (0.8)
+#define MINECRAFT_LIGHT_Y (0.5)
 
 // from Flywheel/common/src/backend/resources/assets/flywheel/flywheel/internal/diffuse.glsl
 float vanillaShadeFromNormal(vec3 normal) {
@@ -30,10 +35,220 @@ float vanillaShadeFromNormal(vec3 normal) {
     return min(n2.x + n2.y * (3. + normal.y) + n2.z, 1.);
 }
 
-float diffuseNether(vec3 normal) {
-    vec3 n2 = normal * normal * vec3(.6, .9, .8);
-    return min(n2.x + n2.y + n2.z, 1.);
+// ===== Flywheel-style smooth light + AO ======================================
+// Layout matches Flywheel's light_lut.glsl: each section is
+//   [solid bits (732 B = 183 ints)] [light bytes (5832 B = 1458 ints)]
+// for a total of 6564 bytes / 1641 ints per section. Solid bit + light byte at
+// the same in-section position N use the same offset formula below.
+const uint VS_BLOCKS_PER_SECTION = 18u * 18u * 18u;
+const uint VS_LIGHT_SIZE_BYTES = VS_BLOCKS_PER_SECTION;
+const uint VS_SOLID_SIZE_BYTES = ((VS_BLOCKS_PER_SECTION + 31u) / 32u) * 4u;
+const uint VS_SOLID_START_INTS = 0u;
+const uint VS_LIGHT_START_INTS = VS_SOLID_SIZE_BYTES / 4u;
+const uint VS_SECTION_SIZE_INTS = (VS_SOLID_SIZE_BYTES + VS_LIGHT_SIZE_BYTES) / 4u;
+
+const uint VS_COMPLETELY_SOLID = 0x7FFFFFFu;
+const float VS_EPSILON = 1e-5;
+const uint VS_LOWER_10_BITS = 0x3FFu;
+const uint VS_UPPER_10_BITS = 0xFFF00000u;
+const float VS_LIGHT_NORMALIZER = 1.0 / 16.0;
+
+uint vs_indexLut(uint i) { return texelFetch(u_VsLightLut, int(i)).r; }
+uint vs_indexLight(uint i) { return texelFetch(u_VsLightSections, int(i)).r; }
+
+bool vs_nextLut(uint base, int coord, out uint next) {
+    int start = int(vs_indexLut(base));
+    uint size = vs_indexLut(base + 1u);
+    int idx = coord - start;
+    if (idx < 0 || idx >= int(size)) return true;
+    next = vs_indexLut(base + 2u + uint(idx));
+    return false;
 }
+
+bool vs_chunkCoordToSectionIndex(ivec3 sectionPos, out uint index) {
+    uint first;
+    if (vs_nextLut(0u, sectionPos.y, first) || first == 0u) return true;
+    uint second;
+    if (vs_nextLut(first, sectionPos.x, second) || second == 0u) return true;
+    uint sectionIndex;
+    if (vs_nextLut(second, sectionPos.z, sectionIndex) || sectionIndex == 0u) return true;
+    index = sectionIndex - 1u;
+    return false;
+}
+
+uvec2 vs_lightAt(uint sectionOffset, uvec3 blockInSectionPos) {
+    uint byteOffset = blockInSectionPos.x + blockInSectionPos.z * 18u + blockInSectionPos.y * 18u * 18u;
+    uint uintOffset = byteOffset >> 2u;
+    uint bitOffset = (byteOffset & 3u) << 3u;
+    uint raw = vs_indexLight(sectionOffset + VS_LIGHT_START_INTS + uintOffset);
+    uint b = (raw >> bitOffset) & 0xFu;
+    uint s = (raw >> (bitOffset + 4u)) & 0xFu;
+    return uvec2(b, s);
+}
+
+bool vs_isSolid(uint sectionOffset, uvec3 blockInSectionPos) {
+    uint bitOffset = blockInSectionPos.x + blockInSectionPos.z * 18u + blockInSectionPos.y * 18u * 18u;
+    uint uintOffset = bitOffset >> 5u;
+    uint bitInWordOffset = bitOffset & 31u;
+    uint word = vs_indexLight(sectionOffset + VS_SOLID_START_INTS + uintOffset);
+    return (word & (1u << bitInWordOffset)) != 0u;
+}
+
+uint vs_fetchSolid3x3x3(uint sectionOffset, ivec3 blockInSectionPos) {
+    uint ret = 0u;
+    #define VS_FETCH_SOLID(x, y, z, i) { \
+        bool flag = vs_isSolid(sectionOffset, uvec3(blockInSectionPos + ivec3(x, y, z))); \
+        ret |= uint(flag) << uint(i); \
+    }
+    VS_FETCH_SOLID(-1, -1, -1, 0)  VS_FETCH_SOLID(0, -1, -1, 1)  VS_FETCH_SOLID(1, -1, -1, 2)
+    VS_FETCH_SOLID(-1, -1,  0, 3)  VS_FETCH_SOLID(0, -1,  0, 4)  VS_FETCH_SOLID(1, -1,  0, 5)
+    VS_FETCH_SOLID(-1, -1,  1, 6)  VS_FETCH_SOLID(0, -1,  1, 7)  VS_FETCH_SOLID(1, -1,  1, 8)
+    VS_FETCH_SOLID(-1,  0, -1, 9)  VS_FETCH_SOLID(0,  0, -1,10)  VS_FETCH_SOLID(1,  0, -1,11)
+    VS_FETCH_SOLID(-1,  0,  0,12)  VS_FETCH_SOLID(0,  0,  0,13)  VS_FETCH_SOLID(1,  0,  0,14)
+    VS_FETCH_SOLID(-1,  0,  1,15)  VS_FETCH_SOLID(0,  0,  1,16)  VS_FETCH_SOLID(1,  0,  1,17)
+    VS_FETCH_SOLID(-1,  1, -1,18)  VS_FETCH_SOLID(0,  1, -1,19)  VS_FETCH_SOLID(1,  1, -1,20)
+    VS_FETCH_SOLID(-1,  1,  0,21)  VS_FETCH_SOLID(0,  1,  0,22)  VS_FETCH_SOLID(1,  1,  0,23)
+    VS_FETCH_SOLID(-1,  1,  1,24)  VS_FETCH_SOLID(0,  1,  1,25)  VS_FETCH_SOLID(1,  1,  1,26)
+    return ret;
+}
+
+uint[27] vs_fetchLight3x3x3(uint sectionOffset, ivec3 blockInSectionPos, uint solidMask) {
+    uint[27] lights;
+    #define VS_FETCH_LIGHT(_x, _y, _z, i) { \
+        uvec2 light = vs_lightAt(sectionOffset, uvec3(blockInSectionPos + ivec3(_x, _y, _z))); \
+        lights[i] = (light.x) | ((light.y) << 10u) | (uint((solidMask & (1u << uint(i))) == 0u) << 20u); \
+    }
+    VS_FETCH_LIGHT(-1, -1, -1, 0)  VS_FETCH_LIGHT(0, -1, -1, 1)  VS_FETCH_LIGHT(1, -1, -1, 2)
+    VS_FETCH_LIGHT(-1, -1,  0, 3)  VS_FETCH_LIGHT(0, -1,  0, 4)  VS_FETCH_LIGHT(1, -1,  0, 5)
+    VS_FETCH_LIGHT(-1, -1,  1, 6)  VS_FETCH_LIGHT(0, -1,  1, 7)  VS_FETCH_LIGHT(1, -1,  1, 8)
+    VS_FETCH_LIGHT(-1,  0, -1, 9)  VS_FETCH_LIGHT(0,  0, -1,10)  VS_FETCH_LIGHT(1,  0, -1,11)
+    VS_FETCH_LIGHT(-1,  0,  0,12)  VS_FETCH_LIGHT(0,  0,  0,13)  VS_FETCH_LIGHT(1,  0,  0,14)
+    VS_FETCH_LIGHT(-1,  0,  1,15)  VS_FETCH_LIGHT(0,  0,  1,16)  VS_FETCH_LIGHT(1,  0,  1,17)
+    VS_FETCH_LIGHT(-1,  1, -1,18)  VS_FETCH_LIGHT(0,  1, -1,19)  VS_FETCH_LIGHT(1,  1, -1,20)
+    VS_FETCH_LIGHT(-1,  1,  0,21)  VS_FETCH_LIGHT(0,  1,  0,22)  VS_FETCH_LIGHT(1,  1,  0,23)
+    VS_FETCH_LIGHT(-1,  1,  1,24)  VS_FETCH_LIGHT(0,  1,  1,25)  VS_FETCH_LIGHT(1,  1,  1,26)
+    return lights;
+}
+
+#define vs_index3x3x3(x, y, z) ((x) + (z) * 3u + (y) * 9u)
+#define vs_validCountToAo(validCount) (1.0 - (4.0 - (validCount)) * 0.2)
+
+vec3 vs_lightForDirection(uint[27] lights, vec3 interpolant,
+                          uint c00, uint c01, uint c10, uint c11,
+                          uint oppositeMask) {
+    uint[8] summed;
+    #define VS_SUM_CORNER(_x, _y, _z, i) { \
+        uint corner = vs_index3x3x3(_x, _y, _z); \
+        summed[i] = lights[c00 + corner] + lights[c01 + corner] + lights[c10 + corner] + lights[c11 + corner]; \
+    }
+    VS_SUM_CORNER(0u, 0u, 0u, 0)
+    VS_SUM_CORNER(1u, 0u, 0u, 1)
+    VS_SUM_CORNER(0u, 0u, 1u, 2)
+    VS_SUM_CORNER(1u, 0u, 1u, 3)
+    VS_SUM_CORNER(0u, 1u, 0u, 4)
+    VS_SUM_CORNER(1u, 1u, 0u, 5)
+    VS_SUM_CORNER(0u, 1u, 1u, 6)
+    VS_SUM_CORNER(1u, 1u, 1u, 7)
+
+    vec3[8] adjusted;
+    // Inner-face correction: if a corner has zero valid blocks, pull from the
+    // opposite corner via the bit-flip given by oppositeMask. uint() casts so
+    // the ternary branches are both uint (strict GLSL refuses int^uint).
+    #define VS_CORNER_INDEX(i) ((summed[uint(i)] & VS_UPPER_10_BITS) == 0u ? uint(i) ^ oppositeMask : uint(i))
+
+    const float[5] normalizers = float[](0.0, 1.0, 1.0/2.0, 1.0/3.0, 1.0/4.0);
+
+    #define VS_ADJUST_CORNER(i) { \
+        uint corner = summed[VS_CORNER_INDEX(i)]; \
+        uint validCount = corner >> 20u; \
+        adjusted[i].xy = vec2(corner & VS_LOWER_10_BITS, (corner >> 10u) & VS_LOWER_10_BITS) * normalizers[validCount]; \
+        adjusted[i].z = float(validCount); \
+    }
+    VS_ADJUST_CORNER(0) VS_ADJUST_CORNER(1) VS_ADJUST_CORNER(2) VS_ADJUST_CORNER(3)
+    VS_ADJUST_CORNER(4) VS_ADJUST_CORNER(5) VS_ADJUST_CORNER(6) VS_ADJUST_CORNER(7)
+
+    vec3 light00 = mix(adjusted[0], adjusted[1], interpolant.x);
+    vec3 light01 = mix(adjusted[2], adjusted[3], interpolant.x);
+    vec3 light10 = mix(adjusted[4], adjusted[5], interpolant.x);
+    vec3 light11 = mix(adjusted[6], adjusted[7], interpolant.x);
+    vec3 light0 = mix(light00, light01, interpolant.z);
+    vec3 light1 = mix(light10, light11, interpolant.z);
+    vec3 light = mix(light0, light1, interpolant.y);
+
+    light.xy *= VS_LIGHT_NORMALIZER;
+    light.z = vs_validCountToAo(light.z);
+    return light;
+}
+
+struct VsLightAo {
+    vec2 light;
+    float ao;
+};
+
+bool vs_lightSmooth(vec3 worldPos, vec3 normal, out VsLightAo lightAoOut) {
+    ivec3 blockPos = ivec3(floor(worldPos));
+    uint lightSectionIndex;
+    if (vs_chunkCoordToSectionIndex(blockPos >> 4, lightSectionIndex)) {
+        return false;
+    }
+    uint sectionOffset = lightSectionIndex * VS_SECTION_SIZE_INTS;
+    ivec3 blockInSectionPos = (blockPos & 0xF) + 1;
+
+    uint solid = vs_fetchSolid3x3x3(sectionOffset, blockInSectionPos);
+    if (solid == VS_COMPLETELY_SOLID) {
+        lightAoOut.light = vec2(0.0);
+        lightAoOut.ao = vs_validCountToAo(0.0);
+        return true;
+    }
+    uint[27] lights = vs_fetchLight3x3x3(sectionOffset, blockInSectionPos, solid);
+    vec3 interpolant = fract(worldPos);
+
+    vec3 lightX;
+    if (normal.x > VS_EPSILON) {
+        lightX = vs_lightForDirection(lights, interpolant,
+            vs_index3x3x3(1u, 0u, 0u), vs_index3x3x3(1u, 0u, 1u),
+            vs_index3x3x3(1u, 1u, 0u), vs_index3x3x3(1u, 1u, 1u), 1u);
+    } else if (normal.x < -VS_EPSILON) {
+        lightX = vs_lightForDirection(lights, interpolant,
+            vs_index3x3x3(0u, 0u, 0u), vs_index3x3x3(0u, 0u, 1u),
+            vs_index3x3x3(0u, 1u, 0u), vs_index3x3x3(0u, 1u, 1u), 1u);
+    } else {
+        lightX = vec3(0.0);
+    }
+
+    vec3 lightZ;
+    if (normal.z > VS_EPSILON) {
+        lightZ = vs_lightForDirection(lights, interpolant,
+            vs_index3x3x3(0u, 0u, 1u), vs_index3x3x3(0u, 1u, 1u),
+            vs_index3x3x3(1u, 0u, 1u), vs_index3x3x3(1u, 1u, 1u), 2u);
+    } else if (normal.z < -VS_EPSILON) {
+        lightZ = vs_lightForDirection(lights, interpolant,
+            vs_index3x3x3(0u, 0u, 0u), vs_index3x3x3(0u, 1u, 0u),
+            vs_index3x3x3(1u, 0u, 0u), vs_index3x3x3(1u, 1u, 0u), 2u);
+    } else {
+        lightZ = vec3(0.0);
+    }
+
+    vec3 lightY;
+    if (normal.y > VS_EPSILON) {
+        lightY = vs_lightForDirection(lights, interpolant,
+            vs_index3x3x3(0u, 1u, 0u), vs_index3x3x3(0u, 1u, 1u),
+            vs_index3x3x3(1u, 1u, 0u), vs_index3x3x3(1u, 1u, 1u), 4u);
+    } else if (normal.y < -VS_EPSILON) {
+        lightY = vs_lightForDirection(lights, interpolant,
+            vs_index3x3x3(0u, 0u, 0u), vs_index3x3x3(0u, 0u, 1u),
+            vs_index3x3x3(1u, 0u, 0u), vs_index3x3x3(1u, 0u, 1u), 4u);
+    } else {
+        lightY = vec3(0.0);
+    }
+
+    vec3 n2 = normal * normal;
+    vec3 lightAo = lightX * n2.x + lightY * n2.y + lightZ * n2.z;
+    lightAoOut.light = lightAo.xy;
+    lightAoOut.ao = lightAo.z;
+    return true;
+}
+// =============================================================================
 
 void main() {
     vec4 diffuseColor = texture(u_BlockTex, v_TexCoord, v_MaterialMipBias);
@@ -45,38 +260,68 @@ void main() {
 #endif
 
 #ifdef USE_VANILLA_COLOR_FORMAT
-    // Apply per-vertex color. AO shade is applied ahead of time on the CPU.
     diffuseColor *= v_Color;
 #else
-    // Apply per-vertex color
-    diffuseColor.rgb *= v_Color.rgb;
-
-    vec3 fdx = dFdx(v_WorldPos);
-    vec3 fdy = dFdy(v_WorldPos);
-    
+    // World-space normal from screen-space derivatives of the camera-relative
+    // world-space pos. (v_CameraRelWorldPos already has the ship's rotation
+    // baked in, so derivatives are in world space directly — no v_TransformMatrix
+    // needed for the normal.)
+    vec3 fdx = dFdx(v_CameraRelWorldPos);
+    vec3 fdy = dFdy(v_CameraRelWorldPos);
     vec3 rawN = cross(fdx, fdy);
     float len2 = dot(rawN, rawN);
-    float dx2  = dot(fdx, fdx);
-    float dy2  = dot(fdy, fdy);
+    float quality = len2 / (dot(fdx, fdx) * dot(fdy, fdy) + 1e-20);
+    bool nValid = quality >= 5e-3 && all(equal(rawN, rawN));
 
-    float denom = dx2 * dy2 + 1e-20;
-    float quality = len2 / denom;
-    mat3 rot = mat3(v_TransformMatrix);
-    vec3 trans = v_TransformMatrix[3].xyz;
-    
+    vec3 worldN = nValid ? normalize(rawN) : vec3(0.0);
 
-    // rawN = nan -> rawN != rawN
-    if (quality < 5e-3 || !all(equal(rawN, rawN))) {
-        // Apply ambient occlusion "shade"
-        diffuseColor.rgb *= v_Color.a;
+    // Absolute world position of the fragment (camera-relative + integer origin).
+    vec3 worldPos = v_CameraRelWorldPos + vec3(u_VsRenderOrigin);
+
+    vec2 lightCoord;
+    float aoMultiplier;
+    // Default-init so the compiler can prove the values are defined when we
+    // skip the smooth-fetch branch (vs_lightSmooth doesn't write its out param
+    // on early-return paths).
+    VsLightAo vsLight;
+    vsLight.light = vec2(0.0);
+    vsLight.ao = 1.0;
+    if (nValid && vs_lightSmooth(worldPos, worldN, vsLight)) {
+        // World-space lighting + AO at the ship's rendered location.
+        // Block-light: max with baked so ship-internal torches still glow
+        //   (they live in shipyard, the world engine doesn't see them here).
+        // Sky-light: take from world (baked sky is from shipyard, irrelevant
+        //   to the ship's actual location).
+        // AO: use the world AO directly. Multiplying by baked .a as well
+        //   would double-darken since v_Color.rgb already has the chunk
+        //   mesher's per-vertex shade baked into it.
+        lightCoord = vec2(
+            max(vsLight.light.x, v_BakedLightCoord.x),
+            vsLight.light.y
+        );
+        aoMultiplier = vsLight.ao;
     } else {
-        vec3 n = normalize(rawN);
-        n = (rot * n).xyz;
+        // Fallback: use baked light & AO from the ship's chunk mesh.
+        lightCoord = v_BakedLightCoord;
+        aoMultiplier = v_Color.a;
+    }
 
-        float shade = vanillaShadeFromNormal(n);
-        diffuseColor.rgb *= shade;
+    vec4 lightSample = texture(u_LightTex, lightCoord);
+    diffuseColor.rgb *= v_Color.rgb * lightSample.rgb;
+
+    // Directional shade (vanilla "side darkening") when we have a normal,
+    // multiplied with the AO factor.
+    if (nValid) {
+        diffuseColor.rgb *= vanillaShadeFromNormal(worldN) * aoMultiplier;
+    } else {
+        diffuseColor.rgb *= aoMultiplier;
     }
 #endif
 
     fragColor = _linearFog(diffuseColor, v_FragDistance, u_FogColor, u_FogStart, u_FogEnd);
+
+    // Keep v_TransformMatrix alive so the linker doesn't strip the whole
+    // chain back to u_TransformMatrix (which sodium's setupShipShaderState
+    // expects to bind). Tiny non-zero multiplier prevents constant-folding.
+    fragColor += vec4(v_TransformMatrix[0].x) * 1e-30;
 }
