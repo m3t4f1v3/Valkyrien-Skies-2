@@ -105,7 +105,7 @@ private fun countsAsMaterializedFloodFluid(state: BlockState, floodFluid: Fluid)
 }
 
 private const val MAX_COMPONENT_GRAPH_NODES = 12_000_000
-private const val MIN_HEURISTIC_PROMOTED_COMPONENT_SIZE = 4
+private const val MIN_HEURISTIC_PROMOTED_COMPONENT_SIZE = 8
 
 private class ShapeTemplateKey(
     private val fullSolid: Boolean,

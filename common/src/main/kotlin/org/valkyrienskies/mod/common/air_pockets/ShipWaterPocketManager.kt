@@ -3784,12 +3784,7 @@ object ShipWaterPocketManager {
         if (idx < 0) return false
         if (state.materializedWater.get(idx)) return false
         if (state.waterReachable.get(idx)) return false
-        if (!isClassificationInSimulationDomain(state, classification)) return false
-
-        // Heuristic-promoted simulation-domain cells are needed for bowl-shaped pockets, but they are not by
-        // themselves strong evidence that world water should be culled. Suppress dry world fluid only for strict
-        // interior cells, or for cells currently protected by the drain solver.
-        return state.interior.get(idx) || state.drainSuppressed.get(idx)
+        return isClassificationInSimulationDomain(state, classification)
     }
 
     private fun isAirPocketClassification(state: ShipPocketState, classification: PointVoidClassification): Boolean {
