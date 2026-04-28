@@ -337,7 +337,7 @@ void main() {
                 flatLight.y
             );
         } else {
-            lightCoord = v_BakedLightCoord;
+            lightCoord = clamp(v_BakedLightCoord, VS_UV_MIN, VS_UV_MAX);
         }
         aoMultiplier = v_Color.a;
     }
