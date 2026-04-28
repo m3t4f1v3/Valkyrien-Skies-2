@@ -19,6 +19,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import org.valkyrienskies.mod.common.config.VSGameConfig;
 import org.valkyrienskies.mod.compat.sodium.light.VsVertexFlagPacker;
 
 /**
@@ -45,6 +46,9 @@ public class MixinFluidRenderer {
                                       LightPipeline lighter, Direction dir, float brightness,
                                       ColorProvider<FluidState> colorProvider, FluidState fluidState,
                                       CallbackInfo ci) {
+        if (!VSGameConfig.CLIENT.getDynamicShipBiomeTinting() && !VSGameConfig.CLIENT.getDynamicShipLighting()) {
+            return;
+        }
         vs$inShipyard = VsVertexFlagPacker.isShipyardBlock(pos);
         vs$resolverType = vs$inShipyard ? VsVertexFlagPacker.resolverTypeFor(fluidState) : 0;
     }
@@ -54,7 +58,7 @@ public class MixinFluidRenderer {
                     target = "Lnet/caffeinemc/mods/sodium/api/util/ColorABGR;withAlpha(IF)I",
                     remap = false))
     private int vs$packFluidColor(int origColor, float brAndBrightness, Operation<Integer> original) {
-        if (!vs$inShipyard) {
+        if (!vs$inShipyard || (!VSGameConfig.CLIENT.getDynamicShipBiomeTinting() && !VSGameConfig.CLIENT.getDynamicShipLighting())) {
             return original.call(origColor, brAndBrightness);
         }
         // Fluids aren't directionally shaded by sodium (lighter.calculate is

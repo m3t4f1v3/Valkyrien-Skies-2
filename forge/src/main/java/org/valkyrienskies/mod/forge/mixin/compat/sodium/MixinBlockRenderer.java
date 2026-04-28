@@ -20,6 +20,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import org.valkyrienskies.mod.common.config.VSGameConfig;
 import org.valkyrienskies.mod.compat.sodium.light.VsVertexFlagPacker;
 
 /**
@@ -46,6 +47,14 @@ public class MixinBlockRenderer {
     private void vs$captureFlags(BlockRenderContext ctx, ChunkModelBuilder builder, Vec3 origin,
                                  Material material, BakedQuadView quad, int[] colors, QuadLightData light,
                                  CallbackInfo ci) {
+        // Skip per-quad detection entirely if no ship-shader feature is on.
+        // Shade matters in addition to biome/light because the face-slot bits
+        // drive the per-vertex world-normal that vanillaShadeFromNormal uses.
+        if (!VSGameConfig.CLIENT.getDynamicShipBiomeTinting()
+                && !VSGameConfig.CLIENT.getDynamicShipLighting()
+                && !VSGameConfig.CLIENT.getBetterVanillaShipShading()) {
+            return;
+        }
         vs$inShipyard = VsVertexFlagPacker.isShipyardBlock(ctx.pos());
         // A quad is biome-tinted only if it has a tintIndex (>=0). A grass
         // block's dirt-side faces are colorIndex == -1 even though the block
@@ -70,7 +79,10 @@ public class MixinBlockRenderer {
                     target = "Lorg/embeddedt/embeddium/render/chunk/ChunkColorWriter;writeColor(IF)I",
                     remap = false))
     private int vs$packVertexColor(ChunkColorWriter writer, int origColor, float br, Operation<Integer> original) {
-        if (!vs$inShipyard) {
+        if (!vs$inShipyard
+                || (!VSGameConfig.CLIENT.getDynamicShipBiomeTinting()
+                    && !VSGameConfig.CLIENT.getDynamicShipLighting()
+                    && !VSGameConfig.CLIENT.getBetterVanillaShipShading())) {
             return original.call(writer, origColor, br);
         }
         // Divide out the directional shade sodium pre-multiplied so the FSH can

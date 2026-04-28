@@ -5,18 +5,32 @@
 #import <sodium:include/chunk_matrices.glsl>
 #import <sodium:include/chunk_material.glsl>
 
+// u_TransformMatrix: ship-to-world matrix, used to lift the per-quad face
+// normal into world space. Needed when shade is on or when world-light runs.
+#if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_SHADE)
 uniform mat4 u_TransformMatrix;
+#endif
+// u_LocalToCameraRel: maps sodium's chunk-local pos into camera-relative
+// world space. Needed by FSH light pipeline (via v_CameraRelWorldPos) or by
+// the biome lookup (worldPosVertex).
+#if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_BIOME)
 uniform mat4 u_LocalToCameraRel;
 uniform ivec3 u_VsRenderOrigin;
+#endif
+#ifdef VS_DYNAMIC_BIOME
 uniform usamplerBuffer u_VsBiomeSections;
 uniform usamplerBuffer u_VsBiomeLut;
+#endif
 
 out vec4 v_Color;
 out vec2 v_TexCoord;
-out vec3 v_WorldPos;
-out vec3 v_CameraRelWorldPos;
 out vec2 v_BakedLightCoord;
-out mat4 v_TransformMatrix;
+#ifdef VS_DYNAMIC_LIGHT
+out vec3 v_CameraRelWorldPos;
+#endif
+#if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_SHADE)
+flat out vec3 v_WorldNormal;
+#endif
 // Decoded VS vertex flags. See VsVertexFlagPacker:
 //   alpha bits 0-2: AO level (0..5 mapped to 0/0.2/0.4/0.6/0.8/1.0)
 //   alpha bits 3-5: face slot (0 DOWN, 1 UP, 2 N, 3 S, 4 W, 5 E, 6 UNSHADED)
@@ -24,7 +38,6 @@ out mat4 v_TransformMatrix;
 flat out int v_ResolverType;
 flat out int v_IsShaded;
 flat out int v_IsFullbright;
-flat out vec3 v_WorldNormal;
 out vec3 v_VertexBiomeTint;
 
 out float v_MaterialMipBias;
@@ -47,6 +60,7 @@ vec3 _get_draw_translation(uint pos) {
     return _get_relative_chunk_coord(pos) * vec3(16.0);
 }
 
+#ifdef VS_DYNAMIC_BIOME
 // ===== Per-vertex biome color lookup =====================================
 const uint VS_BIOME_CELLS_PER_RESOLVER = 256u;
 const uint VS_BIOME_SECTION_SIZE_INTS = 768u;
@@ -96,6 +110,7 @@ vec3 vs_biomeColorAt(vec3 worldPos, int resolverSlot) {
               + cellOffset;
     return vs_unpackRgb8(vs_indexBiome(addr));
 }
+#endif
 
 vec3 vs_faceSlotToNormal(uint slot) {
     if (slot == 0u) return vec3(0.0, -1.0, 0.0);
@@ -114,12 +129,13 @@ void main() {
     vec3 translation = u_RegionOffset + _get_draw_translation(_draw_id);
     vec3 position = _vert_position + translation;
 
-    v_WorldPos = position;
+#ifdef VS_DYNAMIC_LIGHT
     // Camera-relative world position. The fragment adds u_VsRenderOrigin to
     // recover the absolute world block position; per-fragment interpolation
     // means each fragment lands inside a block (not at a corner), avoiding the
     // float-precision flicker that per-vertex lookups had at section faces.
     v_CameraRelWorldPos = (u_LocalToCameraRel * vec4(position, 1.0)).xyz;
+#endif
 
 #ifdef USE_FOG
     v_FragDistance = getFragDistance(u_FogShape, position);
@@ -143,12 +159,15 @@ void main() {
     float aoFloat = float(aoLevel) * 0.2;
     v_Color = vec4(_vert_color.rgb, aoFloat);
 
+#if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_SHADE)
     // World-space surface normal: shipyard-space face direction transformed by
     // the ship-to-world matrix. All four vertices of a quad share the same face
     // slot, so flat-interpolating this through the rasterizer is exact.
     vec3 shipyardNormal = vs_faceSlotToNormal(faceSlot);
     v_WorldNormal = normalize((u_TransformMatrix * vec4(shipyardNormal, 0.0)).xyz);
+#endif
 
+#ifdef VS_DYNAMIC_BIOME
     // Per-vertex biome lookup at the absolute world position. Linear-blended
     // across the quad by the rasterizer for smooth biome transitions; vec3(1.0)
     // when the quad isn't biome-tinted so the FSH multiply is a no-op.
@@ -156,11 +175,13 @@ void main() {
     v_VertexBiomeTint = (v_ResolverType > 0)
             ? vs_biomeColorAt(worldPosVertex, v_ResolverType - 1)
             : vec3(1.0);
+#else
+    v_VertexBiomeTint = vec3(1.0);
+#endif
 
     v_TexCoord = _vert_tex_diffuse_coord;
 
     v_MaterialMipBias = _material_mip_bias(_material_params);
-    v_TransformMatrix = u_TransformMatrix;
 #ifdef USE_FRAGMENT_DISCARD
     v_MaterialAlphaCutoff = _material_alpha_cutoff(_material_params);
 #endif

@@ -5,18 +5,41 @@
 #import <sodium:include/chunk_matrices.glsl>
 #import <sodium:include/chunk_material.glsl>
 
+// u_TransformMatrix: ship-to-world matrix, used to lift the per-quad face
+// normal into world space. Needed when shade is on (vanillaShadeFromNormal)
+// or when the world-light pipeline runs (vs_lightSmooth uses the normal for
+// per-axis interp). ShipThing.bindUniform must agree with this gate.
+#if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_SHADE)
 uniform mat4 u_TransformMatrix;
+#endif
+// u_LocalToCameraRel: maps sodium's chunk-local pos into camera-relative
+// world space. The VSH uses it both to emit v_CameraRelWorldPos (consumed by
+// the FSH light pipeline) and to compute the per-vertex worldPos for the
+// biome lookup. ShipThing binds the matching uniform only when one of the
+// two consumers is on.
+#if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_BIOME)
 uniform mat4 u_LocalToCameraRel;
 uniform ivec3 u_VsRenderOrigin;
+#endif
+#ifdef VS_DYNAMIC_BIOME
 uniform usamplerBuffer u_VsBiomeSections;
 uniform usamplerBuffer u_VsBiomeLut;
+#endif
 
 out vec4 v_Color;
 out vec2 v_TexCoord;
-out vec3 v_WorldPos;
-out vec3 v_CameraRelWorldPos;
 out vec2 v_BakedLightCoord;
-out mat4 v_TransformMatrix;
+// Camera-relative WORLD pos; FSH reads it (+ u_VsRenderOrigin) to recover
+// absolute world block coords for the world-light lookup.
+#ifdef VS_DYNAMIC_LIGHT
+out vec3 v_CameraRelWorldPos;
+#endif
+// World-space surface normal recovered from the per-quad face slot via
+// u_TransformMatrix. Used by both the world-light per-axis interp and the
+// directional-shade pass — declared if either is on.
+#if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_SHADE)
+flat out vec3 v_WorldNormal;
+#endif
 // Decoded VS vertex flags packed by the BlockRenderer mixin into the high
 // bits of the AO byte (vertex color alpha). See VsVertexFlagPacker for the
 // packing contract:
@@ -26,10 +49,6 @@ out mat4 v_TransformMatrix;
 flat out int v_ResolverType;
 flat out int v_IsShaded;
 flat out int v_IsFullbright;
-// World-space surface normal recovered from the per-quad face slot via
-// u_TransformMatrix. Replaces the dFdx/dFdy normal recovery in the FSH —
-// `flat` because all 4 vertices of a quad output the same value.
-flat out vec3 v_WorldNormal;
 // Rasterizer-blended world-biome RGB sampled at each vertex. vec3(1.0) for
 // non-biome quads so the FSH multiply is a no-op.
 out vec3 v_VertexBiomeTint;
@@ -55,6 +74,7 @@ vec3 _get_draw_translation(uint pos) {
     return _get_relative_chunk_coord(pos) * vec3(16.0);
 }
 
+#ifdef VS_DYNAMIC_BIOME
 // ===== Per-vertex biome color lookup =====================================
 // Mirrors the FSH's lookup; layout is fixed by VsShipBiomeColorStorage:
 //   3 resolvers * 16x16 colors = 768 R32UI ints (3072 B) per section.
@@ -106,6 +126,7 @@ vec3 vs_biomeColorAt(vec3 worldPos, int resolverSlot) {
               + cellOffset;
     return vs_unpackRgb8(vs_indexBiome(addr));
 }
+#endif
 
 // Convert face slot (see packing contract above) to a shipyard-space normal.
 // FACE_UNSHADED returns +Y just so the value is finite; the FSH gates on
@@ -127,12 +148,13 @@ void main() {
     vec3 translation = u_RegionOffset + _get_draw_translation(_draw_id);
     vec3 position = _vert_position + translation;
 
-    v_WorldPos = position;
+#ifdef VS_DYNAMIC_LIGHT
     // Camera-relative world position. The fragment adds u_VsRenderOrigin to
     // recover the absolute world block position; per-fragment interpolation
     // means each fragment lands inside a block (not at a corner), avoiding the
     // float-precision flicker that per-vertex lookups had at section faces.
     v_CameraRelWorldPos = (u_LocalToCameraRel * vec4(position, 1.0)).xyz;
+#endif
 
 #ifdef USE_FOG
     v_FragDistance = getFragDistance(u_FogShape, position);
@@ -154,12 +176,15 @@ void main() {
     float aoFloat = float(aoLevel) * 0.2;
     v_Color = vec4(_vert_color.rgb, aoFloat);
 
+#if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_SHADE)
     // World-space surface normal: shipyard-space face direction transformed by
     // the ship-to-world matrix. All four vertices of a quad share the same face
     // slot, so flat-interpolating this through the rasterizer is exact.
     vec3 shipyardNormal = vs_faceSlotToNormal(faceSlot);
     v_WorldNormal = normalize((u_TransformMatrix * vec4(shipyardNormal, 0.0)).xyz);
+#endif
 
+#ifdef VS_DYNAMIC_BIOME
     // Per-vertex biome lookup at the absolute world position. Linear-blended
     // across the quad by the rasterizer for smooth biome transitions; vec3(1.0)
     // when the quad isn't biome-tinted so the FSH multiply is a no-op.
@@ -167,11 +192,13 @@ void main() {
     v_VertexBiomeTint = (v_ResolverType > 0)
             ? vs_biomeColorAt(worldPosVertex, v_ResolverType - 1)
             : vec3(1.0);
+#else
+    v_VertexBiomeTint = vec3(1.0);
+#endif
 
     v_TexCoord = (_vert_tex_diffuse_coord_bias * u_TexCoordShrink) + _vert_tex_diffuse_coord;
 
     v_MaterialMipBias = _material_mip_bias(_material_params);
-    v_TransformMatrix = u_TransformMatrix;
 #ifdef USE_FRAGMENT_DISCARD
     v_MaterialAlphaCutoff = _material_alpha_cutoff(_material_params);
 #endif

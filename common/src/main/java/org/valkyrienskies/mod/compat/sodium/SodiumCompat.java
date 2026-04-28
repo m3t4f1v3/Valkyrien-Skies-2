@@ -31,6 +31,7 @@ import org.joml.Matrix4fc;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
 import org.valkyrienskies.core.api.ships.properties.ShipTransform;
+import org.valkyrienskies.mod.common.config.VSGameConfig;
 import org.valkyrienskies.mod.common.hooks.VSGameEvents;
 import org.valkyrienskies.mod.common.hooks.VSGameEvents.ShipRenderEventSodium;
 import org.valkyrienskies.mod.compat.VSRenderer;
@@ -45,7 +46,21 @@ import org.joml.primitives.AABBdc;
 import com.mojang.blaze3d.systems.RenderSystem;
 
 public class SodiumCompat {
-    static Map<ChunkShaderOptions, GlProgram<ShipThing>> cachedPrograms = new HashMap<>();
+    /**
+     * Composite cache key for ship shader programs. Sodium's
+     * {@link ChunkShaderOptions} alone isn't enough — our shaders branch on
+     * compile-time defines derived from VS config, so we need a separate
+     * compiled program per combination.
+     */
+    private record ShaderCacheKey(ChunkShaderOptions options, int vsFeatureBits) {}
+
+    /** Bit flags for VS-specific shader feature defines. Package-visible because
+     * {@link ShipThing} needs them at construction to decide which uniforms to bind. */
+    static final int FEATURE_BIOME = 1;
+    static final int FEATURE_LIGHT = 2;
+    static final int FEATURE_SHADE = 4;
+
+    static Map<ShaderCacheKey, GlProgram<ShipThing>> cachedPrograms = new HashMap<>();
     private static final ThreadLocal<Matrix4f> CURRENT_TRANSFORM = new ThreadLocal<>();
     private static final ThreadLocal<Matrix4f> CURRENT_LOCAL_TO_WORLD = new ThreadLocal<>();
     private static final ThreadLocal<int[]> CURRENT_RENDER_ORIGIN = new ThreadLocal<>();
@@ -77,12 +92,33 @@ public class SodiumCompat {
     }
 
     public static GlProgram<ChunkShaderInterface> getOrCreateShipProgram(ChunkShaderOptions options) {
-        GlProgram<ShipThing> program = cachedPrograms.get(options);
+        int features = computeFeatureBits();
+        ShaderCacheKey key = new ShaderCacheKey(options, features);
+        GlProgram<ShipThing> program = cachedPrograms.get(key);
         if (program == null) {
-            program = createShader("blocks/block_layer_opaque", options);
-            cachedPrograms.put(options, program);
+            program = createShader("blocks/block_layer_opaque", options, features);
+            cachedPrograms.put(key, program);
         }
         return (GlProgram<ChunkShaderInterface>) (Object) program;
+    }
+
+    /** Snapshot the VS shader-feature config bits at program-build time. */
+    private static int computeFeatureBits() {
+        int bits = 0;
+        if (VSGameConfig.CLIENT.getDynamicShipBiomeTinting()) bits |= FEATURE_BIOME;
+        if (VSGameConfig.CLIENT.getDynamicShipLighting()) bits |= FEATURE_LIGHT;
+        if (VSGameConfig.CLIENT.getBetterVanillaShipShading()) bits |= FEATURE_SHADE;
+        return bits;
+    }
+
+    /**
+     * True iff at least one of the three ship-shader features is enabled. When
+     * false there's no reason to swap in the VS ship shader at all — the
+     * mesher mixin's gates fall through to sodium's native byte format and
+     * sodium's stock chunk shader can render ship blocks correctly.
+     */
+    public static boolean anyShipShaderFeatureEnabled() {
+        return computeFeatureBits() != 0;
     }
 
     public static void setupShipShaderState(GlProgram<ChunkShaderInterface> program, ChunkRenderMatrices matrices, Matrix4fc transformMatrix) {
@@ -154,28 +190,41 @@ public class SodiumCompat {
         ));
 
         // Refresh the world-light + biome-color buffers for any sections occupied
-        // by the ships we are about to render.
+        // by the ships we are about to render. Each storage is gated by its own
+        // config — when a feature is disabled, we skip the per-frame work AND
+        // the shader was compiled without the corresponding `#define`, so it
+        // never samples the buffer either.
         final ClientLevel level = net.minecraft.client.Minecraft.getInstance().level;
-        final VsShipLightStorage storage = getLightStorage();
-        final VsShipBiomeColorStorage biomeStorageLocal = getBiomeStorage();
+        final boolean dynamicLight = VSGameConfig.CLIENT.getDynamicShipLighting();
+        final boolean dynamicBiome = VSGameConfig.CLIENT.getDynamicShipBiomeTinting();
+        final VsShipLightStorage storage = dynamicLight ? getLightStorage() : null;
+        final VsShipBiomeColorStorage biomeStorageLocal = dynamicBiome ? getBiomeStorage() : null;
         if (level != null) {
-            storage.beginFrame();
-            biomeStorageLocal.beginFrame();
+            if (storage != null) storage.beginFrame();
+            if (biomeStorageLocal != null) biomeStorageLocal.beginFrame();
             ((RenderSectionManagerDuck) renderSectionManager).vs_getShipRenderLists().forEach((ship, renderList) -> {
                 final AABBdc aabb = ((ClientShip) ship).getRenderAABB();
                 if (aabb != null) {
-                    storage.requestSectionsInAabb(level,
-                            aabb.minX(), aabb.minY(), aabb.minZ(),
-                            aabb.maxX(), aabb.maxY(), aabb.maxZ());
-                    biomeStorageLocal.requestSectionsInAabb(level,
-                            aabb.minX(), aabb.minY(), aabb.minZ(),
-                            aabb.maxX(), aabb.maxY(), aabb.maxZ());
+                    if (storage != null) {
+                        storage.requestSectionsInAabb(level,
+                                aabb.minX(), aabb.minY(), aabb.minZ(),
+                                aabb.maxX(), aabb.maxY(), aabb.maxZ());
+                    }
+                    if (biomeStorageLocal != null) {
+                        biomeStorageLocal.requestSectionsInAabb(level,
+                                aabb.minX(), aabb.minY(), aabb.minZ(),
+                                aabb.maxX(), aabb.maxY(), aabb.maxZ());
+                    }
                 }
             });
-            storage.pruneUnused();
-            storage.upload();
-            biomeStorageLocal.pruneUnused();
-            biomeStorageLocal.upload();
+            if (storage != null) {
+                storage.pruneUnused();
+                storage.upload();
+            }
+            if (biomeStorageLocal != null) {
+                biomeStorageLocal.pruneUnused();
+                biomeStorageLocal.upload();
+            }
         }
 
         ((RenderSectionManagerDuck) renderSectionManager).vs_getShipRenderLists().forEach((ship, renderList) -> {
@@ -230,9 +279,11 @@ public class SodiumCompat {
             IS_RENDERING_SHIP.set(true);
 
             // Bind the world-light + biome-color buffer textures so the ship
-            // shader can sample them.
-            storage.bind(LIGHT_SECTIONS_TEXTURE_UNIT, LIGHT_LUT_TEXTURE_UNIT);
-            biomeStorageLocal.bind(BIOME_SECTIONS_TEXTURE_UNIT, BIOME_LUT_TEXTURE_UNIT);
+            // shader can sample them. Bound only when the corresponding feature
+            // is enabled; the shaders' #ifdef gates ensure the matching sampler
+            // is never read when its feature is off.
+            if (storage != null) storage.bind(LIGHT_SECTIONS_TEXTURE_UNIT, LIGHT_LUT_TEXTURE_UNIT);
+            if (biomeStorageLocal != null) biomeStorageLocal.bind(BIOME_SECTIONS_TEXTURE_UNIT, BIOME_LUT_TEXTURE_UNIT);
 
             chunkRenderer.render(newMatrices, commandList, renderList, pass,
                 new CameraTransform(cameraShipSpace.x(), cameraShipSpace.y(), cameraShipSpace.z()));
@@ -263,8 +314,8 @@ public class SodiumCompat {
         commandList.close();
     }
 
-    private static GlProgram<ShipThing> createShader(String path, ChunkShaderOptions options) {
-        ShaderConstants constants = createShipShaderConstants(options);
+    private static GlProgram<ShipThing> createShader(String path, ChunkShaderOptions options, int features) {
+        ShaderConstants constants = createShipShaderConstants(options, features);
 
         GlShader vertShader = ShaderLoader.loadShader(ShaderType.VERTEX,
                 new ResourceLocation("valkyrienskies", path + ".vsh"), constants);
@@ -281,14 +332,14 @@ public class SodiumCompat {
                     .bindAttribute("a_TexCoord", ChunkShaderBindingPoints.ATTRIBUTE_TEXTURE)
                     .bindAttribute("a_LightAndData", ChunkShaderBindingPoints.ATTRIBUTE_LIGHT_MATERIAL_INDEX)
                     .bindFragmentData("fragColor", ChunkShaderBindingPoints.FRAG_COLOR)
-                    .link((shader) -> new ShipThing(shader, options));
+                    .link((shader) -> new ShipThing(shader, options, features));
         } finally {
             vertShader.delete();
             fragShader.delete();
         }
     }
 
-    private static ShaderConstants createShipShaderConstants(ChunkShaderOptions options) {
+    private static ShaderConstants createShipShaderConstants(ChunkShaderOptions options, int features) {
         ShaderConstants.Builder builder = ShaderConstants.builder();
 
         for (String define : options.constants().getDefineStrings()) {
@@ -308,6 +359,12 @@ public class SodiumCompat {
                 builder.add(name, parts[2]);
             }
         }
+
+        // VS-specific feature defines, gated by config. Compile-time `#ifdef`
+        // in the VSH/FSH means disabled features cost nothing on the GPU.
+        if ((features & FEATURE_BIOME) != 0) builder.add("VS_DYNAMIC_BIOME");
+        if ((features & FEATURE_LIGHT) != 0) builder.add("VS_DYNAMIC_LIGHT");
+        if ((features & FEATURE_SHADE) != 0) builder.add("VS_DYNAMIC_SHADE");
 
         return builder.build();
     }
