@@ -954,6 +954,158 @@ object ShipWaterPocketManager {
             state.minZ != minZ
     }
 
+    private fun remapStateIndex(
+        oldIdx: Int,
+        oldMinX: Int,
+        oldMinY: Int,
+        oldMinZ: Int,
+        oldSizeX: Int,
+        oldSizeY: Int,
+        oldSizeZ: Int,
+        newMinX: Int,
+        newMinY: Int,
+        newMinZ: Int,
+        newSizeX: Int,
+        newSizeY: Int,
+        newSizeZ: Int,
+    ): Int {
+        val oldVolumeLong = oldSizeX.toLong() * oldSizeY.toLong() * oldSizeZ.toLong()
+        if (oldVolumeLong <= 0L || oldIdx < 0 || oldIdx.toLong() >= oldVolumeLong) return -1
+
+        val oldLX = oldIdx % oldSizeX
+        val oldT = oldIdx / oldSizeX
+        val oldLY = oldT % oldSizeY
+        val oldLZ = oldT / oldSizeY
+
+        val worldX = oldMinX + oldLX
+        val worldY = oldMinY + oldLY
+        val worldZ = oldMinZ + oldLZ
+
+        val newLX = worldX - newMinX
+        val newLY = worldY - newMinY
+        val newLZ = worldZ - newMinZ
+        if (newLX !in 0 until newSizeX || newLY !in 0 until newSizeY || newLZ !in 0 until newSizeZ) {
+            return -1
+        }
+        return newLX + newSizeX * (newLY + newSizeY * newLZ)
+    }
+
+    private fun remapStateMask(
+        mask: BitSet,
+        oldMinX: Int,
+        oldMinY: Int,
+        oldMinZ: Int,
+        oldSizeX: Int,
+        oldSizeY: Int,
+        oldSizeZ: Int,
+        newMinX: Int,
+        newMinY: Int,
+        newMinZ: Int,
+        newSizeX: Int,
+        newSizeY: Int,
+        newSizeZ: Int,
+    ): BitSet {
+        val newVolumeLong = newSizeX.toLong() * newSizeY.toLong() * newSizeZ.toLong()
+        if (newVolumeLong <= 0L) return BitSet()
+        val out = BitSet(newVolumeLong.toInt())
+        val oldVolumeLong = oldSizeX.toLong() * oldSizeY.toLong() * oldSizeZ.toLong()
+        if (oldVolumeLong <= 0L || mask.isEmpty) return out
+        val oldVolume = oldVolumeLong.toInt()
+
+        var oldIdx = mask.nextSetBit(0)
+        while (oldIdx >= 0 && oldIdx < oldVolume) {
+            val newIdx = remapStateIndex(
+                oldIdx = oldIdx,
+                oldMinX = oldMinX,
+                oldMinY = oldMinY,
+                oldMinZ = oldMinZ,
+                oldSizeX = oldSizeX,
+                oldSizeY = oldSizeY,
+                oldSizeZ = oldSizeZ,
+                newMinX = newMinX,
+                newMinY = newMinY,
+                newMinZ = newMinZ,
+                newSizeX = newSizeX,
+                newSizeY = newSizeY,
+                newSizeZ = newSizeZ,
+            )
+            if (newIdx >= 0) out.set(newIdx)
+            oldIdx = mask.nextSetBit(oldIdx + 1)
+        }
+        return out
+    }
+
+    private fun restoreQueuedFloodAddsAfterGeometry(
+        state: ShipPocketState,
+        oldQueuedAdds: BitSet,
+        oldQueuedAddOrder: IntArrayList,
+        oldMinX: Int,
+        oldMinY: Int,
+        oldMinZ: Int,
+        oldSizeX: Int,
+        oldSizeY: Int,
+        oldSizeZ: Int,
+        newMinX: Int,
+        newMinY: Int,
+        newMinZ: Int,
+    ) {
+        if (oldQueuedAdds.isEmpty) return
+        val restored = remapStateMask(
+            mask = oldQueuedAdds,
+            oldMinX = oldMinX,
+            oldMinY = oldMinY,
+            oldMinZ = oldMinZ,
+            oldSizeX = oldSizeX,
+            oldSizeY = oldSizeY,
+            oldSizeZ = oldSizeZ,
+            newMinX = newMinX,
+            newMinY = newMinY,
+            newMinZ = newMinZ,
+            newSizeX = state.sizeX,
+            newSizeY = state.sizeY,
+            newSizeZ = state.sizeZ,
+        )
+        restored.and(state.open)
+        restored.and(state.simulationDomain)
+        restored.andNot(state.materializedWater)
+        if (restored.isEmpty) return
+
+        state.queuedFloodAdds.or(restored)
+        val emitted = BitSet(state.sizeX * state.sizeY * state.sizeZ)
+        for (i in 0 until oldQueuedAddOrder.size) {
+            val oldIdx = oldQueuedAddOrder.getInt(i)
+            if (!oldQueuedAdds.get(oldIdx)) continue
+            val newIdx = remapStateIndex(
+                oldIdx = oldIdx,
+                oldMinX = oldMinX,
+                oldMinY = oldMinY,
+                oldMinZ = oldMinZ,
+                oldSizeX = oldSizeX,
+                oldSizeY = oldSizeY,
+                oldSizeZ = oldSizeZ,
+                newMinX = newMinX,
+                newMinY = newMinY,
+                newMinZ = newMinZ,
+                newSizeX = state.sizeX,
+                newSizeY = state.sizeY,
+                newSizeZ = state.sizeZ,
+            )
+            if (newIdx < 0 || !restored.get(newIdx) || emitted.get(newIdx)) continue
+            emitted.set(newIdx)
+            state.queuedFloodAddOrder.add(newIdx)
+        }
+
+        var idx = restored.nextSetBit(0)
+        while (idx >= 0) {
+            if (!emitted.get(idx)) {
+                state.queuedFloodAddOrder.add(idx)
+            }
+            idx = restored.nextSetBit(idx + 1)
+        }
+        state.nextQueuedAddOrderIdx = 0
+        state.nextQueuedAddIdx = 0
+    }
+
     private fun trySubmitGeometryJob(
         level: Level,
         state: ShipPocketState,
@@ -1043,6 +1195,19 @@ object ShipWaterPocketManager {
         val previousSignature = state.geometrySignature
         val persistedMaterialized =
             if (wasRestored) state.materializedWater.clone() as BitSet else BitSet()
+        val prevMinX = state.minX
+        val prevMinY = state.minY
+        val prevMinZ = state.minZ
+        val prevSizeX = state.sizeX
+        val prevSizeY = state.sizeY
+        val prevSizeZ = state.sizeZ
+        val liveFlooded = state.flooded.clone() as BitSet
+        val liveMaterialized = state.materializedWater.clone() as BitSet
+        val liveBrokenByFlood = state.brokenByFlood.clone() as BitSet
+        val liveDrainSuppressed = state.drainSuppressed.clone() as BitSet
+        val liveWaterReachable = state.waterReachable.clone() as BitSet
+        val liveQueuedAdds = state.queuedFloodAdds.clone() as BitSet
+        val liveQueuedAddOrder = IntArrayList(state.queuedFloodAddOrder)
         val boundsChanged = boundsMismatch(
             state = state,
             minX = result.minX,
@@ -1073,8 +1238,8 @@ object ShipWaterPocketManager {
         state.interior = result.interior
         state.flooded = result.flooded
         state.materializedWater = result.materializedWater
-        state.brokenByFlood = if (boundsChanged) BitSet() else state.brokenByFlood
-        state.drainSuppressed.clear()
+        state.brokenByFlood = BitSet(result.sizeX * result.sizeY * result.sizeZ)
+        state.drainSuppressed = BitSet(result.sizeX * result.sizeY * result.sizeZ)
         state.faceCondXP = result.faceCondXP
         state.faceCondYP = result.faceCondYP
         state.faceCondZP = result.faceCondZP
@@ -1085,10 +1250,117 @@ object ShipWaterPocketManager {
         state.voxelSimulationComponentMask = result.voxelSimulationComponentMask
         state.componentGraphDegraded = result.componentGraphDegraded
         state.geometrySignature = result.geometrySignature
-        state.waterReachable = BitSet(result.sizeX * result.sizeY * result.sizeZ)
+        state.waterReachable = remapStateMask(
+            mask = liveWaterReachable,
+            oldMinX = prevMinX,
+            oldMinY = prevMinY,
+            oldMinZ = prevMinZ,
+            oldSizeX = prevSizeX,
+            oldSizeY = prevSizeY,
+            oldSizeZ = prevSizeZ,
+            newMinX = result.minX,
+            newMinY = result.minY,
+            newMinZ = result.minZ,
+            newSizeX = result.sizeX,
+            newSizeY = result.sizeY,
+            newSizeZ = result.sizeZ,
+        )
+        state.waterReachable.and(state.open)
+        state.waterReachable.and(state.simulationDomain)
         state.unreachableVoid = state.open.clone() as BitSet
+        state.unreachableVoid.andNot(state.waterReachable)
         state.floodPlaneByComponent.clear()
         clearFloodWriteQueues(state)
+
+        val preservedFlooded = remapStateMask(
+            mask = liveFlooded,
+            oldMinX = prevMinX,
+            oldMinY = prevMinY,
+            oldMinZ = prevMinZ,
+            oldSizeX = prevSizeX,
+            oldSizeY = prevSizeY,
+            oldSizeZ = prevSizeZ,
+            newMinX = result.minX,
+            newMinY = result.minY,
+            newMinZ = result.minZ,
+            newSizeX = result.sizeX,
+            newSizeY = result.sizeY,
+            newSizeZ = result.sizeZ,
+        )
+        preservedFlooded.and(state.open)
+        preservedFlooded.and(state.simulationDomain)
+        state.flooded.or(preservedFlooded)
+
+        val preservedMaterialized = remapStateMask(
+            mask = liveMaterialized,
+            oldMinX = prevMinX,
+            oldMinY = prevMinY,
+            oldMinZ = prevMinZ,
+            oldSizeX = prevSizeX,
+            oldSizeY = prevSizeY,
+            oldSizeZ = prevSizeZ,
+            newMinX = result.minX,
+            newMinY = result.minY,
+            newMinZ = result.minZ,
+            newSizeX = result.sizeX,
+            newSizeY = result.sizeY,
+            newSizeZ = result.sizeZ,
+        )
+        preservedMaterialized.and(state.open)
+        preservedMaterialized.and(state.simulationDomain)
+        state.materializedWater.or(preservedMaterialized)
+        state.flooded.or(state.materializedWater)
+
+        state.brokenByFlood = remapStateMask(
+            mask = liveBrokenByFlood,
+            oldMinX = prevMinX,
+            oldMinY = prevMinY,
+            oldMinZ = prevMinZ,
+            oldSizeX = prevSizeX,
+            oldSizeY = prevSizeY,
+            oldSizeZ = prevSizeZ,
+            newMinX = result.minX,
+            newMinY = result.minY,
+            newMinZ = result.minZ,
+            newSizeX = result.sizeX,
+            newSizeY = result.sizeY,
+            newSizeZ = result.sizeZ,
+        )
+        state.brokenByFlood.and(state.open)
+        state.brokenByFlood.and(state.simulationDomain)
+
+        state.drainSuppressed = remapStateMask(
+            mask = liveDrainSuppressed,
+            oldMinX = prevMinX,
+            oldMinY = prevMinY,
+            oldMinZ = prevMinZ,
+            oldSizeX = prevSizeX,
+            oldSizeY = prevSizeY,
+            oldSizeZ = prevSizeZ,
+            newMinX = result.minX,
+            newMinY = result.minY,
+            newMinZ = result.minZ,
+            newSizeX = result.sizeX,
+            newSizeY = result.sizeY,
+            newSizeZ = result.sizeZ,
+        )
+        state.drainSuppressed.and(state.open)
+        state.drainSuppressed.and(state.simulationDomain)
+
+        restoreQueuedFloodAddsAfterGeometry(
+            state = state,
+            oldQueuedAdds = liveQueuedAdds,
+            oldQueuedAddOrder = liveQueuedAddOrder,
+            oldMinX = prevMinX,
+            oldMinY = prevMinY,
+            oldMinZ = prevMinZ,
+            oldSizeX = prevSizeX,
+            oldSizeY = prevSizeY,
+            oldSizeZ = prevSizeZ,
+            newMinX = result.minX,
+            newMinY = result.minY,
+            newMinZ = result.minZ,
+        )
 
         if (
             boundsChanged ||
@@ -1117,6 +1389,7 @@ object ShipWaterPocketManager {
             state.materializedWater.or(persistedMaterialized)
             state.waterReachable.clear()
             state.unreachableVoid = state.open.clone() as BitSet
+            state.unreachableVoid.andNot(state.waterReachable)
             state.floodPlaneByComponent.clear()
             state.dirty = true
         }
@@ -3511,7 +3784,12 @@ object ShipWaterPocketManager {
         if (idx < 0) return false
         if (state.materializedWater.get(idx)) return false
         if (state.waterReachable.get(idx)) return false
-        return isClassificationInSimulationDomain(state, classification)
+        if (!isClassificationInSimulationDomain(state, classification)) return false
+
+        // Heuristic-promoted simulation-domain cells are needed for bowl-shaped pockets, but they are not by
+        // themselves strong evidence that world water should be culled. Suppress dry world fluid only for strict
+        // interior cells, or for cells currently protected by the drain solver.
+        return state.interior.get(idx) || state.drainSuppressed.get(idx)
     }
 
     private fun isAirPocketClassification(state: ShipPocketState, classification: PointVoidClassification): Boolean {

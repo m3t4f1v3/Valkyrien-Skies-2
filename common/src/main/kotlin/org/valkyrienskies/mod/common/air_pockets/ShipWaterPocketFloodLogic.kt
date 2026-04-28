@@ -181,14 +181,18 @@ internal fun applyFloodBlockWrite(
         }
 
         if (current.isAir || isFlowingFloodFluid) {
-            level.setBlock(pos, canonical.defaultFluidState().createLegacyBlock(), setBlockFlags)
+            if (!level.setBlock(pos, canonical.defaultFluidState().createLegacyBlock(), setBlockFlags)) {
+                return FloodWriteApplication(false, false, FloodWriteEffectKind.NONE)
+            }
             level.scheduleTick(pos, canonical, 1)
             return FloodWriteApplication(true, true, FloodWriteEffectKind.SOURCE)
         }
 
         if (isWaterloggableFloodState(current, canonical)) {
             if (!current.getValue(BlockStateProperties.WATERLOGGED)) {
-                level.setBlock(pos, current.setValue(BlockStateProperties.WATERLOGGED, true), setBlockFlags)
+                if (!level.setBlock(pos, current.setValue(BlockStateProperties.WATERLOGGED, true), setBlockFlags)) {
+                    return FloodWriteApplication(false, false, FloodWriteEffectKind.NONE)
+                }
                 level.scheduleTick(pos, Fluids.WATER, 1)
             }
             return FloodWriteApplication(true, true, FloodWriteEffectKind.WATERLOG)
@@ -205,7 +209,9 @@ internal fun applyFloodBlockWrite(
                 return FloodWriteApplication(false, false, FloodWriteEffectKind.NONE)
             }
 
-            level.setBlock(pos, canonical.defaultFluidState().createLegacyBlock(), setBlockFlags)
+            if (!level.setBlock(pos, canonical.defaultFluidState().createLegacyBlock(), setBlockFlags)) {
+                return FloodWriteApplication(false, false, FloodWriteEffectKind.NONE)
+            }
             level.scheduleTick(pos, canonical, 1)
             return FloodWriteApplication(true, true, FloodWriteEffectKind.BREAK_ON_FLOOD)
         }
@@ -217,14 +223,18 @@ internal fun applyFloodBlockWrite(
         !currentFluid.isEmpty &&
         floodCanonicalSource(currentFluid.type) == canonical
     ) {
-        level.setBlock(pos, Blocks.AIR.defaultBlockState(), setBlockFlags)
+        if (!level.setBlock(pos, Blocks.AIR.defaultBlockState(), setBlockFlags)) {
+            return FloodWriteApplication(false, false, FloodWriteEffectKind.NONE)
+        }
         return FloodWriteApplication(true, false, FloodWriteEffectKind.SOURCE)
     }
 
     if (isWaterloggableFloodState(current, canonical) &&
         current.getValue(BlockStateProperties.WATERLOGGED)
     ) {
-        level.setBlock(pos, current.setValue(BlockStateProperties.WATERLOGGED, false), setBlockFlags)
+        if (!level.setBlock(pos, current.setValue(BlockStateProperties.WATERLOGGED, false), setBlockFlags)) {
+            return FloodWriteApplication(false, false, FloodWriteEffectKind.NONE)
+        }
         return FloodWriteApplication(true, false, FloodWriteEffectKind.WATERLOG)
     }
 
