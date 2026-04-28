@@ -1699,6 +1699,7 @@ object ShipWaterPocketManager {
         } else {
             java.util.Arrays.fill(submergedCoverage, 0, volume, 0.0)
         }
+        val buoyancySubmergedCoverage = DoubleArray(volume)
 
         var surfaceYByCell = tmpPrecomputedSurfaceY.get()
         if (surfaceYByCell.size < volume) {
@@ -1750,6 +1751,26 @@ object ShipWaterPocketManager {
                     if (surface != null && surface.isFinite()) {
                         surfaceYByCell[idx] = surface
                     }
+                }
+            }
+            if (state.simulationDomain.get(idx) && !state.materializedWater.get(idx)) {
+                val buoyancyCoverage = if (coverage.isSubmergedAny()) {
+                    coverage
+                } else {
+                    getShipCellFluidCoverage(
+                        level = level,
+                        shipTransform = shipTransform,
+                        currentShipState = null,
+                        shipBlockPos = shipBlockPos,
+                        shipPosTmp = shipPosTmp,
+                        worldPosTmp = worldPosTmp,
+                        worldBlockPos = worldBlockPos,
+                        queryCache = queryCache,
+                        clientWorldQueryBounds = clientWorldQueryBounds,
+                    )
+                }
+                if (buoyancyCoverage.isSubmergedAny()) {
+                    buoyancySubmergedCoverage[idx] = buoyancyCoverage.coverageRatio
                 }
             }
             idx = open.nextSetBit(idx + 1)
@@ -2205,6 +2226,7 @@ object ShipWaterPocketManager {
             voxelInteriorComponentMask = state.voxelSimulationComponentMask,
             submerged = submerged,
             submergedCoverage = submergedCoverage.copyOf(volume),
+            buoyancySubmergedCoverage = buoyancySubmergedCoverage,
             dominantFloodFluid = dominantFloodFluid,
             surfaceYByCell = surfaceYByCell.copyOf(volume),
             openingFaceSamples = openingFaceSamples,
@@ -4361,6 +4383,7 @@ object ShipWaterPocketManager {
         voxelInteriorComponentMask: LongArray? = null,
         precomputedSubmerged: BitSet? = null,
         precomputedSubmergedCoverage: DoubleArray? = null,
+        precomputedBuoyancySubmergedCoverage: DoubleArray? = null,
         precomputedDominantFloodFluid: Fluid? = null,
         precomputedSurfaceYByCell: DoubleArray? = null,
         precomputedOpeningFaceSamples: Long2ObjectOpenHashMap<OpeningFaceCoverageSnapshot>? = null,
@@ -4479,6 +4502,14 @@ object ShipWaterPocketManager {
                     dominantFloodFluid = fluid
                 }
             }
+        }
+        val buoyancyCoverage = if (
+            precomputedBuoyancySubmergedCoverage != null &&
+            precomputedBuoyancySubmergedCoverage.size >= volume
+        ) {
+            precomputedBuoyancySubmergedCoverage
+        } else {
+            submergedCoverage
         }
         if (dominantFloodFluid != null && floodFluidOut != null && floodFluidOut.get() == null) {
             floodFluidOut.set(dominantFloodFluid)
@@ -5587,7 +5618,7 @@ object ShipWaterPocketManager {
             if (buoyancy != null) {
                 for (i in 0 until tail) {
                     val cellIdx = componentQueue[i]
-                    val coverage = submergedCoverage[cellIdx].coerceIn(0.0, 1.0)
+                    val coverage = buoyancyCoverage[cellIdx].coerceIn(0.0, 1.0)
                     if (coverage <= 1.0e-6) continue
 
                     val lx = cellIdx % sizeX
@@ -5646,6 +5677,7 @@ object ShipWaterPocketManager {
             voxelInteriorComponentMask = snapshot.voxelInteriorComponentMask,
             precomputedSubmerged = snapshot.submerged,
             precomputedSubmergedCoverage = snapshot.submergedCoverage,
+            precomputedBuoyancySubmergedCoverage = snapshot.buoyancySubmergedCoverage,
             precomputedDominantFloodFluid = snapshot.dominantFloodFluid,
             precomputedSurfaceYByCell = snapshot.surfaceYByCell,
             precomputedOpeningFaceSamples = snapshot.openingFaceSamples,

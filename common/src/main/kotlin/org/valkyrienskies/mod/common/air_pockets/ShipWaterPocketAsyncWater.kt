@@ -40,6 +40,7 @@ internal data class WaterSolveSnapshot(
     val voxelInteriorComponentMask: LongArray,
     val submerged: BitSet,
     val submergedCoverage: DoubleArray,
+    val buoyancySubmergedCoverage: DoubleArray,
     val dominantFloodFluid: Fluid?,
     val surfaceYByCell: DoubleArray,
     val openingFaceSamples: Long2ObjectOpenHashMap<OpeningFaceCoverageSnapshot>,
