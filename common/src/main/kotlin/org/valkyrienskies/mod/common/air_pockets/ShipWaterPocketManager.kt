@@ -770,6 +770,7 @@ object ShipWaterPocketManager {
     }
 
     private fun flushPersistedServerState(level: ServerLevel, shipId: Long, state: ShipPocketState, force: Boolean, nowTick: Long) {
+        if (state.restoredFromPersistence && state.awaitingGeometryValidation) return
         if (!force && !state.persistDirty) return
         if (!force && nowTick - state.lastPersistFlushTick < PERSIST_FLUSH_INTERVAL_TICKS) return
         val persisted = snapshotStateForPersistence(state)
@@ -2502,6 +2503,11 @@ object ShipWaterPocketManager {
                 }
             }
 
+            if (state.awaitingGeometryValidation && !shipChunksLoaded) {
+                clearFloodWriteQueues(state)
+                return@forEach
+            }
+
             val restoredStateUsable = isRestoredStateStructurallyUsableForBounds(
                 state = state,
                 minX = minX,
@@ -2512,14 +2518,7 @@ object ShipWaterPocketManager {
                 sizeZ = sizeZ,
             )
 
-            if (state.awaitingGeometryValidation && !geometryApplied && !restoredStateUsable) {
-                flushPersistedServerState(
-                    level = level,
-                    shipId = ship.id,
-                    state = state,
-                    force = false,
-                    nowTick = level.gameTime,
-                )
+            if (state.awaitingGeometryValidation && !geometryApplied) {
                 return@forEach
             }
 

@@ -372,7 +372,7 @@ internal fun applyPersistedState(state: ShipPocketState, persisted: PersistedShi
     state.strictInterior = persisted.strictInterior.clone() as BitSet
     state.simulationDomain = persisted.simulationDomain.clone() as BitSet
     state.outsideVoid = persisted.outsideVoid.clone() as BitSet
-    state.interior = persisted.strictInterior.clone() as BitSet
+    state.interior = persisted.interior.clone() as BitSet
     state.floodFluid = canonicalFloodSource(persisted.floodFluid)
     state.flooded = persisted.flooded.clone() as BitSet
     state.materializedWater = persisted.materializedWater.clone() as BitSet
@@ -386,7 +386,7 @@ internal fun applyPersistedState(state: ShipPocketState, persisted: PersistedShi
     state.voxelExteriorComponentMask = persisted.voxelExteriorComponentMask.copyOf()
     state.voxelInteriorComponentMask = persisted.voxelInteriorComponentMask.copyOf()
     state.voxelSimulationComponentMask = persisted.voxelSimulationComponentMask.copyOf()
-    state.componentGraphDegraded = true
+    state.componentGraphDegraded = false
     state.floodPlaneByComponent = Int2DoubleOpenHashMap(persisted.floodPlaneByComponent)
     state.geometryRevision = persisted.geometryRevision
     state.geometrySignature = persisted.geometrySignature
