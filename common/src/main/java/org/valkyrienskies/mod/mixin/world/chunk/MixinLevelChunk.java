@@ -19,6 +19,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.ChunkStatus;
 import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.LevelChunk.PostLoadProcessor;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.chunk.ProtoChunk;
 import net.minecraft.world.level.chunk.UpgradeData;
@@ -66,7 +67,7 @@ public abstract class MixinLevelChunk extends ChunkAccess implements VSLevelChun
     private FluidStateManager.ChunkFluidData fluidData;
 
     /**
-     * Allow block entity ticking in shipyard chunks at FULL status (level 33).
+     * Allow block entity ticking in shipyard chunks that were loaded only to FULL status.
      *
      * MC's isTicking checks getFullStatus().isOrAfter(BLOCK_TICKING), which requires
      * level ≤ 32. Ship chunks use level 33 (FULL) to minimize neighbor loading.
@@ -84,18 +85,18 @@ public abstract class MixinLevelChunk extends ChunkAccess implements VSLevelChun
     }
 
     /**
-     * Report shipyard chunks as BLOCK_TICKING status so that Level.markAndNotifyBlock()
+     * Report FULL-only shipyard chunks as ENTITY_TICKING status so that Level.markAndNotifyBlock()
      * calls sendBlockUpdated(), which triggers ServerChunkCache.blockChanged() and
      * ultimately ChunkHolder.broadcastChanges() to send block update packets to clients.
      *
      * Without this, ship chunks at level 33 (FULL status) fail the
-     * getFullStatus().isOrAfter(BLOCK_TICKING) check and block updates are silently dropped.
+     * getFullStatus().isOrAfter(ENTITY_TICKING) check and block updates are silently dropped.
      */
     @Inject(method = "getFullStatus", at = @At("HEAD"), cancellable = true)
     private void vs$upgradeShipyardChunkStatus(CallbackInfoReturnable<FullChunkStatus> cir) {
         if (VS2ChunkAllocator.INSTANCE.isChunkInShipyardCompanion(
                 this.chunkPos.x, this.chunkPos.z)) {
-            cir.setReturnValue(FullChunkStatus.BLOCK_TICKING);
+            cir.setReturnValue(FullChunkStatus.ENTITY_TICKING);
         }
     }
 
@@ -110,16 +111,9 @@ public abstract class MixinLevelChunk extends ChunkAccess implements VSLevelChun
         at = @At("RETURN")
     )
     private void LevelChunk$init(
-        final Level level,
-        final ChunkPos chunkPos,
-        final UpgradeData data,
-        final LevelChunkTicks<Block> blockTicks,
-        final LevelChunkTicks<Fluid> fluidTicks,
-        final long inhabitedTime,
-        final LevelChunkSection[] sections,
-        final LevelChunk.PostLoadProcessor postProcessor,
-        final BlendingData blendingData,
-        final CallbackInfo ci
+        Level level, ChunkPos chunkPos, UpgradeData upgradeData, LevelChunkTicks levelChunkTicks,
+        LevelChunkTicks levelChunkTicks2, long l, LevelChunkSection[] levelChunkSections,
+        PostLoadProcessor postLoadProcessor, BlendingData blendingData, CallbackInfo ci
     ) {
         this.fluidData = new FluidStateManager.ChunkFluidData();
 

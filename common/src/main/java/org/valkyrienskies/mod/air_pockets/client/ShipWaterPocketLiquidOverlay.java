@@ -94,7 +94,6 @@ public final class ShipWaterPocketLiquidOverlay {
     private static final int SHAPE_MAX_COMPONENTS = 64;
     private static final byte SHAPE_COMPONENT_SOLID = -1;
     private static final byte SHAPE_COMPONENT_UNASSIGNED = -2;
-
     private static final float[] CLIP_X0 = new float[6];
     private static final float[] CLIP_Y0 = new float[6];
     private static final float[] CLIP_Z0 = new float[6];
@@ -124,11 +123,11 @@ public final class ShipWaterPocketLiquidOverlay {
         }
     }
 
-    private static final class FluidSurfaceSample {
-        private final Fluid fluid;
-        private final FluidState fluidState;
-        private final BlockPos pos;
-        private final double surfaceY;
+    static final class FluidSurfaceSample {
+        final Fluid fluid;
+        final FluidState fluidState;
+        final BlockPos pos;
+        final double surfaceY;
 
         private FluidSurfaceSample(final Fluid fluid, final FluidState fluidState, final BlockPos pos, final double surfaceY) {
             this.fluid = fluid;
@@ -194,7 +193,6 @@ public final class ShipWaterPocketLiquidOverlay {
     private static final Long2ObjectOpenHashMap<ChunkTrackedFluidSurface> FLUID_SURFACE_CACHE = new Long2ObjectOpenHashMap<>();
     private static final Long2ObjectOpenHashMap<ChunkTrackedFluidSurface> FLUID_SURFACE_POINT_CACHE =
         new Long2ObjectOpenHashMap<>();
-
     public static void clear() {
         SHIP_CACHE.clear();
         SHAPE_TEMPLATE_CACHE.clear();
@@ -313,9 +311,9 @@ public final class ShipWaterPocketLiquidOverlay {
                     .setCullState(RenderStateShard.NO_CULL)
                     .setLightmapState(RenderStateShard.LIGHTMAP)
                     .setOverlayState(RenderStateShard.OVERLAY)
-                    .setLayeringState(RenderStateShard.VIEW_OFFSET_Z_LAYERING)
+                    .setLayeringState(RenderStateShard.NO_LAYERING)
                     .setDepthTestState(RenderStateShard.LEQUAL_DEPTH_TEST)
-                    .setWriteMaskState(RenderStateShard.COLOR_WRITE)
+                    .setWriteMaskState(RenderStateShard.COLOR_DEPTH_WRITE)
                     .createCompositeState(true)
             );
         }
@@ -432,15 +430,17 @@ public final class ShipWaterPocketLiquidOverlay {
             final int t = outsideIdx / sizeX;
             final int ly = t % sizeY;
             final int lz = t / sizeY;
+            final @Nullable OverlayFaceSample stableSample = resolveOverlayFaceSample(level, snapshot, fluidPos, scanPos,
+                fluidQueryCache, lx + 0.5, ly + 0.5, lz + 0.5, m00, m10, m20, m01, m11, m21, m02, m12, m22, tX, tY, tZ);
             if (lx > 0) {
                 final int n = outsideIdx - 1;
                 final boolean fullCell = isFullCellOverlaySolid(fullCellOverlaySolids, n);
                 final boolean interiorFace = isInteriorOpen(open, interior, n);
                 final boolean solidFace = !open.get(n) && overlaySolids != null && overlaySolids.get(n);
                 if (fullCell || interiorFace || solidFace) {
-                    final @Nullable OverlayFaceSample sample = resolveOverlayFaceSample(level, snapshot, fluidPos, scanPos,
-                        fluidQueryCache, lx + FACE_SAMPLE_OFFSET, ly + 0.5, lz + 0.5, m00, m10, m20, m01, m11, m21, m02, m12,
-                        m22, tX, tY, tZ);
+                    final @Nullable OverlayFaceSample sample = stableSample != null ? stableSample : resolveOverlayFaceSample(level,
+                        snapshot, fluidPos, scanPos, fluidQueryCache, lx + FACE_SAMPLE_OFFSET, ly + 0.5, lz + 0.5, m00, m10, m20,
+                        m01, m11, m21, m02, m12, m22, tX, tY, tZ);
                     if (sample != null) {
                         if (fullCell) {
                             solidPos.set(cache.minX + lx - 1, cache.minY + ly, cache.minZ + lz);
@@ -463,9 +463,9 @@ public final class ShipWaterPocketLiquidOverlay {
                 final boolean interiorFace = isInteriorOpen(open, interior, n);
                 final boolean solidFace = !open.get(n) && overlaySolids != null && overlaySolids.get(n);
                 if (fullCell || interiorFace || solidFace) {
-                    final @Nullable OverlayFaceSample sample = resolveOverlayFaceSample(level, snapshot, fluidPos, scanPos,
-                        fluidQueryCache, lx + 1.0 - FACE_SAMPLE_OFFSET, ly + 0.5, lz + 0.5, m00, m10, m20, m01, m11, m21, m02,
-                        m12, m22, tX, tY, tZ);
+                    final @Nullable OverlayFaceSample sample = stableSample != null ? stableSample : resolveOverlayFaceSample(level,
+                        snapshot, fluidPos, scanPos, fluidQueryCache, lx + 1.0 - FACE_SAMPLE_OFFSET, ly + 0.5, lz + 0.5, m00,
+                        m10, m20, m01, m11, m21, m02, m12, m22, tX, tY, tZ);
                     if (sample != null) {
                         if (fullCell) {
                             solidPos.set(cache.minX + lx + 1, cache.minY + ly, cache.minZ + lz);
@@ -488,9 +488,9 @@ public final class ShipWaterPocketLiquidOverlay {
                 final boolean interiorFace = isInteriorOpen(open, interior, n);
                 final boolean solidFace = !open.get(n) && overlaySolids != null && overlaySolids.get(n);
                 if (fullCell || interiorFace || solidFace) {
-                    final @Nullable OverlayFaceSample sample = resolveOverlayFaceSample(level, snapshot, fluidPos, scanPos,
-                        fluidQueryCache, lx + 0.5, ly + FACE_SAMPLE_OFFSET, lz + 0.5, m00, m10, m20, m01, m11, m21, m02, m12,
-                        m22, tX, tY, tZ);
+                    final @Nullable OverlayFaceSample sample = stableSample != null ? stableSample : resolveOverlayFaceSample(level,
+                        snapshot, fluidPos, scanPos, fluidQueryCache, lx + 0.5, ly + FACE_SAMPLE_OFFSET, lz + 0.5, m00, m10, m20,
+                        m01, m11, m21, m02, m12, m22, tX, tY, tZ);
                     if (sample != null) {
                         if (fullCell) {
                             solidPos.set(cache.minX + lx, cache.minY + ly - 1, cache.minZ + lz);
@@ -513,9 +513,9 @@ public final class ShipWaterPocketLiquidOverlay {
                 final boolean interiorFace = isInteriorOpen(open, interior, n);
                 final boolean solidFace = !open.get(n) && overlaySolids != null && overlaySolids.get(n);
                 if (fullCell || interiorFace || solidFace) {
-                    final @Nullable OverlayFaceSample sample = resolveOverlayFaceSample(level, snapshot, fluidPos, scanPos,
-                        fluidQueryCache, lx + 0.5, ly + 1.0 - FACE_SAMPLE_OFFSET, lz + 0.5, m00, m10, m20, m01, m11, m21, m02,
-                        m12, m22, tX, tY, tZ);
+                    final @Nullable OverlayFaceSample sample = stableSample != null ? stableSample : resolveOverlayFaceSample(level,
+                        snapshot, fluidPos, scanPos, fluidQueryCache, lx + 0.5, ly + 1.0 - FACE_SAMPLE_OFFSET, lz + 0.5, m00, m10,
+                        m20, m01, m11, m21, m02, m12, m22, tX, tY, tZ);
                     if (sample != null) {
                         if (fullCell) {
                             solidPos.set(cache.minX + lx, cache.minY + ly + 1, cache.minZ + lz);
@@ -538,9 +538,9 @@ public final class ShipWaterPocketLiquidOverlay {
                 final boolean interiorFace = isInteriorOpen(open, interior, n);
                 final boolean solidFace = !open.get(n) && overlaySolids != null && overlaySolids.get(n);
                 if (fullCell || interiorFace || solidFace) {
-                    final @Nullable OverlayFaceSample sample = resolveOverlayFaceSample(level, snapshot, fluidPos, scanPos,
-                        fluidQueryCache, lx + 0.5, ly + 0.5, lz + FACE_SAMPLE_OFFSET, m00, m10, m20, m01, m11, m21, m02, m12,
-                        m22, tX, tY, tZ);
+                    final @Nullable OverlayFaceSample sample = stableSample != null ? stableSample : resolveOverlayFaceSample(level,
+                        snapshot, fluidPos, scanPos, fluidQueryCache, lx + 0.5, ly + 0.5, lz + FACE_SAMPLE_OFFSET, m00, m10, m20,
+                        m01, m11, m21, m02, m12, m22, tX, tY, tZ);
                     if (sample != null) {
                         if (fullCell) {
                             solidPos.set(cache.minX + lx, cache.minY + ly, cache.minZ + lz - 1);
@@ -563,9 +563,9 @@ public final class ShipWaterPocketLiquidOverlay {
                 final boolean interiorFace = isInteriorOpen(open, interior, n);
                 final boolean solidFace = !open.get(n) && overlaySolids != null && overlaySolids.get(n);
                 if (fullCell || interiorFace || solidFace) {
-                    final @Nullable OverlayFaceSample sample = resolveOverlayFaceSample(level, snapshot, fluidPos, scanPos,
-                        fluidQueryCache, lx + 0.5, ly + 0.5, lz + 1.0 - FACE_SAMPLE_OFFSET, m00, m10, m20, m01, m11, m21, m02,
-                        m12, m22, tX, tY, tZ);
+                    final @Nullable OverlayFaceSample sample = stableSample != null ? stableSample : resolveOverlayFaceSample(level,
+                        snapshot, fluidPos, scanPos, fluidQueryCache, lx + 0.5, ly + 0.5, lz + 1.0 - FACE_SAMPLE_OFFSET, m00, m10,
+                        m20, m01, m11, m21, m02, m12, m22, tX, tY, tZ);
                     if (sample != null) {
                         if (fullCell) {
                             solidPos.set(cache.minX + lx, cache.minY + ly, cache.minZ + lz + 1);
@@ -685,7 +685,7 @@ public final class ShipWaterPocketLiquidOverlay {
         return renderType == RenderType.translucent() || renderType == RenderType.cutout() || renderType == RenderType.cutoutMipped();
     }
 
-    private static @Nullable FluidSurfaceSample findExteriorFluidSurface(final net.minecraft.client.multiplayer.ClientLevel level,
+    static @Nullable FluidSurfaceSample findExteriorFluidSurface(final net.minecraft.client.multiplayer.ClientLevel level,
         final BlockPos.MutableBlockPos fluidPos, final BlockPos.MutableBlockPos scanPos,
         final FluidStateManager.QueryCache fluidQueryCache, final double worldX, final double worldY, final double worldZ) {
         FluidSurfaceSample best = null;
@@ -769,13 +769,21 @@ public final class ShipWaterPocketLiquidOverlay {
         }
 
         fluidPos.set(blockX, blockY, blockZ);
-        final FluidStateManager.FluidData sampleData = findExteriorFluidData(level, fluidPos, fluidQueryCache);
-        if (sampleData == null) {
-            cacheFluidSurfacePoint(pointKey, chunkRevision, FLUID_SURFACE_MISS);
-            return null;
+        FluidState sampleState = getRawExteriorFluidState(level, fluidPos, fluidQueryCache);
+        if (sampleState == null) {
+            fluidPos.move(0, -1, 0);
+            sampleState = getRawExteriorFluidState(level, fluidPos, fluidQueryCache);
+            if (sampleState == null) {
+                fluidPos.move(0, 2, 0);
+                sampleState = getRawExteriorFluidState(level, fluidPos, fluidQueryCache);
+                if (sampleState == null) {
+                    cacheFluidSurfacePoint(pointKey, chunkRevision, FLUID_SURFACE_MISS);
+                    return null;
+                }
+            }
         }
 
-        final long key = BlockPos.asLong(fluidPos.getX(), sampleData.topY(), fluidPos.getZ());
+        final long key = BlockPos.asLong(fluidPos.getX(), fluidPos.getY(), fluidPos.getZ());
         final ChunkTrackedFluidSurface cached = FLUID_SURFACE_CACHE.get(key);
         if (cached != null) {
             if (cached.chunkRevision == chunkRevision) {
@@ -785,9 +793,15 @@ public final class ShipWaterPocketLiquidOverlay {
             FLUID_SURFACE_CACHE.remove(key);
         }
 
-        final Fluid canonicalFluid = sampleData.sourceFluid();
-        scanPos.set(fluidPos.getX(), sampleData.topY(), fluidPos.getZ());
-        final FluidState topFluid = sampleData.surface();
+        final Fluid canonicalFluid = canonicalSource(sampleState.getType());
+        final int topY = scanRawExteriorFluidColumnTopY(level, fluidPos, canonicalFluid, fluidQueryCache, scanPos);
+        scanPos.set(fluidPos.getX(), topY, fluidPos.getZ());
+
+        final FluidState topFluid = getRawExteriorFluidState(level, scanPos, fluidQueryCache);
+        if (topFluid == null) {
+            cacheFluidSurfacePoint(pointKey, chunkRevision, FLUID_SURFACE_MISS);
+            return null;
+        }
 
         final FluidSurfaceSample sample = new FluidSurfaceSample(
             canonicalFluid,
@@ -810,27 +824,26 @@ public final class ShipWaterPocketLiquidOverlay {
         FLUID_SURFACE_POINT_CACHE.put(pointKey, new ChunkTrackedFluidSurface(chunkRevision, sample));
     }
 
-    private static @Nullable FluidStateManager.FluidData findExteriorFluidData(
+    static int scanRawExteriorFluidColumnTopY(
         final net.minecraft.client.multiplayer.ClientLevel level,
-        final BlockPos.MutableBlockPos pos,
-        final FluidStateManager.QueryCache fluidQueryCache
+        final BlockPos pos,
+        final Fluid canonicalFluid,
+        final FluidStateManager.QueryCache fluidQueryCache,
+        final BlockPos.MutableBlockPos scanPos
     ) {
-        final FluidStateManager.FluidData sameY = getExteriorFluidData(level, pos, fluidQueryCache);
-        if (sameY != null) {
-            return sameY;
+        scanPos.set(pos);
+        final int maxYExclusive = level.getMaxBuildHeight();
+        while (scanPos.getY() < maxYExclusive) {
+            final FluidState current = getRawExteriorFluidState(level, scanPos, fluidQueryCache);
+            if (current == null || canonicalSource(current.getType()) != canonicalFluid) {
+                break;
+            }
+            scanPos.move(0, 1, 0);
         }
-
-        pos.move(0, -1, 0);
-        final FluidStateManager.FluidData below = getExteriorFluidData(level, pos, fluidQueryCache);
-        if (below != null) {
-            return below;
-        }
-
-        pos.move(0, 2, 0);
-        return getExteriorFluidData(level, pos, fluidQueryCache);
+        return scanPos.getY() - 1;
     }
 
-    private static @Nullable FluidStateManager.FluidData getExteriorFluidData(
+    private static @Nullable FluidState getRawExteriorFluidState(
         final net.minecraft.client.multiplayer.ClientLevel level,
         final BlockPos pos,
         final FluidStateManager.QueryCache fluidQueryCache
@@ -838,10 +851,11 @@ public final class ShipWaterPocketLiquidOverlay {
         if (VSGameUtilsKt.isBlockInShipyard(level, pos)) {
             return null;
         }
-        return FluidStateManager.getFluidData(level, pos, fluidQueryCache);
+        final FluidState rawFluid = FluidStateManager.getFluidState(level, pos, fluidQueryCache);
+        return shouldUseExteriorFluidSample(false, rawFluid.isEmpty()) ? rawFluid : null;
     }
 
-    private static void ensureExteriorFluidCacheLevel(final net.minecraft.client.multiplayer.ClientLevel level) {
+    static void ensureExteriorFluidCacheLevel(final net.minecraft.client.multiplayer.ClientLevel level) {
         if (lastSurfaceCacheLevel == level) return;
         lastSurfaceCacheLevel = level;
         clearExteriorFluidCaches();

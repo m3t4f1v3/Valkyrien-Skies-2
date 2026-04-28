@@ -2,6 +2,7 @@ package org.valkyrienskies.mod.air_pockets.client;
 
 import java.lang.reflect.Method;
 import java.util.function.Function;
+import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.BiomeColors;
@@ -14,6 +15,7 @@ import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.level.material.Fluids;
 import net.minecraft.world.inventory.InventoryMenu;
+import org.joml.Vector3f;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -42,12 +44,15 @@ public final class ShipWaterPocketFluidVisualHelper {
     private static Method forgeGetOverlay3 = null;
     private static Method forgeGetTint0 = null;
     private static Method forgeGetTint3 = null;
+    private static Method forgeModifyFogColor6 = null;
 
     private static boolean fabricFluidTexturesChecked = false;
     private static Object fabricFluidRenderHandlerRegistry = null;
     private static Method fabricRegistryGetHandler = null;
     private static Method fabricHandlerGetSprites = null;
     private static Method fabricHandlerGetColor = null;
+
+    private static final int VANILLA_LAVA_FOG_COLOR = rgbFromFloats(0.6f, 0.1f, 0.0f);
 
     public static final class FluidVisual {
         private final Fluid fluid;
@@ -154,6 +159,9 @@ public final class ShipWaterPocketFluidVisualHelper {
         if (canonical == Fluids.WATER) {
             return BiomeColors.getAverageWaterColor(level, pos);
         }
+        if (canonical == Fluids.LAVA) {
+            return 0xFF6A00;
+        }
 
         final Integer forgeTint = queryForgeFluidTint(level, pos, canonical, fluidState);
         if (forgeTint != null) return forgeTint.intValue() & 0xFFFFFF;
@@ -162,6 +170,24 @@ public final class ShipWaterPocketFluidVisualHelper {
         if (fabricTint != null) return fabricTint.intValue() & 0xFFFFFF;
 
         return 0xFFFFFF;
+    }
+
+    public static int getFluidFogColor(final ClientLevel level, final BlockPos pos, final Fluid fluid, final FluidState fluidState,
+        final @Nullable Camera camera) {
+        final Fluid canonical = canonicalSource(fluid);
+        if (canonical == Fluids.WATER) {
+            return level.getBiome(pos).value().getWaterFogColor() & 0xFFFFFF;
+        }
+        if (canonical == Fluids.LAVA) {
+            return VANILLA_LAVA_FOG_COLOR;
+        }
+
+        final Integer forgeFog = queryForgeFluidFogColor(level, pos, canonical, fluidState, camera);
+        if (forgeFog != null) {
+            return forgeFog.intValue() & 0xFFFFFF;
+        }
+
+        return getFluidTintColor(level, pos, canonical, fluidState);
     }
 
     public static @Nullable TextureAtlasSprite pickPreferredSprite(final Fluid fluid, final @Nullable TextureAtlasSprite[] sprites) {
@@ -222,6 +248,30 @@ public final class ShipWaterPocketFluidVisualHelper {
         return null;
     }
 
+    private static @Nullable Integer queryForgeFluidFogColor(final ClientLevel level, final BlockPos pos, final Fluid fluid,
+        final FluidState fluidState, final @Nullable Camera camera) {
+        if (!ensureForgeFluidTextureAccess() || forgeModifyFogColor6 == null || camera == null) return null;
+        try {
+            final Object ext = forgeFluidExtOf.invoke(null, fluid);
+            if (ext == null) return null;
+
+            final int fallbackRgb = getFluidTintColor(level, pos, fluid, fluidState);
+            final Vector3f baseColor = new Vector3f(
+                ((fallbackRgb >> 16) & 0xFF) / 255.0f,
+                ((fallbackRgb >> 8) & 0xFF) / 255.0f,
+                (fallbackRgb & 0xFF) / 255.0f
+            );
+            final Minecraft mc = Minecraft.getInstance();
+            final int renderDistance = mc.options != null ? mc.options.renderDistance().get() * 16 : 0;
+            final Object result = forgeModifyFogColor6.invoke(ext, camera, 0.0f, level, renderDistance, 0.0f, baseColor);
+            if (result instanceof final Vector3f fogColor) {
+                return rgbFromFloats(fogColor.x(), fogColor.y(), fogColor.z());
+            }
+        } catch (final Throwable ignored) {
+        }
+        return null;
+    }
+
     private static boolean ensureForgeFluidTextureAccess() {
         if (forgeFluidTexturesChecked) return forgeFluidExtOf != null;
         forgeFluidTexturesChecked = true;
@@ -238,6 +288,16 @@ public final class ShipWaterPocketFluidVisualHelper {
             forgeGetFlow3 = findMethod(extClass, "getFlowingTexture", FluidState.class, BlockAndTintGetter.class, BlockPos.class);
             forgeGetOverlay3 = findMethod(extClass, "getOverlayTexture", FluidState.class, BlockAndTintGetter.class, BlockPos.class);
             forgeGetTint3 = findMethod(extClass, "getTintColor", FluidState.class, BlockAndTintGetter.class, BlockPos.class);
+            forgeModifyFogColor6 = findMethod(
+                extClass,
+                "modifyFogColor",
+                Camera.class,
+                float.class,
+                ClientLevel.class,
+                int.class,
+                float.class,
+                Vector3f.class
+            );
             return true;
         } catch (final Throwable ignored) {
             return false;
@@ -309,5 +369,12 @@ public final class ShipWaterPocketFluidVisualHelper {
             if (value instanceof final ResourceLocation location) return location;
         }
         return null;
+    }
+
+    private static int rgbFromFloats(final float red, final float green, final float blue) {
+        final int redInt = Math.max(0, Math.min(255, Math.round(red * 255.0f)));
+        final int greenInt = Math.max(0, Math.min(255, Math.round(green * 255.0f)));
+        final int blueInt = Math.max(0, Math.min(255, Math.round(blue * 255.0f)));
+        return (redInt << 16) | (greenInt << 8) | blueInt;
     }
 }

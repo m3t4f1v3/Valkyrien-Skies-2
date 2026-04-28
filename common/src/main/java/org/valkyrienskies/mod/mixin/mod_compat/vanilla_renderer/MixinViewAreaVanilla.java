@@ -9,6 +9,7 @@ import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.ViewArea;
 import net.minecraft.client.renderer.chunk.ChunkRenderDispatcher;
 import net.minecraft.client.renderer.chunk.ChunkRenderDispatcher.RenderChunk;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.ChunkPos;
@@ -26,8 +27,10 @@ import org.valkyrienskies.core.api.ships.ClientShip;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.config.ShipRenderer;
 import org.valkyrienskies.mod.common.config.ShipRendererKt;
+import org.valkyrienskies.mod.mixin.accessors.client.multiplayer.ClientLevelAccessor;
 import org.valkyrienskies.mod.mixin.accessors.client.render.chunk.RenderChunkAccessor;
 import org.valkyrienskies.mod.mixinducks.client.render.IVSViewAreaMethods;
+import org.valkyrienskies.mod.mixinducks.mod_compat.vanilla_renderer.LevelRendererDuck;
 
 /**
  * The purpose of this mixin is to allow {@link ViewArea} to render ship chunks.
@@ -106,6 +109,19 @@ public class MixinViewAreaVanilla implements IVSViewAreaMethods {
         }
     }
 
+    @Unique
+    private void vs$markExistingShipRenderChunkDirty(final int chunkX, final int sectionY, final int chunkZ,
+        final boolean important) {
+        final int yIndex = sectionY - level.getMinSection();
+        if (yIndex < 0 || yIndex >= chunkGridSizeY) {
+            return;
+        }
+        final ChunkRenderDispatcher.RenderChunk[] renderChunksArray = vs$shipRenderChunks.get(ChunkPos.asLong(chunkX, chunkZ));
+        if (renderChunksArray != null && renderChunksArray[yIndex] != null) {
+            renderChunksArray[yIndex].setDirty(important);
+        }
+    }
+
     /**
      * Intercept setDirty for ship chunks. We do NOT create RenderChunks here because
      * each RenderChunk constructor calls glGenBuffers (blocking GPU allocation).
@@ -128,14 +144,22 @@ public class MixinViewAreaVanilla implements IVSViewAreaMethods {
 
         var ship = (ClientShip) VSGameUtilsKt.getShipManagingPos(level, x, z);
         if (ship != null && ShipRendererKt.getShipRenderer(ship) == ShipRenderer.VANILLA) {
+            if (this.level instanceof final ClientLevel clientLevel) {
+                final LevelRenderer levelRenderer = ((ClientLevelAccessor) clientLevel).getLevelRenderer();
+                if (levelRenderer instanceof final LevelRendererDuck levelRendererDuck) {
+                    levelRendererDuck.vs$setShipChunkVisibilityDirty();
+                }
+            }
             // Only mark existing render chunks dirty — don't create new ones.
             // Creation is deferred to vs$getOrCreateShipRenderChunk (called from
             // vs$addShipVisibleChunks) which only creates for non-empty sections.
-            final long chunkPosAsLong = ChunkPos.asLong(x, z);
-            final ChunkRenderDispatcher.RenderChunk[] renderChunksArray = vs$shipRenderChunks.get(chunkPosAsLong);
-            if (renderChunksArray != null && renderChunksArray[yIndex] != null) {
-                renderChunksArray[yIndex].setDirty(important);
-            }
+            vs$markExistingShipRenderChunkDirty(x, y, z, important);
+            vs$markExistingShipRenderChunkDirty(x - 1, y, z, important);
+            vs$markExistingShipRenderChunkDirty(x + 1, y, z, important);
+            vs$markExistingShipRenderChunkDirty(x, y - 1, z, important);
+            vs$markExistingShipRenderChunkDirty(x, y + 1, z, important);
+            vs$markExistingShipRenderChunkDirty(x, y, z - 1, important);
+            vs$markExistingShipRenderChunkDirty(x, y, z + 1, important);
 
             callbackInfo.cancel();
         }

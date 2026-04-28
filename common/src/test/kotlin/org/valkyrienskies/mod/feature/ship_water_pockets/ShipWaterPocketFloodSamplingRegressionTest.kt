@@ -33,6 +33,7 @@ class ShipWaterPocketFloodSamplingRegressionTest {
             blockKey(0, 2, 0) to Fluids.FLOWING_WATER.defaultFluidState().createLegacyBlock(),
         )
         val level = createTrackingLevel(states)
+
         val topFluidHeight = states.getValue(blockKey(0, 2, 0)).fluidState.ownHeight.toDouble()
 
         val surfaceY = invokeEstimateExteriorFluidSurfaceYAtShipPoint(
@@ -74,6 +75,32 @@ class ShipWaterPocketFloodSamplingRegressionTest {
         assertEquals(liveState.unreachableVoid, prepared.unreachableVoid)
         assertEquals(liveState.floodFluid, prepared.floodFluid)
         assertBuoyancyEquals(liveState.buoyancy, prepared.buoyancy)
+    }
+
+    @Test
+    fun partiallySubmergedSideOpeningStillCountsAsFloodIngress() {
+        val states = mutableMapOf(
+            blockKey(0, 0, 0) to Blocks.AIR.defaultBlockState(),
+            blockKey(1, 0, 0) to Fluids.FLOWING_WATER.defaultFluidState().createLegacyBlock(),
+        )
+        val level = createTrackingLevel(states, gameTime = 0L)
+        val state = horizontalPocketStateX(
+            sizeX = 2,
+            simulationIndices = intArrayOf(0),
+            exteriorIndices = intArrayOf(1),
+        ).apply {
+            exterior = bitSetOf(1)
+            floodFluid = Fluids.WATER
+        }
+        val snapshot = invokeCaptureWaterSolveSnapshot(level, state, shipTransform)
+        val openingSample = snapshot!!.openingFaceSamples.get(1L)
+        assertNotNull(openingSample)
+        assertEquals(Fluids.WATER, openingSample!!.canonicalFluid)
+        assertTrue(openingSample.coverageRatio > 0.0)
+
+        val reachable = invokeComputeWaterReachable(level, state, shipTransform)
+
+        assertTrue(reachable.get(0))
     }
 
     @Test
