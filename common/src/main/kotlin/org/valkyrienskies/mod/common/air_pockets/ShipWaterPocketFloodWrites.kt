@@ -64,7 +64,7 @@ internal fun isFloodAddFrontierReady(
     val volume = sizeX * sizeY * sizeZ
     if (idx !in 0 until volume) return false
     if (!state.open.get(idx) || !state.simulationDomain.get(idx)) return false
-    if (state.materializedWater.get(idx) || addedThisFlush.get(idx)) return true
+    if ((state.materializedWater.get(idx) && !state.queuedFloodRemoves.get(idx)) || addedThisFlush.get(idx)) return true
 
     val strideY = sizeX
     val strideZ = sizeX * sizeY
@@ -99,7 +99,8 @@ internal fun isFloodAddFrontierReady(
         if (conductance <= 0) return false
 
         return if (state.simulationDomain.get(neighborIdx)) {
-            state.materializedWater.get(neighborIdx) || addedThisFlush.get(neighborIdx)
+            (state.materializedWater.get(neighborIdx) && !state.queuedFloodRemoves.get(neighborIdx)) ||
+                addedThisFlush.get(neighborIdx)
         } else {
             state.outsideVoid.get(neighborIdx) && isExteriorFloodSeedReady(neighborIdx)
         }

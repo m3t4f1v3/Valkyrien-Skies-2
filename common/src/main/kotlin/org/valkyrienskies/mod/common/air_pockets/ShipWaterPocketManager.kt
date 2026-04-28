@@ -2564,11 +2564,13 @@ object ShipWaterPocketManager {
             // sitting still in the shipyard so they can reflow under the new gravity.
             val gravityDown = computeShipGravityDownDir(shipTransform)
             val lastGravity = state.lastGravityDownDir
+            var gravityDirectionChanged = false
             if (lastGravity == null) {
                 state.lastGravityDownDir = gravityDown
             } else if (lastGravity != gravityDown) {
                 state.lastGravityDownDir = gravityDown
                 state.pendingGravityResettleNextIdx = 0
+                gravityDirectionChanged = true
             }
             if (shipChunksLoaded) {
                 tickGravityResettle(level, state)
@@ -2675,6 +2677,9 @@ object ShipWaterPocketManager {
                 state.sizeY > 0 &&
                 state.sizeZ > 0
             ) {
+                if (gravityDirectionChanged) {
+                    redistributeMaterializedWaterForGravity(level, state, shipTransform)
+                }
                 updateFlooding(level, state, shipTransform)
                 state.lastFloodUpdateTick = now
             }
@@ -6111,17 +6116,7 @@ object ShipWaterPocketManager {
                         if (layerKey < minLayerKey) minLayerKey = layerKey
                     }
 
-                    val anchorLayerKey = when (gravityDownDir) {
-                        Direction.DOWN -> -anchorY
-                        Direction.UP -> anchorY
-                        Direction.EAST -> anchorX
-                        Direction.WEST -> -anchorX
-                        Direction.SOUTH -> anchorZ
-                        Direction.NORTH -> -anchorZ
-                    }
-                    val distToMax = kotlin.math.abs(maxLayerKey - anchorLayerKey)
-                    val distToMin = kotlin.math.abs(anchorLayerKey - minLayerKey)
-                    val firstLayerKey = if (distToMax >= distToMin) maxLayerKey else minLayerKey
+                    val firstLayerKey = maxLayerKey
                     val frontAnchorIdxs = IntArray(MAX_VIRTUAL_INGRESS_FRONTS)
                     val frontWeights = IntArray(MAX_VIRTUAL_INGRESS_FRONTS)
                     var frontCount = 0
@@ -6188,27 +6183,13 @@ object ShipWaterPocketManager {
                             return true
                         }
 
-                        fun layerKeyForCoords(x: Int, y: Int, z: Int): Int {
-                            return when (gravityDownDir) {
-                                Direction.DOWN -> -y
-                                Direction.UP -> y
-                                Direction.EAST -> x
-                                Direction.WEST -> -x
-                                Direction.SOUTH -> z
-                                Direction.NORTH -> -z
-                            }
-                        }
-
                         for (front in 0 until frontCount) {
                             val frontAnchor = frontAnchorIdxs[front]
                             val ax = frontAnchor % sizeX
                             val at = frontAnchor / sizeX
                             val ay = at % sizeY
                             val az = at / sizeY
-                            val frontAnchorLayerKey = layerKeyForCoords(ax, ay, az)
-                            val frontDistToMax = kotlin.math.abs(maxLayerKey - frontAnchorLayerKey)
-                            val frontDistToMin = kotlin.math.abs(frontAnchorLayerKey - minLayerKey)
-                            val frontFirstLayerKey = if (frontDistToMax >= frontDistToMin) maxLayerKey else minLayerKey
+                            val frontFirstLayerKey = maxLayerKey
 
                             var frontLineTargetIdx = -1
                             var frontLineTargetDistSq = Int.MAX_VALUE
@@ -6488,6 +6469,154 @@ object ShipWaterPocketManager {
         val orderedAddsAll = mergeOrderedFloodComponentAdds(orderedAddComponents)
         enqueueFloodWriteDiffs(state, toAddAll, toRemoveAll, orderedAddsAll)
         state.persistDirty = true
+    }
+
+    private fun redistributeMaterializedWaterForGravity(
+        level: ServerLevel,
+        state: ShipPocketState,
+        shipTransform: ShipTransform,
+    ) {
+        val open = state.open
+        val interior = state.simulationDomain
+        val materialized = state.materializedWater
+        if (open.isEmpty || interior.isEmpty || materialized.isEmpty) return
+
+        val sizeX = state.sizeX
+        val sizeY = state.sizeY
+        val sizeZ = state.sizeZ
+        val volume = sizeX * sizeY * sizeZ
+        if (volume <= 0) return
+
+        val baseShipX = state.minX.toDouble()
+        val baseShipY = state.minY.toDouble()
+        val baseShipZ = state.minZ.toDouble()
+        val shipPosTmp = tmpShipPos2.get()
+        val worldPosTmp = tmpWorldPos2.get()
+
+        shipPosTmp.set(baseShipX, baseShipY, baseShipZ)
+        shipTransform.shipToWorld.transformPosition(shipPosTmp, worldPosTmp)
+        val baseWorldY = worldPosTmp.y
+
+        shipPosTmp.set(baseShipX + 1.0, baseShipY, baseShipZ)
+        shipTransform.shipToWorld.transformPosition(shipPosTmp, worldPosTmp)
+        val incX = worldPosTmp.y - baseWorldY
+
+        shipPosTmp.set(baseShipX, baseShipY + 1.0, baseShipZ)
+        shipTransform.shipToWorld.transformPosition(shipPosTmp, worldPosTmp)
+        val incY = worldPosTmp.y - baseWorldY
+
+        shipPosTmp.set(baseShipX, baseShipY, baseShipZ + 1.0)
+        shipTransform.shipToWorld.transformPosition(shipPosTmp, worldPosTmp)
+        val incZ = worldPosTmp.y - baseWorldY
+
+        fun cellCenterWorldYKey(idx: Int): Long {
+            val lx = idx % sizeX
+            val t = idx / sizeX
+            val ly = t % sizeY
+            val lz = t / sizeY
+            val wy = baseWorldY + incX * (lx + 0.5) + incY * (ly + 0.5) + incZ * (lz + 0.5)
+            return kotlin.math.floor(wy * 1_000_000.0).toLong()
+        }
+
+        val strideY = sizeX
+        val strideZ = sizeX * sizeY
+        val hasComponentConnectivity = hasComponentTraversalSupport(state)
+        val visited = tmpFloodComponentVisited.get()
+        visited.clear()
+
+        var queue = tmpFloodQueue.get()
+        if (queue.size < volume) {
+            queue = IntArray(volume)
+            tmpFloodQueue.set(queue)
+        }
+
+        val toAdd = BitSet(volume)
+        val toRemove = BitSet(volume)
+
+        fun scanComponent(start: Int) {
+            var head = 0
+            var tail = 0
+            visited.set(start)
+            queue[tail++] = start
+            var waterCount = 0
+
+            while (head < tail) {
+                val idx = queue[head++]
+                if (materialized.get(idx)) waterCount++
+
+                val lx = idx % sizeX
+                val t = idx / sizeX
+                val ly = t % sizeY
+                val lz = t / sizeY
+                val curMask = if (hasComponentConnectivity) simulationComponentMaskAt(state, idx) else -1L
+
+                fun tryNeighbor(n: Int, dirCode: Int) {
+                    if (n < 0 || n >= volume) return
+                    if (!open.get(n) || !interior.get(n) || visited.get(n)) return
+                    val conductance = if (hasComponentConnectivity) {
+                        computeFilteredFaceConductance(
+                            state = state,
+                            idxA = idx,
+                            idxB = n,
+                            dirCode = dirCode,
+                            componentMaskA = curMask,
+                            componentMaskB = simulationComponentMaskAt(state, n),
+                        )
+                    } else {
+                        edgeConductance(state, idx, lx, ly, lz, dirCode)
+                    }
+                    if (conductance <= 0) return
+                    visited.set(n)
+                    queue[tail++] = n
+                }
+
+                if (lx > 0) tryNeighbor(idx - 1, 0)
+                if (lx + 1 < sizeX) tryNeighbor(idx + 1, 1)
+                if (ly > 0) tryNeighbor(idx - strideY, 2)
+                if (ly + 1 < sizeY) tryNeighbor(idx + strideY, 3)
+                if (lz > 0) tryNeighbor(idx - strideZ, 4)
+                if (lz + 1 < sizeZ) tryNeighbor(idx + strideZ, 5)
+            }
+
+            if (waterCount <= 0 || waterCount >= tail) return
+
+            val ordered = LongArray(tail)
+            for (i in 0 until tail) {
+                val idx = queue[i]
+                ordered[i] = (cellCenterWorldYKey(idx) shl 32) or (idx.toLong() and 0xffff_ffffL)
+            }
+            Arrays.sort(ordered)
+
+            val target = BitSet(volume)
+            for (i in 0 until waterCount) {
+                target.set(ordered[i].toInt())
+            }
+
+            for (i in 0 until tail) {
+                val idx = queue[i]
+                if (target.get(idx)) {
+                    if (!materialized.get(idx)) toAdd.set(idx)
+                } else if (materialized.get(idx)) {
+                    toRemove.set(idx)
+                }
+            }
+        }
+
+        var start = materialized.nextSetBit(0)
+        while (start >= 0 && start < volume) {
+            if (!open.get(start) || !interior.get(start) || visited.get(start)) {
+                start = materialized.nextSetBit(start + 1)
+                continue
+            }
+            scanComponent(start)
+            start = materialized.nextSetBit(start + 1)
+        }
+
+        if (toAdd.isEmpty && toRemove.isEmpty) return
+        state.queuedFloodAdds.andNot(toRemove)
+        state.queuedFloodRemoves.andNot(toAdd)
+        applyBlockChanges(level, state, toAdd, toWater = true, pos = BlockPos.MutableBlockPos())
+        applyBlockChanges(level, state, toRemove, toWater = false, pos = BlockPos.MutableBlockPos())
     }
 
     private fun drainFloodedInteriorToOutsideAir(
