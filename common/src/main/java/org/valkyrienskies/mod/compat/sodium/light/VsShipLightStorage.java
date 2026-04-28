@@ -1,5 +1,6 @@
 package org.valkyrienskies.mod.compat.sodium.light;
 
+import it.unimi.dsi.fastutil.ints.IntArrayList;
 import it.unimi.dsi.fastutil.longs.Long2IntMap;
 import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
@@ -14,6 +15,7 @@ import java.util.BitSet;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL13;
 import org.lwjgl.opengl.GL15;
+import org.lwjgl.opengl.GL30;
 import org.lwjgl.opengl.GL31;
 import org.lwjgl.system.MemoryUtil;
 
@@ -84,6 +86,8 @@ public class VsShipLightStorage {
     private int currentLutByteSize = 0;
 
     private final LightLut lut = new LightLut();
+    private final IntArrayList lutScratch = new IntArrayList();
+    private ByteBuffer lutUploadBuf = null;
 
     public VsShipLightStorage() {
         capacity = DEFAULT_CAPACITY;
@@ -259,18 +263,25 @@ public class VsShipLightStorage {
             // glTexBuffer time and won't see the new store otherwise.
             if (orphaned) {
                 GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, sectionsTexture);
-                GL31.glTexBuffer(GL31.GL_TEXTURE_BUFFER, GL30RUI(), sectionsBuffer);
+                GL31.glTexBuffer(GL31.GL_TEXTURE_BUFFER, GL31.GL_R32UI, sectionsBuffer);
                 GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, 0);
             }
             changed.clear();
         }
 
         if (lutDirty) {
-            int[] flat = lut.flatten();
-            ByteBuffer buf = ByteBuffer.allocateDirect(Math.max(4, flat.length * 4)).order(ByteOrder.nativeOrder());
-            IntBuffer ib = buf.asIntBuffer();
-            ib.put(flat);
-            ib.position(0);
+            lut.flattenInto(lutScratch);
+            int sizeInts = lutScratch.size();
+            int neededBytes = Math.max(4, sizeInts * 4);
+            if (lutUploadBuf == null || lutUploadBuf.capacity() < neededBytes) {
+                int newCap = Math.max(neededBytes, lutUploadBuf == null ? 1024 : lutUploadBuf.capacity() * 2);
+                lutUploadBuf = ByteBuffer.allocateDirect(newCap).order(ByteOrder.nativeOrder());
+            }
+            IntBuffer ib = lutUploadBuf.asIntBuffer();
+            if (sizeInts > 0) {
+                ib.put(lutScratch.elements(), 0, sizeInts);
+            }
+            ib.flip();
             GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, lutBuffer);
             GL15.glBufferData(GL31.GL_TEXTURE_BUFFER, ib, GL15.GL_DYNAMIC_DRAW);
             GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, 0);
@@ -278,9 +289,9 @@ public class VsShipLightStorage {
             // texture sees the new storage on drivers that cache the data-store
             // reference at glTexBuffer time.
             GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, lutTexture);
-            GL31.glTexBuffer(GL31.GL_TEXTURE_BUFFER, GL30RUI(), lutBuffer);
+            GL31.glTexBuffer(GL31.GL_TEXTURE_BUFFER, GL31.GL_R32UI, lutBuffer);
             GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, 0);
-            currentLutByteSize = flat.length * 4;
+            currentLutByteSize = sizeInts * 4;
             lutDirty = false;
         }
     }
@@ -344,7 +355,7 @@ public class VsShipLightStorage {
         if (sectionsTexture == 0) {
             sectionsTexture = GL11.glGenTextures();
             GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, sectionsTexture);
-            GL31.glTexBuffer(GL31.GL_TEXTURE_BUFFER, GL30RUI(), sectionsBuffer);
+            GL31.glTexBuffer(GL31.GL_TEXTURE_BUFFER, GL31.GL_R32UI, sectionsBuffer);
             GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, 0);
         }
         if (lutBuffer == 0) {
@@ -353,14 +364,9 @@ public class VsShipLightStorage {
         if (lutTexture == 0) {
             lutTexture = GL11.glGenTextures();
             GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, lutTexture);
-            GL31.glTexBuffer(GL31.GL_TEXTURE_BUFFER, GL30RUI(), lutBuffer);
+            GL31.glTexBuffer(GL31.GL_TEXTURE_BUFFER, GL31.GL_R32UI, lutBuffer);
             GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, 0);
         }
-    }
-
-    private static int GL30RUI() {
-        // GL_R32UI = 0x8236
-        return 0x8236;
     }
 
     private int allocate() {
@@ -395,7 +401,7 @@ public class VsShipLightStorage {
 
     private void collectSection(LevelAccessor level, long sectionPos, int idx) {
         long ptr = arenaPtr + (long) idx * SECTION_SIZE_BYTES;
-        // Zero out
+        // Zero out so any unset solid bits / unwritten light bytes start clean.
         MemoryUtil.memSet(ptr, 0, SECTION_SIZE_BYTES);
 
         LayerLightEventListener block = level.getLightEngine().getLayerListener(LightLayer.BLOCK);
@@ -405,48 +411,41 @@ public class VsShipLightStorage {
         int yMin = SectionPos.sectionToBlockCoord(SectionPos.y(sectionPos));
         int zMin = SectionPos.sectionToBlockCoord(SectionPos.z(sectionPos));
 
-        // Pass 1: solid bitmap. Bit at (x+1) + (z+1)*18 + (y+1)*324 for the
-        // block at world (xMin+x, yMin+y, zMin+z). The bit ordering is the same
-        // as the byte layout so the shader can read either via the same offset
-        // formula.
-        BitSet solid = new BitSet(BLOCKS_PER_SECTION);
+        // Single pass over the 18^3 volume: emit one byte of packed light
+        // (low nibble = block, high nibble = sky) at offset bitIdx in the
+        // light region, and accumulate solid bits 32-at-a-time into the
+        // solid bitmap. The loop order matches the offset formula
+        // (x+1) + (z+1)*18 + (y+1)*324 so the byte index equals bitIdx.
+        // The shader reads the solid region as R32UI words (bitOffset >> 5),
+        // so writing 32-bit ints in native endian matches the shader's view.
+        long solidPtr = ptr + SOLID_START_BYTES;
+        long lightPtr = ptr + LIGHT_START_BYTES;
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
-        int bitIndex = 0;
+        int acc = 0;
+        int bitIdx = 0;
         for (int y = -1; y < 17; y++) {
             for (int z = -1; z < 17; z++) {
                 for (int x = -1; x < 17; x++) {
                     pos.set(xMin + x, yMin + y, zMin + z);
                     BlockState state = level.getBlockState(pos);
                     if (state.canOcclude() && state.isCollisionShapeFullBlock(level, pos)) {
-                        solid.set(bitIndex);
+                        acc |= 1 << (bitIdx & 31);
                     }
-                    bitIndex++;
-                }
-            }
-        }
-        // BitSet.toLongArray returns words in little-endian bit order, which on
-        // a little-endian platform stores correctly for the shader's R32UI reads
-        // at uintOffset = bitOffset >> 5.
-        long[] solidWords = solid.toLongArray();
-        long solidPtr = ptr + SOLID_START_BYTES;
-        for (long w : solidWords) {
-            MemoryUtil.memPutLong(solidPtr, w);
-            solidPtr += Long.BYTES;
-        }
-
-        // Pass 2: per-block light bytes (low nibble = block, high nibble = sky).
-        long lightPtr = ptr + LIGHT_START_BYTES;
-        for (int y = -1; y < 17; y++) {
-            for (int z = -1; z < 17; z++) {
-                for (int x = -1; x < 17; x++) {
-                    pos.set(xMin + x, yMin + y, zMin + z);
                     int b = block.getLightValue(pos);
                     int s = sky.getLightValue(pos);
-                    int offset = (x + 1) + (z + 1) * 18 + (y + 1) * 18 * 18;
-                    byte packed = (byte) ((b & 0xF) | ((s & 0xF) << 4));
-                    MemoryUtil.memPutByte(lightPtr + offset, packed);
+                    MemoryUtil.memPutByte(lightPtr + bitIdx, (byte) ((b & 0xF) | ((s & 0xF) << 4)));
+                    bitIdx++;
+                    if ((bitIdx & 31) == 0) {
+                        MemoryUtil.memPutInt(solidPtr, acc);
+                        solidPtr += 4;
+                        acc = 0;
+                    }
                 }
             }
+        }
+        // Residual partial word (5832 bits = 182 full words + 8 remaining).
+        if ((bitIdx & 31) != 0) {
+            MemoryUtil.memPutInt(solidPtr, acc);
         }
         changed.set(idx);
     }

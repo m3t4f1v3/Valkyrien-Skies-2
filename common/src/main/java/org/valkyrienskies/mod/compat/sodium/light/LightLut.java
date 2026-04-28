@@ -1,7 +1,6 @@
 package org.valkyrienskies.mod.compat.sodium.light;
 
-import java.util.ArrayList;
-import java.util.List;
+import it.unimi.dsi.fastutil.ints.IntArrayList;
 
 import net.minecraft.core.SectionPos;
 
@@ -40,18 +39,22 @@ public final class LightLut {
         layerZ.clear(z);
     }
 
-    public int[] flatten() {
-        List<Integer> out = new ArrayList<>();
+    /** Flatten the LUT into the caller-provided list, reusing its backing storage. */
+    public void flattenInto(IntArrayList out) {
+        out.clear();
         indices.fillLut(out, (xLayer, lut2) ->
                 xLayer.fillLut(lut2, IntLayer::fillLut));
-        int[] arr = new int[out.size()];
-        for (int i = 0; i < arr.length; i++) arr[i] = out.get(i);
-        return arr;
+    }
+
+    public int[] flatten() {
+        IntArrayList out = new IntArrayList();
+        flattenInto(out);
+        return out.toIntArray();
     }
 
     @FunctionalInterface
     private interface BiConsumer<T> {
-        void accept(T t, List<Integer> lut);
+        void accept(T t, IntArrayList lut);
     }
 
     private interface Supplier<T> {
@@ -89,17 +92,18 @@ public final class LightLut {
         }
 
         @SuppressWarnings("unchecked")
-        void fillLut(List<Integer> lut, BiConsumer<T> inner) {
+        void fillLut(IntArrayList lut, BiConsumer<T> inner) {
+            int n = next.length;
+            int innerIdxBase = lut.size() + 2;
             lut.add(base);
-            lut.add(next.length);
-            int innerIdxBase = lut.size();
-            for (int i = 0; i < next.length; i++) lut.add(0);
+            lut.add(n);
+            // Bulk-extend with zero placeholders; cheaper than n add(0) calls.
+            lut.size(innerIdxBase + n);
 
-            for (int i = 0; i < next.length; i++) {
+            for (int i = 0; i < n; i++) {
                 T v = (T) next[i];
                 if (v == null) continue;
-                int pos = lut.size();
-                lut.set(innerIdxBase + i, pos);
+                lut.set(innerIdxBase + i, lut.size());
                 inner.accept(v, lut);
             }
         }
@@ -142,10 +146,10 @@ public final class LightLut {
             indices[off] = 0;
         }
 
-        void fillLut(List<Integer> lut) {
+        void fillLut(IntArrayList lut) {
             lut.add(base);
             lut.add(indices.length);
-            for (int idx : indices) lut.add(idx);
+            lut.addElements(lut.size(), indices, 0, indices.length);
         }
 
         private void resize(int len) {
