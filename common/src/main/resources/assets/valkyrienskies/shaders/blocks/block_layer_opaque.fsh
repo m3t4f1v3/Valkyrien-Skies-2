@@ -52,6 +52,13 @@ const float VS_EPSILON = 1e-5;
 const uint VS_LOWER_10_BITS = 0x3FFu;
 const uint VS_UPPER_10_BITS = 0xFFF00000u;
 const float VS_LIGHT_NORMALIZER = 1.0 / 16.0;
+// MC's lightmap texture uses GL's default GL_REPEAT wrap; at UV=0 a LINEAR
+// sample blends pixel 15 (bright) into pixel 0 (dark), giving the wrong color
+// for sky=0 in caves. Clamp to pixel-center range to match sodium's baked
+// vertex format (which clamps the packed light byte to [8, 248] for the same
+// reason).
+const float VS_UV_MIN = 1.0 / 32.0;
+const float VS_UV_MAX = 31.0 / 32.0;
 
 uint vs_indexLut(uint i) { return texelFetch(u_VsLightLut, int(i)).r; }
 uint vs_indexLight(uint i) { return texelFetch(u_VsLightSections, int(i)).r; }
@@ -175,7 +182,7 @@ vec3 vs_lightForDirection(uint[27] lights, vec3 interpolant,
     vec3 light1 = mix(light10, light11, interpolant.z);
     vec3 light = mix(light0, light1, interpolant.y);
 
-    light.xy *= VS_LIGHT_NORMALIZER;
+    light.xy = clamp(light.xy * VS_LIGHT_NORMALIZER, VS_UV_MIN, VS_UV_MAX);
     light.z = vs_validCountToAo(light.z);
     return light;
 }
@@ -184,6 +191,23 @@ struct VsLightAo {
     vec2 light;
     float ao;
 };
+
+// Single-block world-light lookup at worldPos. Used as a fallback so we can
+// still get the correct sky-light (e.g. 0 in a cave) when the smooth lookup
+// can't run — without this, callers fall back to the shipyard's baked
+// sky-light, which is ~max because the shipyard is an open-sky void.
+bool vs_lightFlat(vec3 worldPos, out vec2 light) {
+    ivec3 blockPos = ivec3(floor(worldPos));
+    uint sectionIndex;
+    if (vs_chunkCoordToSectionIndex(blockPos >> 4, sectionIndex)) {
+        return false;
+    }
+    uint sectionOffset = sectionIndex * VS_SECTION_SIZE_INTS;
+    ivec3 blockInSectionPos = (blockPos & 0xF) + 1;
+    uvec2 raw = vs_lightAt(sectionOffset, uvec3(blockInSectionPos));
+    light = clamp(vec2(raw) * VS_LIGHT_NORMALIZER, VS_UV_MIN, VS_UV_MAX);
+    return true;
+}
 
 bool vs_lightSmooth(vec3 worldPos, vec3 normal, out VsLightAo lightAoOut) {
     ivec3 blockPos = ivec3(floor(worldPos));
@@ -196,7 +220,7 @@ bool vs_lightSmooth(vec3 worldPos, vec3 normal, out VsLightAo lightAoOut) {
 
     uint solid = vs_fetchSolid3x3x3(sectionOffset, blockInSectionPos);
     if (solid == VS_COMPLETELY_SOLID) {
-        lightAoOut.light = vec2(0.0);
+        lightAoOut.light = vec2(VS_UV_MIN);
         lightAoOut.ao = vs_validCountToAo(0.0);
         return true;
     }
@@ -301,8 +325,20 @@ void main() {
         );
         aoMultiplier = vsLight.ao;
     } else {
-        // Fallback: use baked light & AO from the ship's chunk mesh.
-        lightCoord = v_BakedLightCoord;
+        // Fallback when we can't do a smooth lookup (bad screen-space normal,
+        // or section not tracked yet). Try a single-block world lookup so we
+        // still pick up the world's sky-light at this position — otherwise
+        // these fragments would inherit the shipyard's baked sky-light (~15)
+        // and look brightly lit even inside caves.
+        vec2 flatLight;
+        if (vs_lightFlat(worldPos, flatLight)) {
+            lightCoord = vec2(
+                max(flatLight.x, v_BakedLightCoord.x),
+                flatLight.y
+            );
+        } else {
+            lightCoord = v_BakedLightCoord;
+        }
         aoMultiplier = v_Color.a;
     }
 
