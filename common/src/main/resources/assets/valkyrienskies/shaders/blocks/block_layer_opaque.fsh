@@ -13,6 +13,7 @@ in vec2 v_BakedLightCoord;   // _vert_tex_light_coord (baked from shipyard stora
 in mat4 v_TransformMatrix;
 flat in int v_ResolverType;  // 0 none, 1 grass, 2 foliage, 3 water
 flat in int v_IsShaded;      // 0 unshaded (skip directional shade), 1 shaded
+flat in int v_IsFullbright;  // 1 if BakedQuad was tagged emissive in its source model JSON
 flat in vec3 v_WorldNormal;  // world-space surface normal recovered from face slot in the VSH
 in vec3 v_VertexBiomeTint;   // rasterizer-blended world biome RGB, vec3(1.0) on non-biome quads
 
@@ -360,10 +361,15 @@ void main() {
     // vertices contribute the same value — exact for a flat quad and free of
     // the dFdx/dFdy precision artifacts on small triangles.
     vec3 worldN = v_WorldNormal;
-    bool nValid = dot(worldN, worldN) > 0.5;
 
     // Absolute world position of the fragment (camera-relative + integer origin).
     vec3 worldPos = v_CameraRelWorldPos + vec3(u_VsRenderOrigin);
+
+    // Fullbright / emissive: the mesher mixin checks BakedQuad.getVertices()
+    // at the LIGHT_INDEX offset and packs the FULLBRIGHT face slot if non-zero
+    // (i.e. the source model JSON tagged the quad emissive). v_IsFullbright is
+    // the decoded flag — no fragment-time heuristic.
+    bool isFullbright = v_IsFullbright != 0;
 
     vec2 lightCoord;
     float aoMultiplier;
@@ -373,7 +379,12 @@ void main() {
     VsLightAo vsLight;
     vsLight.light = vec2(0.0);
     vsLight.ao = 1.0;
-    if (nValid && vs_lightSmooth(worldPos, worldN, vsLight)) {
+    if (isFullbright) {
+        // Skip the world-light lookup entirely; fullbright = max lightmap, no
+        // AO, no directional shade.
+        lightCoord = vec2(VS_UV_MAX);
+        aoMultiplier = 1.0;
+    } else if (vs_lightSmooth(worldPos, worldN, vsLight)) {
         // World-space lighting + AO at the ship's rendered location.
         // Block-light: max with baked so ship-internal torches still glow
         //   (they live in shipyard, the world engine doesn't see them here).
@@ -420,9 +431,11 @@ void main() {
     vec4 lightSample = texture(u_LightTex, lightCoord);
     diffuseColor.rgb *= vertTint * lightSample.rgb;
 
-    // Directional shade (vanilla "side darkening") only when the quad opted in
-    // (BakedQuad.isShade()) — emissive / fullbright quads keep flat colors.
-    if (nValid && v_IsShaded != 0) {
+    // Directional shade (vanilla "side darkening"): applied only when the quad
+    // opted in (BakedQuad.isShade()) AND we didn't detect fullbright above.
+    // aoMultiplier is already 1.0 for fullbright so the else-branch is a no-op
+    // there too.
+    if (v_IsShaded != 0 && !isFullbright) {
         diffuseColor.rgb *= vanillaShadeFromNormal(worldN) * aoMultiplier;
     } else {
         diffuseColor.rgb *= aoMultiplier;

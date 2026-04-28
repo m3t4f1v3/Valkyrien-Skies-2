@@ -1,5 +1,6 @@
 package org.valkyrienskies.mod.compat.sodium.light;
 
+import net.minecraft.client.renderer.block.model.BakedQuad;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.tags.FluidTags;
@@ -47,6 +48,24 @@ public final class VsVertexFlagPacker {
     public static final int FACE_WEST = 4;
     public static final int FACE_EAST = 5;
     public static final int FACE_UNSHADED = 6;
+    /** Emissive / fullbright quad: skip directional shade and AO, force lightmap to max. */
+    public static final int FACE_FULLBRIGHT = 7;
+
+    /** Standard MC BLOCK vertex format puts the packed lightmap UV at int offset 6. */
+    private static final int VERTEX_LIGHT_OFFSET = 6;
+
+    /**
+     * True if the BakedQuad was tagged emissive in its source model JSON
+     * ({@code "emissive": true} or a non-zero {@code BakedQuad.getLightEmission()}).
+     * Sodium / embeddium store the {@code LightTexture.FULL_BRIGHT} pack into
+     * the per-vertex lightmap slot of the BakedQuad's int-packed vertex array
+     * for emissive faces; non-emissive faces leave the slot at 0. We probe
+     * vertex 0 — emissive flags are quad-level so all four vertices agree.
+     */
+    public static boolean isEmissiveQuad(BakedQuad quad) {
+        int[] verts = quad.getVertices();
+        return verts.length > VERTEX_LIGHT_OFFSET && verts[VERTEX_LIGHT_OFFSET] != 0;
+    }
 
     private VsVertexFlagPacker() {}
 

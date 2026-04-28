@@ -10,6 +10,7 @@ import me.jellysquid.mods.sodium.client.render.chunk.compile.pipeline.BlockRende
 import me.jellysquid.mods.sodium.client.render.chunk.compile.pipeline.BlockRenderer;
 import me.jellysquid.mods.sodium.client.render.chunk.terrain.material.Material;
 
+import net.minecraft.client.renderer.block.model.BakedQuad;
 import net.minecraft.world.phys.Vec3;
 
 import org.spongepowered.asm.mixin.Mixin;
@@ -50,7 +51,15 @@ public class MixinBlockRenderer {
                 ? VsVertexFlagPacker.resolverTypeFor(ctx.state())
                 : 0;
         boolean isShaded = quad.hasShade();
-        vs$faceSlot = VsVertexFlagPacker.faceSlot(quad.getLightFace(), isShaded);
+        // Emissive quads (model JSON "emissive": true, glowstone, etc.) get the
+        // dedicated FULLBRIGHT face slot — overrides direction so the FSH skips
+        // shade and AO and forces the lightmap UV to max. BakedQuadView is
+        // always backed by an MC BakedQuad at runtime (sodium mixes the
+        // interface in), so the cast is safe.
+        boolean emissive = VsVertexFlagPacker.isEmissiveQuad((BakedQuad) quad);
+        vs$faceSlot = emissive
+                ? VsVertexFlagPacker.FACE_FULLBRIGHT
+                : VsVertexFlagPacker.faceSlot(quad.getLightFace(), isShaded);
         vs$shadeFactor = VsVertexFlagPacker.standardShade(quad.getLightFace(), isShaded);
     }
 

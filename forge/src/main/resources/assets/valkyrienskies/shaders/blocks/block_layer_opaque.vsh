@@ -23,6 +23,7 @@ out mat4 v_TransformMatrix;
 //   alpha bits 6-7: resolverType (0 none, 1 grass, 2 foliage, 3 water)
 flat out int v_ResolverType;
 flat out int v_IsShaded;
+flat out int v_IsFullbright;
 flat out vec3 v_WorldNormal;
 out vec3 v_VertexBiomeTint;
 
@@ -136,7 +137,9 @@ void main() {
     uint aoLevel = aoByte & 7u;
     uint faceSlot = (aoByte >> 3u) & 7u;
     v_ResolverType = int((aoByte >> 6u) & 3u);
-    v_IsShaded = (faceSlot == 6u) ? 0 : 1;
+    // faceSlot 0-5 = shaded cardinal, 6 = unshaded (fluids etc.), 7 = fullbright (emissive)
+    v_IsShaded = (faceSlot < 6u) ? 1 : 0;
+    v_IsFullbright = (faceSlot == 7u) ? 1 : 0;
     float aoFloat = float(aoLevel) * 0.2;
     v_Color = vec4(_vert_color.rgb, aoFloat);
 
