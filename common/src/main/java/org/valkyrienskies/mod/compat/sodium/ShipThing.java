@@ -15,6 +15,8 @@ public class ShipThing extends ChunkShaderInterface {
     private final GlUniformInt3v uniformRenderOrigin;
     private final GlUniformInt uniformLightSections;
     private final GlUniformInt uniformLightLut;
+    private final GlUniformInt uniformBiomeSections;
+    private final GlUniformInt uniformBiomeLut;
 
     public ShipThing(ShaderBindingContext context, ChunkShaderOptions options) {
         super(context, options);
@@ -23,6 +25,8 @@ public class ShipThing extends ChunkShaderInterface {
         this.uniformRenderOrigin = context.bindUniform("u_VsRenderOrigin", GlUniformInt3v::new);
         this.uniformLightSections = context.bindUniform("u_VsLightSections", GlUniformInt::new);
         this.uniformLightLut = context.bindUniform("u_VsLightLut", GlUniformInt::new);
+        this.uniformBiomeSections = context.bindUniform("u_VsBiomeSections", GlUniformInt::new);
+        this.uniformBiomeLut = context.bindUniform("u_VsBiomeLut", GlUniformInt::new);
     }
 
     public void setTransformMatrix(Matrix4fc matrix) {
@@ -43,5 +47,13 @@ public class ShipThing extends ChunkShaderInterface {
 
     public void setLightLutSampler(int unit) {
         this.uniformLightLut.setInt(unit);
+    }
+
+    public void setBiomeSectionsSampler(int unit) {
+        this.uniformBiomeSections.setInt(unit);
+    }
+
+    public void setBiomeLutSampler(int unit) {
+        this.uniformBiomeLut.setInt(unit);
     }
 }

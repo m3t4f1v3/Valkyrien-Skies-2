@@ -42,7 +42,9 @@
     "compat.oc2r.MixinComputerRenderer",
     "compat.oc2r.MixinMonitorRenderer",
     "compat.oc2r.MixinProjectorDepthRenderer",
-    "compat.sodium.MixinEmbeddiumShaderModBridge",
+    "compat.sodium.MixinBlockRenderer",
+    "compat.sodium.MixinFluidRenderer",
+    "compat.sodium.MixinShaderModBridge",
     "compat.sodium.MixinSodiumWorldRenderer"
   ],
   "injectors": {

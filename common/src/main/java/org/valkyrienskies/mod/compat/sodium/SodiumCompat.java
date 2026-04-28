@@ -34,6 +34,7 @@ import org.valkyrienskies.core.api.ships.properties.ShipTransform;
 import org.valkyrienskies.mod.common.hooks.VSGameEvents;
 import org.valkyrienskies.mod.common.hooks.VSGameEvents.ShipRenderEventSodium;
 import org.valkyrienskies.mod.compat.VSRenderer;
+import org.valkyrienskies.mod.compat.sodium.light.VsShipBiomeColorStorage;
 import org.valkyrienskies.mod.compat.sodium.light.VsShipLightStorage;
 import org.valkyrienskies.mod.mixin.ValkyrienCommonMixinConfigPlugin;
 import org.valkyrienskies.mod.mixin.mod_compat.sodium.RenderSectionManagerAccessor;
@@ -55,14 +56,24 @@ public class SodiumCompat {
     // Pick free units past those.
     public static final int LIGHT_SECTIONS_TEXTURE_UNIT = 6;
     public static final int LIGHT_LUT_TEXTURE_UNIT = 7;
+    public static final int BIOME_SECTIONS_TEXTURE_UNIT = 8;
+    public static final int BIOME_LUT_TEXTURE_UNIT = 9;
 
     private static VsShipLightStorage lightStorage;
+    private static VsShipBiomeColorStorage biomeStorage;
 
     public static VsShipLightStorage getLightStorage() {
         if (lightStorage == null) {
             lightStorage = new VsShipLightStorage();
         }
         return lightStorage;
+    }
+
+    public static VsShipBiomeColorStorage getBiomeStorage() {
+        if (biomeStorage == null) {
+            biomeStorage = new VsShipBiomeColorStorage();
+        }
+        return biomeStorage;
     }
 
     public static GlProgram<ChunkShaderInterface> getOrCreateShipProgram(ChunkShaderOptions options) {
@@ -95,6 +106,8 @@ public class SodiumCompat {
         }
         shipInterface.setLightSectionsSampler(LIGHT_SECTIONS_TEXTURE_UNIT);
         shipInterface.setLightLutSampler(LIGHT_LUT_TEXTURE_UNIT);
+        shipInterface.setBiomeSectionsSampler(BIOME_SECTIONS_TEXTURE_UNIT);
+        shipInterface.setBiomeLutSampler(BIOME_LUT_TEXTURE_UNIT);
     }
 
     /** Stores transform for the next render() call on the current thread. */
@@ -140,21 +153,29 @@ public class SodiumCompat {
             pass, matrices, x, y, z
         ));
 
-        // Refresh the world-light buffer for any sections occupied by the ships we are about to render.
+        // Refresh the world-light + biome-color buffers for any sections occupied
+        // by the ships we are about to render.
         final ClientLevel level = net.minecraft.client.Minecraft.getInstance().level;
         final VsShipLightStorage storage = getLightStorage();
+        final VsShipBiomeColorStorage biomeStorageLocal = getBiomeStorage();
         if (level != null) {
             storage.beginFrame();
+            biomeStorageLocal.beginFrame();
             ((RenderSectionManagerDuck) renderSectionManager).vs_getShipRenderLists().forEach((ship, renderList) -> {
                 final AABBdc aabb = ((ClientShip) ship).getRenderAABB();
                 if (aabb != null) {
                     storage.requestSectionsInAabb(level,
                             aabb.minX(), aabb.minY(), aabb.minZ(),
                             aabb.maxX(), aabb.maxY(), aabb.maxZ());
+                    biomeStorageLocal.requestSectionsInAabb(level,
+                            aabb.minX(), aabb.minY(), aabb.minZ(),
+                            aabb.maxX(), aabb.maxY(), aabb.maxZ());
                 }
             });
             storage.pruneUnused();
             storage.upload();
+            biomeStorageLocal.pruneUnused();
+            biomeStorageLocal.upload();
         }
 
         ((RenderSectionManagerDuck) renderSectionManager).vs_getShipRenderLists().forEach((ship, renderList) -> {
@@ -208,8 +229,10 @@ public class SodiumCompat {
             pushRenderOrigin(originX, originY, originZ);
             IS_RENDERING_SHIP.set(true);
 
-            // Bind the world-light buffer textures so the ship shader can sample them.
+            // Bind the world-light + biome-color buffer textures so the ship
+            // shader can sample them.
             storage.bind(LIGHT_SECTIONS_TEXTURE_UNIT, LIGHT_LUT_TEXTURE_UNIT);
+            biomeStorageLocal.bind(BIOME_SECTIONS_TEXTURE_UNIT, BIOME_LUT_TEXTURE_UNIT);
 
             chunkRenderer.render(newMatrices, commandList, renderList, pass,
                 new CameraTransform(cameraShipSpace.x(), cameraShipSpace.y(), cameraShipSpace.z()));

@@ -2,7 +2,7 @@
 
 #import <sodium:include/fog.glsl>
 
-in vec4 v_Color;            // _vert_color carried through; .a holds baked sodium AO
+in vec4 v_Color;            // RGB = sodium-baked vertex color; .a = AO (decoded in VSH)
 in vec2 v_TexCoord;
 in float v_FragDistance;
 in float v_MaterialMipBias;
@@ -11,6 +11,10 @@ in vec3 v_WorldPos;
 in vec3 v_CameraRelWorldPos; // camera-relative WORLD-space pos; +u_VsRenderOrigin == absolute world pos
 in vec2 v_BakedLightCoord;   // _vert_tex_light_coord (baked from shipyard storage)
 in mat4 v_TransformMatrix;
+flat in int v_ResolverType;  // 0 none, 1 grass, 2 foliage, 3 water
+flat in int v_IsShaded;      // 0 unshaded (skip directional shade), 1 shaded
+flat in vec3 v_WorldNormal;  // world-space surface normal recovered from face slot in the VSH
+in vec3 v_VertexBiomeTint;   // rasterizer-blended world biome RGB, vec3(1.0) on non-biome quads
 
 uniform sampler2D u_BlockTex;
 uniform sampler2D u_LightTex;
@@ -22,6 +26,8 @@ uniform float u_FogEnd;
 uniform ivec3 u_VsRenderOrigin;
 uniform usamplerBuffer u_VsLightSections;
 uniform usamplerBuffer u_VsLightLut;
+uniform usamplerBuffer u_VsBiomeSections;
+uniform usamplerBuffer u_VsBiomeLut;
 
 out vec4 fragColor;
 
@@ -272,6 +278,68 @@ bool vs_lightSmooth(vec3 worldPos, vec3 normal, out VsLightAo lightAoOut) {
     lightAoOut.ao = lightAo.z;
     return true;
 }
+// ===== World-space biome color lookup ========================================
+// Layout per section: 3 resolvers * 16x16 colors = 768 R32UI ints (3072 B).
+// Resolver order matches VsShipBiomeColorStorage: 0=grass, 1=foliage, 2=water.
+// Within a resolver block the offset is z*16 + x. Each int is RGBA8 with R in
+// the low byte (native little-endian), so unpackUnorm4x8 yields .rgb in the
+// right order.
+const uint VS_BIOME_CELLS_PER_SECTION = 256u;     // 16 * 16
+const uint VS_BIOME_CELLS_PER_RESOLVER = 256u;    // ints
+const uint VS_BIOME_SECTION_SIZE_INTS = 768u;     // 3 * 256
+
+uint vs_indexBiomeLut(uint i) { return texelFetch(u_VsBiomeLut, int(i)).r; }
+uint vs_indexBiome(uint i) { return texelFetch(u_VsBiomeSections, int(i)).r; }
+
+bool vs_nextBiomeLut(uint base, int coord, out uint next) {
+    int start = int(vs_indexBiomeLut(base));
+    uint size = vs_indexBiomeLut(base + 1u);
+    int idx = coord - start;
+    if (idx < 0 || idx >= int(size)) return true;
+    next = vs_indexBiomeLut(base + 2u + uint(idx));
+    return false;
+}
+
+bool vs_chunkCoordToBiomeSectionIndex(ivec3 sectionPos, out uint index) {
+    uint first;
+    if (vs_nextBiomeLut(0u, sectionPos.y, first) || first == 0u) return true;
+    uint second;
+    if (vs_nextBiomeLut(first, sectionPos.x, second) || second == 0u) return true;
+    uint sectionIndex;
+    if (vs_nextBiomeLut(second, sectionPos.z, sectionIndex) || sectionIndex == 0u) return true;
+    index = sectionIndex - 1u;
+    return false;
+}
+
+// Unpack the low 24 bits of an R32UI texel as RGB in [0,1]. Avoids the
+// GLSL 400+ unpackUnorm4x8 builtin so the shader still compiles at #version 330.
+// The R32UI bytes are stored little-endian R,G,B,A by VsShipBiomeColorStorage.
+vec3 vs_unpackRgb8(uint v) {
+    return vec3(
+        float( v        & 0xFFu),
+        float((v >>  8u) & 0xFFu),
+        float((v >> 16u) & 0xFFu)
+    ) * (1.0 / 255.0);
+}
+
+// resolverSlot is 0=grass, 1=foliage, 2=water (i.e. v_ResolverType - 1).
+// Returns vec3(1.0) if the section isn't tracked yet so the multiplicative
+// tint is a no-op (rather than darkening to black).
+vec3 vs_biomeColorAt(vec3 worldPos, int resolverSlot) {
+    ivec3 blockPos = ivec3(floor(worldPos));
+    uint sectionIndex;
+    if (vs_chunkCoordToBiomeSectionIndex(blockPos >> 4, sectionIndex)) {
+        return vec3(1.0);
+    }
+    uint sectionOffset = sectionIndex * VS_BIOME_SECTION_SIZE_INTS;
+    ivec2 cell = blockPos.xz & 15;
+    uint cellOffset = uint(cell.x) + uint(cell.y) * 16u;
+    uint addr = sectionOffset
+              + uint(resolverSlot) * VS_BIOME_CELLS_PER_RESOLVER
+              + cellOffset;
+    uint raw = vs_indexBiome(addr);
+    return vs_unpackRgb8(raw);
+}
 // =============================================================================
 
 void main() {
@@ -286,18 +354,13 @@ void main() {
 #ifdef USE_VANILLA_COLOR_FORMAT
     diffuseColor *= v_Color;
 #else
-    // World-space normal from screen-space derivatives of the camera-relative
-    // world-space pos. (v_CameraRelWorldPos already has the ship's rotation
-    // baked in, so derivatives are in world space directly — no v_TransformMatrix
-    // needed for the normal.)
-    vec3 fdx = dFdx(v_CameraRelWorldPos);
-    vec3 fdy = dFdy(v_CameraRelWorldPos);
-    vec3 rawN = cross(fdx, fdy);
-    float len2 = dot(rawN, rawN);
-    float quality = len2 / (dot(fdx, fdx) * dot(fdy, fdy) + 1e-20);
-    bool nValid = quality >= 5e-3 && all(equal(rawN, rawN));
-
-    vec3 worldN = nValid ? normalize(rawN) : vec3(0.0);
+    // World-space normal: the VSH packs the per-quad face direction into the
+    // alpha byte, decodes it to a shipyard-space normal, and transforms by
+    // u_TransformMatrix. v_WorldNormal is `flat`-interpolated so all 4 quad
+    // vertices contribute the same value — exact for a flat quad and free of
+    // the dFdx/dFdy precision artifacts on small triangles.
+    vec3 worldN = v_WorldNormal;
+    bool nValid = dot(worldN, worldN) > 0.5;
 
     // Absolute world position of the fragment (camera-relative + integer origin).
     vec3 worldPos = v_CameraRelWorldPos + vec3(u_VsRenderOrigin);
@@ -316,14 +379,18 @@ void main() {
         //   (they live in shipyard, the world engine doesn't see them here).
         // Sky-light: take from world (baked sky is from shipyard, irrelevant
         //   to the ship's actual location).
-        // AO: use the world AO directly. Multiplying by baked .a as well
-        //   would double-darken since v_Color.rgb already has the chunk
-        //   mesher's per-vertex shade baked into it.
+        // AO: combine world-external AO (vsLight.ao) with the ship-internal
+        //   AO baked into v_Color.a by the mesher. The mesher mixin already
+        //   divided sodium's directional shade out of br before packing, so
+        //   v_Color.a is pure AO and there's no double-darken risk. Without
+        //   this, an open-air ship has no surrounding world blocks → world
+        //   AO = 1.0, and the ship would render too bright (no occlusion at
+        //   its own internal corners).
         lightCoord = vec2(
             max(vsLight.light.x, v_BakedLightCoord.x),
             vsLight.light.y
         );
-        aoMultiplier = vsLight.ao;
+        aoMultiplier = vsLight.ao * v_Color.a;
     } else {
         // Fallback when we can't do a smooth lookup (bad screen-space normal,
         // or section not tracked yet). Try a single-block world lookup so we
@@ -342,12 +409,20 @@ void main() {
         aoMultiplier = v_Color.a;
     }
 
-    vec4 lightSample = texture(u_LightTex, lightCoord);
-    diffuseColor.rgb *= v_Color.rgb * lightSample.rgb;
+    // BlockColors-baked vertex tint multiplied by the rasterizer-blended
+    // world-biome tint sampled per-vertex in the VSH. v_VertexBiomeTint is
+    // vec3(1.0) for non-biome quads, so this is a no-op there. For biome-
+    // tinted quads the mesher mixin already white-d out v_Color.rgb so the
+    // multiply yields just the world-biome color smoothly blended across the
+    // quad's vertices.
+    vec3 vertTint = v_Color.rgb * v_VertexBiomeTint;
 
-    // Directional shade (vanilla "side darkening") when we have a normal,
-    // multiplied with the AO factor.
-    if (nValid) {
+    vec4 lightSample = texture(u_LightTex, lightCoord);
+    diffuseColor.rgb *= vertTint * lightSample.rgb;
+
+    // Directional shade (vanilla "side darkening") only when the quad opted in
+    // (BakedQuad.isShade()) — emissive / fullbright quads keep flat colors.
+    if (nValid && v_IsShaded != 0) {
         diffuseColor.rgb *= vanillaShadeFromNormal(worldN) * aoMultiplier;
     } else {
         diffuseColor.rgb *= aoMultiplier;

@@ -7,7 +7,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(value = ShaderModBridge.class, remap = false)
-public abstract class MixinEmbeddiumShaderModBridge {
+public abstract class MixinShaderModBridge {
     @Inject(method = "emulateLegacyColorBrightnessFormat", at = @At("HEAD"), cancellable = true)
     private static void useLegacyColorBrightnessFormat(final CallbackInfoReturnable<Boolean> cir) {
         cir.setReturnValue(true);
