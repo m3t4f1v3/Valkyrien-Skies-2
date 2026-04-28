@@ -66,7 +66,7 @@ void main() {
     
 
     // rawN = nan -> rawN != rawN
-    if (quality < 5e-2 || !all(equal(rawN, rawN))) {
+    if (quality < 5e-3 || !all(equal(rawN, rawN))) {
         // Apply ambient occlusion "shade"
         diffuseColor.rgb *= v_Color.a;
     } else {

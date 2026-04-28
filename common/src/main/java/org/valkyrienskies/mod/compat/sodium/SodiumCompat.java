@@ -34,16 +34,36 @@ import org.valkyrienskies.core.api.ships.properties.ShipTransform;
 import org.valkyrienskies.mod.common.hooks.VSGameEvents;
 import org.valkyrienskies.mod.common.hooks.VSGameEvents.ShipRenderEventSodium;
 import org.valkyrienskies.mod.compat.VSRenderer;
+import org.valkyrienskies.mod.compat.sodium.light.VsShipLightStorage;
 import org.valkyrienskies.mod.mixin.ValkyrienCommonMixinConfigPlugin;
 import org.valkyrienskies.mod.mixin.mod_compat.sodium.RenderSectionManagerAccessor;
 import org.valkyrienskies.mod.mixinducks.mod_compat.sodium.RenderSectionManagerDuck;
+import org.valkyrienskies.core.api.ships.ClientShip;
+import org.joml.primitives.AABBdc;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 
 public class SodiumCompat {
     static Map<ChunkShaderOptions, GlProgram<ShipThing>> cachedPrograms = new HashMap<>();
     private static final ThreadLocal<Matrix4f> CURRENT_TRANSFORM = new ThreadLocal<>();
+    private static final ThreadLocal<Matrix4f> CURRENT_LOCAL_TO_WORLD = new ThreadLocal<>();
+    private static final ThreadLocal<int[]> CURRENT_RENDER_ORIGIN = new ThreadLocal<>();
     private static final ThreadLocal<Boolean> IS_RENDERING_SHIP = ThreadLocal.withInitial(() -> false);
+
+    // Texture units used for the ship light buffer textures.
+    // Sodium uses unit 0 for the block atlas and 2 for the lightmap (LIGHT_TEXTURE_TARGET).
+    // Pick free units past those.
+    public static final int LIGHT_SECTIONS_TEXTURE_UNIT = 6;
+    public static final int LIGHT_LUT_TEXTURE_UNIT = 7;
+
+    private static VsShipLightStorage lightStorage;
+
+    public static VsShipLightStorage getLightStorage() {
+        if (lightStorage == null) {
+            lightStorage = new VsShipLightStorage();
+        }
+        return lightStorage;
+    }
 
     public static GlProgram<ChunkShaderInterface> getOrCreateShipProgram(ChunkShaderOptions options) {
         GlProgram<ShipThing> program = cachedPrograms.get(options);
@@ -62,7 +82,19 @@ public class SodiumCompat {
         shipInterface.setModelViewMatrix(matrices.modelView());
         // Set transform matrix (identity if not provided)
         shipInterface.setTransformMatrix(transformMatrix != null ? transformMatrix : new Matrix4f().identity());
-        // shipInterface.setNormalMatrix(matrices.modelView().invert(new Matrix4f()).transpose());
+        // Local-to-world maps the ship-local vertex space (after sodium's chunk
+        // translation) into absolute world block coordinates so the shader can
+        // look up world-space block/sky lighting.
+        Matrix4f localToWorld = CURRENT_LOCAL_TO_WORLD.get();
+        shipInterface.setLocalToWorldMatrix(localToWorld != null ? localToWorld : new Matrix4f().identity());
+        int[] origin = CURRENT_RENDER_ORIGIN.get();
+        if (origin != null) {
+            shipInterface.setRenderOrigin(origin[0], origin[1], origin[2]);
+        } else {
+            shipInterface.setRenderOrigin(0, 0, 0);
+        }
+        shipInterface.setLightSectionsSampler(LIGHT_SECTIONS_TEXTURE_UNIT);
+        shipInterface.setLightLutSampler(LIGHT_LUT_TEXTURE_UNIT);
     }
 
     /** Stores transform for the next render() call on the current thread. */
@@ -75,6 +107,14 @@ public class SodiumCompat {
         Matrix4f transform = CURRENT_TRANSFORM.get();
         CURRENT_TRANSFORM.remove();
         return transform;
+    }
+
+    public static void pushLocalToWorld(Matrix4f m) {
+        CURRENT_LOCAL_TO_WORLD.set(m);
+    }
+
+    public static void pushRenderOrigin(int x, int y, int z) {
+        CURRENT_RENDER_ORIGIN.set(new int[] { x, y, z });
     }
 
     public static boolean isRenderingShip() {
@@ -100,6 +140,23 @@ public class SodiumCompat {
             pass, matrices, x, y, z
         ));
 
+        // Refresh the world-light buffer for any sections occupied by the ships we are about to render.
+        final ClientLevel level = net.minecraft.client.Minecraft.getInstance().level;
+        final VsShipLightStorage storage = getLightStorage();
+        if (level != null) {
+            storage.beginFrame();
+            ((RenderSectionManagerDuck) renderSectionManager).vs_getShipRenderLists().forEach((ship, renderList) -> {
+                final AABBdc aabb = ((ClientShip) ship).getRenderAABB();
+                if (aabb != null) {
+                    storage.requestSectionsInAabb(level,
+                            aabb.minX(), aabb.minY(), aabb.minZ(),
+                            aabb.maxX(), aabb.maxY(), aabb.maxZ());
+                }
+            });
+            storage.pruneUnused();
+            storage.upload();
+        }
+
         ((RenderSectionManagerDuck) renderSectionManager).vs_getShipRenderLists().forEach((ship, renderList) -> {
             VSGameEvents.INSTANCE.getRenderShipSodium().emit(new ShipRenderEventSodium(pass, matrices, x, y, z, ship, renderList));
             final ShipTransform shipTransform = ship.getRenderTransform();
@@ -120,13 +177,39 @@ public class SodiumCompat {
                 .mul(s)
                 .translate(cameraShipSpace);
 
+            // Build a precision-friendly matrix that maps a sodium-chunk-local vertex
+            // pos to (worldPos - renderOrigin), where renderOrigin is the integer
+            // camera world block position. Combined with the ivec3 renderOrigin
+            // uniform, the shader can reconstruct an exact world block pos for the
+            // flywheel-style light fetch.
+            //
+            // We want `M * p = worldPos - origin = S*(p + cameraShipSpace) - origin`.
+            // To stay precision-friendly when origin can be ~30M, we build:
+            //   T(camera-origin) * T(-camera) * S * T(cameraShipSpace)
+            // = T(-origin) * S * T(cameraShipSpace)
+            // where the FINAL translation column equals (cameraWorld - origin) ~= frac
+            // and is therefore safe to truncate to float.
+            final int originX = (int) Math.floor(x);
+            final int originY = (int) Math.floor(y);
+            final int originZ = (int) Math.floor(z);
+            final Matrix4d localToCameraRel = new Matrix4d()
+                .translate(x - originX, y - originY, z - originZ)
+                .translate(-x, -y, -z)
+                .mul(s)
+                .translate(cameraShipSpace);
+
             final ChunkRenderMatrices newMatrices =
                 new ChunkRenderMatrices(matrices.projection(), new Matrix4f(newModelView));
             DefaultChunkRenderer chunkRenderer = (DefaultChunkRenderer) ((RenderSectionManagerAccessor) renderSectionManager).getChunkRenderer();
-            
-            // Stash transform for the mixin's redirected begin() to consume
+
+            // Stash uniforms for the mixin's redirected begin() to consume
             pushTransform(new Matrix4f(s));
+            pushLocalToWorld(new Matrix4f(localToCameraRel));
+            pushRenderOrigin(originX, originY, originZ);
             IS_RENDERING_SHIP.set(true);
+
+            // Bind the world-light buffer textures so the ship shader can sample them.
+            storage.bind(LIGHT_SECTIONS_TEXTURE_UNIT, LIGHT_LUT_TEXTURE_UNIT);
 
             chunkRenderer.render(newMatrices, commandList, renderList, pass,
                 new CameraTransform(cameraShipSpace.x(), cameraShipSpace.y(), cameraShipSpace.z()));
