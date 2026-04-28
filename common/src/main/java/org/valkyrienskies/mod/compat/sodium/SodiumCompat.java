@@ -7,17 +7,14 @@ import me.jellysquid.mods.sodium.client.gl.shader.GlShader;
 import me.jellysquid.mods.sodium.client.gl.shader.ShaderConstants;
 import me.jellysquid.mods.sodium.client.gl.shader.ShaderLoader;
 import me.jellysquid.mods.sodium.client.gl.shader.ShaderType;
-import me.jellysquid.mods.sodium.client.gl.shader.uniform.GlUniformFloat3v;
 import me.jellysquid.mods.sodium.client.render.chunk.ChunkRenderMatrices;
 import me.jellysquid.mods.sodium.client.render.chunk.DefaultChunkRenderer;
 import me.jellysquid.mods.sodium.client.render.chunk.RenderSectionManager;
 import me.jellysquid.mods.sodium.client.render.chunk.map.ChunkStatus;
 import me.jellysquid.mods.sodium.client.render.chunk.map.ChunkTrackerHolder;
-import me.jellysquid.mods.sodium.client.render.chunk.shader.ChunkFogMode;
 import me.jellysquid.mods.sodium.client.render.chunk.shader.ChunkShaderBindingPoints;
 import me.jellysquid.mods.sodium.client.render.chunk.shader.ChunkShaderInterface;
 import me.jellysquid.mods.sodium.client.render.chunk.shader.ChunkShaderOptions;
-import me.jellysquid.mods.sodium.client.render.chunk.shader.ShaderBindingContext;
 import me.jellysquid.mods.sodium.client.render.chunk.terrain.DefaultTerrainRenderPasses;
 import me.jellysquid.mods.sodium.client.render.chunk.terrain.TerrainRenderPass;
 import me.jellysquid.mods.sodium.client.render.viewport.CameraTransform;
@@ -27,8 +24,6 @@ import net.minecraft.resources.ResourceLocation;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicReference;
-
 import org.joml.Matrix4d;
 import org.joml.Matrix4dc;
 import org.joml.Matrix4f;
@@ -41,14 +36,13 @@ import org.valkyrienskies.mod.common.hooks.VSGameEvents.ShipRenderEventSodium;
 import org.valkyrienskies.mod.compat.VSRenderer;
 import org.valkyrienskies.mod.mixin.ValkyrienCommonMixinConfigPlugin;
 import org.valkyrienskies.mod.mixin.mod_compat.sodium.RenderSectionManagerAccessor;
-import org.valkyrienskies.mod.mixin.mod_compat.sodium.ShaderChunkRendererAccessor;
 import org.valkyrienskies.mod.mixinducks.mod_compat.sodium.RenderSectionManagerDuck;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 
 public class SodiumCompat {
     static Map<ChunkShaderOptions, GlProgram<ShipThing>> cachedPrograms = new HashMap<>();
-    private static final ThreadLocal<Matrix4f> CURRENT_ROTATION = new ThreadLocal<>();
+    private static final ThreadLocal<Matrix4f> CURRENT_TRANSFORM = new ThreadLocal<>();
     private static final ThreadLocal<Boolean> IS_RENDERING_SHIP = ThreadLocal.withInitial(() -> false);
 
     public static GlProgram<ChunkShaderInterface> getOrCreateShipProgram(ChunkShaderOptions options) {
@@ -60,27 +54,27 @@ public class SodiumCompat {
         return (GlProgram<ChunkShaderInterface>) (Object) program;
     }
 
-    public static void setupShipShaderState(GlProgram<ChunkShaderInterface> program, ChunkRenderMatrices matrices, Matrix4fc rotationMatrix) {
+    public static void setupShipShaderState(GlProgram<ChunkShaderInterface> program, ChunkRenderMatrices matrices, Matrix4fc transformMatrix) {
         ShipThing shipInterface = (ShipThing) program.getInterface();
         shipInterface.setupState();
         // Set projection and model-view matrices
         shipInterface.setProjectionMatrix(matrices.projection());
         shipInterface.setModelViewMatrix(matrices.modelView());
-        // Set rotation matrix (identity if not provided)
-        shipInterface.setRotationMatrix(rotationMatrix != null ? rotationMatrix : new Matrix4f().identity());
+        // Set transform matrix (identity if not provided)
+        shipInterface.setTransformMatrix(transformMatrix != null ? transformMatrix : new Matrix4f().identity());
         // shipInterface.setNormalMatrix(matrices.modelView().invert(new Matrix4f()).transpose());
     }
 
-    /** Stores rotation for the next render() call on the current thread. */
-    public static void pushRotation(Matrix4f rotation) {
-        CURRENT_ROTATION.set(rotation);
+    /** Stores transform for the next render() call on the current thread. */
+    public static void pushTransform(Matrix4f transform) {
+        CURRENT_TRANSFORM.set(transform);
     }
 
-    /** Retrieves and clears the stored rotation for this thread. */
-    public static Matrix4f popRotation() {
-        Matrix4f rot = CURRENT_ROTATION.get();
-        CURRENT_ROTATION.remove();
-        return rot;
+    /** Retrieves and clears the stored transform for this thread. */
+    public static Matrix4f popTransform() {
+        Matrix4f transform = CURRENT_TRANSFORM.get();
+        CURRENT_TRANSFORM.remove();
+        return transform;
     }
 
     public static boolean isRenderingShip() {
@@ -130,16 +124,8 @@ public class SodiumCompat {
                 new ChunkRenderMatrices(matrices.projection(), new Matrix4f(newModelView));
             DefaultChunkRenderer chunkRenderer = (DefaultChunkRenderer) ((RenderSectionManagerAccessor) renderSectionManager).getChunkRenderer();
             
-            // Extract rotation matrix from ship-to-world transform (3x3 upper-left)
-            Matrix4f shipRotation = new Matrix4f(
-                (float) s.m00(), (float) s.m01(), (float) s.m02(), 0,
-                (float) s.m10(), (float) s.m11(), (float) s.m12(), 0,
-                (float) s.m20(), (float) s.m21(), (float) s.m22(), 0,
-                0, 0, 0, 1
-            );
-
-            // Stash rotation for the mixin's redirected begin() to consume
-            pushRotation(shipRotation);
+            // Stash transform for the mixin's redirected begin() to consume
+            pushTransform(new Matrix4f(s));
             IS_RENDERING_SHIP.set(true);
 
             chunkRenderer.render(newMatrices, commandList, renderList, pass,

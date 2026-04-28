@@ -15,19 +15,18 @@ import me.jellysquid.mods.sodium.client.render.chunk.terrain.TerrainRenderPass;
 import org.valkyrienskies.mod.compat.LoadedMods;
 import org.valkyrienskies.mod.compat.iris.IrisCompat;
 import org.valkyrienskies.mod.compat.sodium.SodiumCompat;
-import org.valkyrienskies.mod.mixin.mod_compat.sodium.ShaderChunkRendererAccessor;
 
 @Mixin(DefaultChunkRenderer.class)
 public abstract class MixinDefaultChunkRenderer {
     @Redirect(method = "render", at = @At(value = "INVOKE", target = "Lme/jellysquid/mods/sodium/client/render/chunk/ShaderChunkRenderer;begin(Lme/jellysquid/mods/sodium/client/render/chunk/terrain/TerrainRenderPass;)V"), remap = false)
     private void redirectBegin(ShaderChunkRenderer instance, TerrainRenderPass renderPass, ChunkRenderMatrices matrices) {
-        Matrix4f rotation = SodiumCompat.popRotation();
+        Matrix4f transform = SodiumCompat.popTransform();
         if (SodiumCompat.isRenderingShip() && (!LoadedMods.getIris() || !IrisCompat.isIrisShaderActive())) {
             renderPass.startDrawing();
             ChunkShaderOptions options = new ChunkShaderOptions(ChunkFogMode.SMOOTH, renderPass, ((ShaderChunkRendererAccessor) instance).getVertexType());
             ((ShaderChunkRendererAccessor) instance).setActiveProgram(SodiumCompat.getOrCreateShipProgram(options));
             ((ShaderChunkRendererAccessor) instance).getActiveProgram().bind();
-            SodiumCompat.setupShipShaderState(((ShaderChunkRendererAccessor) instance).getActiveProgram(), matrices, rotation);
+            SodiumCompat.setupShipShaderState(((ShaderChunkRendererAccessor) instance).getActiveProgram(), matrices, transform);
         } else {
             
             ((ShaderChunkRendererAccessor) (Object) this).invokeBegin(renderPass);

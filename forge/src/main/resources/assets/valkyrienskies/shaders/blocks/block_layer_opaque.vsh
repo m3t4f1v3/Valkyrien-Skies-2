@@ -4,12 +4,11 @@
 #import <sodium:include/chunk_vertex.glsl>
 #import <sodium:include/chunk_matrices.glsl>
 #import <sodium:include/chunk_material.glsl>
-uniform mat4 u_RotationMatrix;
+uniform mat4 u_TransformMatrix;
 
 out vec4 v_Color;
 out vec2 v_TexCoord;
-out vec3 v_WorldPos;
-out mat4 v_RotationMatrix;
+out mat4 v_TransformMatrix;
 
 out float v_MaterialMipBias;
 #ifdef USE_FRAGMENT_DISCARD
@@ -45,8 +44,6 @@ void main() {
     vec3 translation = u_RegionOffset + _get_draw_translation(_draw_id);
     vec3 position = _vert_position + translation;
 
-    v_WorldPos = position;
-
 #ifdef USE_FOG
     v_FragDistance = getFragDistance(u_FogShape, position);
 #endif
@@ -59,7 +56,7 @@ void main() {
     v_TexCoord = _vert_tex_diffuse_coord;
 
     v_MaterialMipBias = _material_mip_bias(_material_params);
-    v_RotationMatrix = u_RotationMatrix;
+    v_TransformMatrix = u_TransformMatrix;
 #ifdef USE_FRAGMENT_DISCARD
     v_MaterialAlphaCutoff = _material_alpha_cutoff(_material_params);
 #endif

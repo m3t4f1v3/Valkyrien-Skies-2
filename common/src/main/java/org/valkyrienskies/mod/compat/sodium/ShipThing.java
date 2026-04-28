@@ -8,18 +8,18 @@ import me.jellysquid.mods.sodium.client.render.chunk.shader.ChunkShaderOptions;
 import me.jellysquid.mods.sodium.client.render.chunk.shader.ShaderBindingContext;
 
 public class ShipThing extends ChunkShaderInterface {
-    private final GlUniformMatrix4f uniformRotationMatrix;
+    private final GlUniformMatrix4f uniformTransformMatrix;
 
     // private final GlUniformMatrix4f uniformNormalMatrix;
     public ShipThing(ShaderBindingContext context, ChunkShaderOptions options) {
         super(context, options);
-        this.uniformRotationMatrix = context.bindUniform("u_RotationMatrix", GlUniformMatrix4f::new);
+        this.uniformTransformMatrix = context.bindUniform("u_TransformMatrix", GlUniformMatrix4f::new);
         // this.uniformNormalMatrix = context.bindUniform("u_NormalMatrix",
         // GlUniformMatrix4f::new);
     }
 
-    public void setRotationMatrix(Matrix4fc matrix) {
-        this.uniformRotationMatrix.set(matrix);
+    public void setTransformMatrix(Matrix4fc matrix) {
+        this.uniformTransformMatrix.set(matrix);
     }
 
     // public void setNormalMatrix(Matrix4fc matrix) {

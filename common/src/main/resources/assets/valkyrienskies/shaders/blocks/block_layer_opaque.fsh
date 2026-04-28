@@ -9,7 +9,7 @@ in float v_FragDistance; // The fragment's distance from the camera
 in float v_MaterialMipBias;
 in float v_MaterialAlphaCutoff;
 in vec3 v_WorldPos;
-in mat4 v_RotationMatrix;
+in mat4 v_TransformMatrix;
 
 uniform sampler2D u_BlockTex; // The block texture
 
@@ -24,18 +24,15 @@ out vec4 fragColor; // The output fragment for the color framebuffer
 #define MINECRAFT_LIGHT_Y   (0.5)
 
 
-// yeah yeah i know i should import this but cba atm thats a job for cleanup me
-float vanillaShadeFromNormal(vec3 n) {
-    vec3 an = abs(n);
+// from Flywheel/common/src/backend/resources/assets/flywheel/flywheel/internal/diffuse.glsl
+float vanillaShadeFromNormal(vec3 normal) {
+    vec3 n2 = normal * normal * vec3(.6, .25, .8);
+    return min(n2.x + n2.y * (3. + normal.y) + n2.z, 1.);
+}
 
-    float yShade = n.y > 0.0 ? 1.0 : MINECRAFT_LIGHT_Y;
-
-    float shade =
-    an.x * MINECRAFT_LIGHT_X +
-    an.z * MINECRAFT_LIGHT_Z +
-    an.y * yShade;
-
-    return shade / (an.x + an.y + an.z);
+float diffuseNether(vec3 normal) {
+    vec3 n2 = normal * normal * vec3(.6, .9, .8);
+    return min(n2.x + n2.y + n2.z, 1.);
 }
 
 void main() {
@@ -64,14 +61,17 @@ void main() {
 
     float denom = dx2 * dy2 + 1e-20;
     float quality = len2 / denom;
+    mat3 rot = mat3(v_TransformMatrix);
+    vec3 trans = v_TransformMatrix[3].xyz;
+    
 
     // rawN = nan -> rawN != rawN
-    if (quality < 5e-4 || !all(equal(rawN, rawN))) {
+    if (quality < 5e-2 || !all(equal(rawN, rawN))) {
         // Apply ambient occlusion "shade"
         diffuseColor.rgb *= v_Color.a;
     } else {
         vec3 n = normalize(rawN);
-        n = (v_RotationMatrix * vec4(n, 0.0)).xyz;
+        n = (rot * n).xyz;
 
         float shade = vanillaShadeFromNormal(n);
         diffuseColor.rgb *= shade;
