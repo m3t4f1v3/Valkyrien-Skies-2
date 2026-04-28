@@ -18,4 +18,6 @@ public interface LevelRendererVanillaDuck {
     public record VisibleChunkData(WeakHashMap<ClientShip, ObjectList<RenderChunkInfo>> shipRenderChunks, BlockPos2ByteOpenHashMap visibleShipChunks) {
 
     }
+    boolean vs$isShipChunkVisible(int chunkX, int sectionY, int chunkZ);
+
 }
