@@ -33,8 +33,12 @@ uniform float u_FogStart;
 uniform float u_FogEnd;
 
 uniform ivec3 u_VsRenderOrigin;
-// Buffer texture (RGBA32F) — each texel is one ship emitter's
-//   (worldX, worldY, worldZ, lightLevel).
+// Buffer texture (RGBA32F) — TWO texels per ship emitter:
+//   texel 2i:   vec4(worldX, worldY, worldZ, lightLevel)
+//   texel 2i+1: vec4(qx, qy, qz, qw)   ship-to-world rotation quaternion
+// The quaternion's inverse rotates the world-frame fragment-to-emitter
+// offset into the emitter's owning ship local frame, so the Manhattan
+// light bubble visibly rotates with the hull.
 uniform samplerBuffer u_VsShipEmitters;
 uniform int u_VsShipEmitterCount;
 
@@ -181,21 +185,13 @@ float ws_shipAo(vec3 worldPosWorld, vec3 nf) {
 // cap are silently ignored at fragment time.
 const int VS_EMITTER_LOOP_CAP = 128;
 
-// Distance-attenuated max ship-emitter contribution at this fragment's world
-// position. Vanilla-style 1-per-block falloff. No occlusion: light passes
-// through blocks (we'd need a per-fragment ray-march to do better, which is
-// too expensive on weaker hardware).
+// Distance-attenuated max ship-emitter contribution at this fragment's
+// world position. Manhattan distance in the emitter's owning-ship frame
+// so the octahedral light bubble visibly rotates with the hull.
 float vs_shipEmitterLight(vec3 worldPos) {
     float maxLight = 0.0;
     int n = min(u_VsShipEmitterCount, VS_EMITTER_LOOP_CAP);
     for (int i = 0; i < n; i++) {
-        // Two texels per emitter: position+light and ship rotation.
-        // Manhattan distance is computed in ship-frame so the
-        // octahedral light bubble rotates with the hull instead of
-        // staying world-axis-aligned. Manhattan still roughly matches
-        // vanilla's BFS step cost (1 per axis-aligned step in ship
-        // frame), keeping "torch reach = 14 blocks" visually exact for
-        // an axis-aligned ship.
         vec4 e = texelFetch(u_VsShipEmitters, i * 2);
         vec4 q = texelFetch(u_VsShipEmitters, i * 2 + 1);
         vec3 offset_ship = vs_quatRotateInv(q, worldPos - e.xyz);
