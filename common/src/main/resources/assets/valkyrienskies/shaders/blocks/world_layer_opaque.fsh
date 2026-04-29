@@ -39,12 +39,10 @@ uniform samplerBuffer u_VsShipEmitters;
 uniform int u_VsShipEmitterCount;
 
 // Per-frame list of solid ship voxel CENTERS in world space (post-ship-
-// transform). Each texel: vec4(worldX, worldY, worldZ, neighborMask).
-// neighborMask is a 6-bit ship-frame neighbor map packed as a small float
-// (0..63) — bit 0/1 = ∓X, bit 2/3 = ∓Y, bit 4/5 = ∓Z. Used by the AO
-// loop's corner-correction term to recognize "this voxel is part of a
-// row" and fill the bilinear corner cell that pure Manhattan misses. See
-// VsShipOccluderList.NMASK_* for the canonical bit layout.
+// transform). Each texel: vec4(worldX, worldY, worldZ, 0). Used by the
+// rotation-aware AO loop below — voxel positions are continuous floats
+// so the AO follows the ship's transform smoothly (cell-storage-based
+// AO can only morph between cell-aligned configs as voxels move).
 uniform samplerBuffer u_VsShipOccluders;
 uniform int u_VsShipOccluderCount;
 
@@ -89,18 +87,9 @@ float ws_shipAo(vec3 worldPosWorld, vec3 nf) {
     float fragU = dot(worldPosWorld, uAxis);
     float fragV = dot(worldPosWorld, vAxis);
 
-    // Map face-plane U/V back to a ship-frame axis index (0=X, 1=Y, 2=Z)
-    // so we can index into each voxel's neighbor mask. uAxis/vAxis above
-    // pick from {X, Y, Z}\{normal}; this mirrors that choice. Works for
-    // axis-aligned ships (the common case); rotated ships' ship-frame
-    // axes don't line up with world U/V, so the mask bits we read here
-    // would be wrong — for those, the corner correction below silently
-    // either over- or under-fires, but the dominant Manhattan term is
-    // still correct.
-    int uIdx = absNf.x > 0.5 ? 1 : 0;
-    int vIdx = absNf.z > 0.5 ? 1 : 2;
-
-    float occlusion = 0.0;
+    float occlusionManhattan = 0.0;
+    float occlusionCorner = 0.0;
+    int cornerContributors = 0;
 
     for (int i = 0; i < n; i++) {
         vec4 voxel = texelFetch(u_VsShipOccluders, i);
@@ -114,65 +103,54 @@ float ws_shipAo(vec3 worldPosWorld, vec3 nf) {
         float dv = dot(voxelProj, vAxis) - fragV;
 
         // Manhattan-distance SDF of the voxel's face-plane box. Reproduces
-        // vanilla MC's exact AO shape:
-        //   - inside the voxel's 1×1 footprint: full 1/3 contribution
-        //     (vanilla "occluder reduces face-vertex AO by 1/3").
+        // vanilla MC's exact AO shape for an isolated occluder:
+        //   - inside the voxel's 1×1 footprint: full 1/3 contribution.
         //   - axially adjacent cells: linear 1/3 → 0 ramp over 1 cell.
         //   - diagonally adjacent cells: triangular falloff cut by the
-        //     45° Manhattan iso-line (loss > 0 only where |Δu|+|Δv|<1
-        //     beyond the box corner) — that's exactly vanilla's clean-
-        //     triangle corner for an isolated occluder.
+        //     45° Manhattan iso-line — vanilla's clean-triangle corner.
         //
-        // Constants from the SDF reference:
-        //   - halfSize 0.5: voxel is a unit cell on the face plane.
-        //   - threshold 1.0 (= 2 × halfSize): tent reaches 0 at distance
-        //     1 cell from the box, matching vanilla's 1-cell AO reach.
-        //
-        // Single-sample per voxel (no 4-corner sampling needed): the SDF
-        // already encodes the full 1×1 footprint. Voxel position is
-        // continuous, so the shape translates AND rotates with voxels —
-        // no per-cell decomposition, no world-grid anchoring.
+        // halfSize 0.5: voxel is a unit cell on the face plane. tent
+        // reaches 0 at distance 1 cell from the box (matching vanilla's
+        // 1-cell AO reach). Voxel position is continuous, so the shape
+        // translates AND rotates with voxels — no per-cell
+        // decomposition, no world-grid anchoring.
         float dU = abs(du) - 0.5;
         float dV = abs(dv) - 0.5;
         float manhattan = max(0.0, 1.0 - max(dU, 0.0) - max(dV, 0.0));
-        occlusion += (1.0 / 3.0) * fn * manhattan;
 
-        // Neighbor-aware corner correction. The Manhattan tent above
-        // matches vanilla AO for an ISOLATED occluder, but rows of
-        // adjacent voxels reveal a flaw: each voxel contributes a clean
-        // octagon, and adjacent octagons meet along a 45° iso-line
-        // instead of merging into a uniform strip. Specifically, for a
-        // row casting AO on the face beside it, the row's corner blocks
-        // contribute 0 at face centers (their Manhattan tents die at
-        // sdfMan=1) — vanilla's bilinear interp puts ~1/12 there, so
-        // every interior face has a triangular slice of bright space
-        // carved out where the corner cell should be uniformly dark.
+        // Diagonal corner-cell extra for the "X X" case (two voxels
+        // with a 1-cell gap between them). Manhattan alone falls to 0
+        // along |Δu|+|Δv|=1, so each X contributes 0 at the gap-front
+        // fragment (dU=0.5, dV=0.5 from each), leaving a bright wedge
+        // where vanilla has continuous AO. The corner-extra term
+        // promotes the tent to bilinear (1−dU)(1−dV) inside the
+        // diagonal cell, filling the gap to 1/12 per voxel. Factors
+        // clamp at 0/1 so distant voxels contribute nothing.
         //
-        // Fix: when the voxel has a ship-frame neighbor in the
-        // perpendicular direction toward the fragment's quadrant
-        // (i.e., the neighbor that "completes the L" with this voxel
-        // pointing into the fragment's face), add the bilinear-vs-
-        // Manhattan extra term in the corner cell. Gating on the
-        // neighbor mask keeps this from over-firing for isolated
-        // diagonal blocks (whose Manhattan answer is already what the
-        // user wants — a clean octagonal shadow).
-        if (dU > 0.0 && dV > 0.0) {
-            uint mask = uint(voxel.w + 0.5);
-            uint towardU = (du < 0.0)
-                ? ((mask >> uint(uIdx * 2 + 1)) & 1u)  // fragment +U → check +U neighbor
-                : ((mask >> uint(uIdx * 2))     & 1u); // fragment -U → check -U neighbor
-            uint towardV = (dv < 0.0)
-                ? ((mask >> uint(vIdx * 2 + 1)) & 1u)
-                : ((mask >> uint(vIdx * 2))     & 1u);
-            if ((towardU | towardV) != 0u) {
-                float fU = clamp(1.0 - dU, 0.0, 1.0);
-                float fV = clamp(1.0 - dV, 0.0, 1.0);
-                float bilinear = fU * fV;
-                occlusion += (1.0 / 3.0) * fn * max(0.0, bilinear - manhattan);
-            }
+        // Gated below by `cornerContributors >= 2`: the corner cell is
+        // filled only when at least two voxels are themselves landing
+        // a cornerExtra contribution at this fragment — the X-X-gap
+        // signature. An isolated voxel triggers at most one corner
+        // contributor (its own diagonal cell) so the fill is dropped
+        // and the clean Manhattan octagon is preserved. Adjacent voxels
+        // (XX, no gap) also drop the fill: only the diagonal voxel of
+        // the pair has cornerExtra > 0; the axial voxel's contribution
+        // goes to Manhattan, doesn't bump cornerContributors, so the
+        // single corner contributor isn't enough to fill.
+        float fU = clamp(1.0 - dU, 0.0, 1.0);
+        float fV = clamp(1.0 - dV, 0.0, 1.0);
+        float cornerExtra = max(0.0, fU * fV - manhattan);
+
+        occlusionManhattan += (1.0 / 3.0) * fn * manhattan;
+        float contribC = (1.0 / 3.0) * fn * cornerExtra;
+        occlusionCorner += contribC;
+        if (contribC > 0.0) {
+            cornerContributors++;
         }
     }
 
+    float occlusion = occlusionManhattan
+            + (cornerContributors >= 2 ? occlusionCorner : 0.0);
     occlusion = clamp(occlusion, 0.0, 1.0);
     return mix(0.2, 1.0, 1.0 - occlusion);
 }

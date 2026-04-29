@@ -49,20 +49,6 @@ public class VsShipOccluderList {
 
     private final Vector3d scratch = new Vector3d();
     private final BlockPos.MutableBlockPos scratchBlockPos = new BlockPos.MutableBlockPos();
-    private final BlockPos.MutableBlockPos scratchNeighborPos = new BlockPos.MutableBlockPos();
-
-    // Bit positions in the per-voxel ship-frame neighbor mask packed
-    // into the 4th float of each occluder vec4. The shader maps these
-    // ship-frame axes to face-plane U/V via the face normal — works for
-    // axis-aligned ships (which is the common case); rotated ships fall
-    // through to plain Manhattan because the bits no longer line up with
-    // world axes.
-    private static final int NMASK_MINUS_X = 1 << 0;
-    private static final int NMASK_PLUS_X  = 1 << 1;
-    private static final int NMASK_MINUS_Y = 1 << 2;
-    private static final int NMASK_PLUS_Y  = 1 << 3;
-    private static final int NMASK_MINUS_Z = 1 << 4;
-    private static final int NMASK_PLUS_Z  = 1 << 5;
 
     public VsShipOccluderList() {
         arenaPtr = MemoryUtil.nmemAlloc((long) MAX_OCCLUDERS * BYTES_PER_OCCLUDER);
@@ -115,35 +101,11 @@ public class VsShipOccluderList {
                     scratch.set(sx + 0.5, sy + 0.5, sz + 0.5);
                     shipToWorld.transformPosition(scratch);
 
-                    // Ship-frame neighbor mask. Tells the shader, for each
-                    // voxel, which of its ±X/±Y/±Z ship-frame neighbors are
-                    // also solid occluders. The shader uses this to gate a
-                    // bilinear corner-correction term on top of the Manhattan
-                    // tent — without it, a row of voxels casts a string of
-                    // octagons with bright triangular slices between them
-                    // (each Manhattan tent's diagonal corner falls off to 0
-                    // at distance 1, leaving the corner cell of every interior
-                    // face only at 1/6 occlusion instead of vanilla's 1/3).
-                    // With the mask, the shader knows the corner blocks of a
-                    // row are part of an L with the axial neighbor, fires the
-                    // bilinear extra in their corner cells, and the strip
-                    // matches vanilla's uniform AO along the row.
-                    int neighborMask = 0;
-                    if (isSolidShipBlock(level, sx - 1, sy, sz)) neighborMask |= NMASK_MINUS_X;
-                    if (isSolidShipBlock(level, sx + 1, sy, sz)) neighborMask |= NMASK_PLUS_X;
-                    if (isSolidShipBlock(level, sx, sy - 1, sz)) neighborMask |= NMASK_MINUS_Y;
-                    if (isSolidShipBlock(level, sx, sy + 1, sz)) neighborMask |= NMASK_PLUS_Y;
-                    if (isSolidShipBlock(level, sx, sy, sz - 1)) neighborMask |= NMASK_MINUS_Z;
-                    if (isSolidShipBlock(level, sx, sy, sz + 1)) neighborMask |= NMASK_PLUS_Z;
-
                     long offset = arenaPtr + (long) count * BYTES_PER_OCCLUDER;
                     MemoryUtil.memPutFloat(offset,        (float) scratch.x);
                     MemoryUtil.memPutFloat(offset + 4,    (float) scratch.y);
                     MemoryUtil.memPutFloat(offset + 8,    (float) scratch.z);
-                    // Mask 0..63 stores cleanly as a small float — well within
-                    // the integer-exact range of float32 and free of denormal
-                    // flush issues. Read in shader via uint(voxel.w + 0.5).
-                    MemoryUtil.memPutFloat(offset + 12,   (float) neighborMask);
+                    MemoryUtil.memPutFloat(offset + 12,   0.0f);
                     count++;
                 }
             }
@@ -172,16 +134,6 @@ public class VsShipOccluderList {
         GlStateManager._activeTexture(GL13.GL_TEXTURE0 + textureUnit);
         GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, texture);
         GlStateManager._activeTexture(GL13.GL_TEXTURE0);
-    }
-
-    /** Same isSolid check the main loop uses, but on a separate scratch
-     *  position so it can be called for neighbor probes without clobbering
-     *  the outer loop's scratchBlockPos. */
-    private boolean isSolidShipBlock(LevelAccessor level, int x, int y, int z) {
-        scratchNeighborPos.set(x, y, z);
-        BlockState state = level.getBlockState(scratchNeighborPos);
-        if (state.isAir()) return false;
-        return state.canOcclude() && state.isCollisionShapeFullBlock(level, scratchNeighborPos);
     }
 
     private void ensureGlObjects() {
