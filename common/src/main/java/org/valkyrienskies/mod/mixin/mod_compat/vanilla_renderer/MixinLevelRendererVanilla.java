@@ -184,10 +184,10 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
      * Add ship render chunks to [renderChunks]
      */
     @Inject(
-        method = "setupRender",
+        method = "applyFrustum",
         at = @At("RETURN")
     )
-    private void preSetupRender(final Camera camera, final Frustum frustum, final boolean bl, final boolean bl2, final CallbackInfo ci) {
+    private void postApplyFrustum(Frustum frustum, CallbackInfo ci){
         // Gradually pre-allocate render chunk GPU buffers so they're ready when ships load
         ((IVSViewAreaMethods) viewArea).vs$fillRenderChunkPool();
         if (!this.vs$didApplyFrustumThisFrame) {
@@ -487,5 +487,24 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
         VertexBuffer.unbind();
         this.minecraft.getProfiler().pop();
         renderType.clearRenderState();
+    }
+
+    @Override
+    public VisibleChunkData vs$captureShipVisibleChunks() {
+        WeakHashMap<ClientShip, ObjectList<RenderChunkInfo>> temp = new WeakHashMap<>();
+        shipRenderChunks.forEach((ship, chunks) -> {
+            ObjectArrayList<RenderChunkInfo> subTemp = new ObjectArrayList<>();
+            chunks.forEach(subTemp::add);
+            temp.put(ship, subTemp);
+        });
+        return new VisibleChunkData(temp, vs$visibileShipChunks);
+    }
+
+    @Override
+    public void vs$reloadShipVisibleChunks(VisibleChunkData data) {
+        this.vs$visibileShipChunks = data.visibleShipChunks();
+        shipRenderChunks.forEach((ship, chunks) -> chunks.clear());
+        shipRenderChunks.clear();
+        this.shipRenderChunks.putAll(data.shipRenderChunks());
     }
 }

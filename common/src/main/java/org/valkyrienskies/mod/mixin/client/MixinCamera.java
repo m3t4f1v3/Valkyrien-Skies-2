@@ -66,6 +66,10 @@ public abstract class MixinCamera implements IVSCamera {
     private float xRot;
     @Shadow
     private float yRot;
+
+    @Unique
+    private float vs$zRot;
+
     @Shadow
     @Final
     private Quaternionf rotation;
@@ -77,6 +81,8 @@ public abstract class MixinCamera implements IVSCamera {
     private float eyeHeightOld;
     @Shadow
     private Vec3 position;
+    @Shadow
+    private BlockPos.MutableBlockPos blockPosition;
 
     @Unique
     private int vs$sealedGraceTicks = 0;
@@ -238,5 +244,27 @@ public abstract class MixinCamera implements IVSCamera {
         }
 
         return maxZoom;
+    }
+
+    @Override
+    public void setRotationVS(float yaw, float pitch, float roll) {
+        this.xRot = pitch;
+        this.yRot = yaw;
+        this.vs$zRot = roll;
+        this.rotation.rotationYXZ(-yaw * ((float)Math.PI / 180), pitch * ((float)Math.PI / 180), roll * ((float)Math.PI / 180));
+        this.forwards.set(0.0f, 0.0f, 1.0f).rotate(this.rotation);
+        this.up.set(0.0f, 1.0f, 0.0f).rotate(this.rotation);
+        this.left.set(1.0f, 0.0f, 0.0f).rotate(this.rotation);
+    }
+
+    @Override
+    public void setPositionVS(Vec3 position) {
+        this.position = position;
+        this.blockPosition.set(position.x, position.y, position.z);
+    }
+
+    @Override
+    public float getZrot() {
+        return vs$zRot;
     }
 }
