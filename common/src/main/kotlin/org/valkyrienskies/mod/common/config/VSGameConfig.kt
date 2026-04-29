@@ -76,6 +76,16 @@ object VSGameConfig {
             description = "The way ships are rendered by default"
         )
         var defaultRenderer = ShipRenderer.VANILLA
+
+        @ConfigEntry(description = "Use a custom vanilla shader for rendering ship chunks, improving lighting on tilted and upside down ships. Also enables the directional-shade fix for the sodium/embeddium ship renderer.")
+        var betterVanillaShipShading = false
+
+        @ConfigEntry(description = "Sample the world biome at the ship's actual rendered position so grass/leaves/water on ships show the correct biome color (sodium/embeddium only). Disable for a small perf gain — ship blocks fall back to whatever the chunk mesher baked.")
+        var dynamicShipBiomeTinting = false
+
+        @ConfigEntry(description = "Sample world block/sky light at the ship's rendered position so torches and sunlight in the world correctly light the ship (sodium/embeddium only). Disable for a moderate perf gain — ship blocks fall back to the shipyard's baked lightmap.")
+        var dynamicShipLighting = false
+
     }
 
     class Server {

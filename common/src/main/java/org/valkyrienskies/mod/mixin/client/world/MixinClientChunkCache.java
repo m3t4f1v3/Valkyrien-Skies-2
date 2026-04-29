@@ -22,6 +22,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.chunk.ChunkStatus;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.lighting.LevelLightEngine;
 import org.joml.Vector3i;
 import org.joml.Vector3ic;
@@ -40,8 +41,8 @@ import org.valkyrienskies.core.internal.world.chunks.VsiTerrainUpdate;
 import org.valkyrienskies.mod.common.VS2ChunkAllocator;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.config.VSGameConfig;
-import org.valkyrienskies.mod.compat.SodiumCompat;
 import org.valkyrienskies.mod.compat.VSRenderer;
+import org.valkyrienskies.mod.compat.sodium.SodiumCompat;
 import org.valkyrienskies.mod.mixin.ValkyrienCommonMixinConfigPlugin;
 import org.valkyrienskies.mod.mixin.accessors.client.multiplayer.ClientLevelAccessor;
 import org.valkyrienskies.mod.mixin.accessors.client.render.LevelRendererAccessor;
@@ -79,6 +80,19 @@ public abstract class MixinClientChunkCache implements ClientChunkCacheDuck {
     @Override
     public Long2ObjectMap<LevelChunk> vs$getShipChunks() {
         return this.shipChunks;
+    }
+
+    /**
+     * Notify the VS sodium light storage when the world's light engine reports a
+     * section update. Without this hook, freshly placed torches / sky changes
+     * near an already-tracked ship section are never reflected in the GPU light
+     * buffer used by the ship shader.
+     */
+    @Inject(method = "onLightUpdate", at = @At("HEAD"))
+    private void vs_sodium$onLightUpdate(LightLayer layer, SectionPos pos, CallbackInfo ci) {
+        if (ValkyrienCommonMixinConfigPlugin.getVSRenderer() == VSRenderer.SODIUM) {
+            SodiumCompat.getLightStorage().invalidateSection(pos.asLong());
+        }
     }
 
     @Inject(method = "replaceWithPacketData", at = @At("HEAD"), cancellable = true)
