@@ -39,7 +39,8 @@ public abstract class MixinCamera {
             final double origY = cameraPos.y;
             final double origZ = cameraPos.z;
 
-            if (ShipWaterPocketManager.isWorldPosInShipAirPocket(level, origX, origY, origZ)) {
+            if (ShipWaterPocketManager.isWorldPosInShipAirPocket(level, origX, origY, origZ) ||
+                ShipWaterPocketManager.isWorldPosInShipWorldFluidSuppressionZone(level, origX, origY, origZ)) {
                 return fluidState[0];
             }
 

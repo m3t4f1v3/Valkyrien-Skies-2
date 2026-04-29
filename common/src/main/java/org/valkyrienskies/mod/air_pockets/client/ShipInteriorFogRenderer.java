@@ -355,7 +355,8 @@ public final class ShipInteriorFogRenderer {
             return false;
         }
         final FogType cameraFogType = camera.getFluidInCamera();
-        if (cameraFogType != FogType.NONE) {
+        if (cameraFogType != FogType.NONE &&
+            !isCameraInShipPocketRenderZone(mc.level, camera)) {
             //logDiag("Skipped interior fog render: camera fluid={}", cameraFogType);
             return false;
         }
@@ -515,7 +516,7 @@ public final class ShipInteriorFogRenderer {
             final double sampleX = startX + look.x() * travel;
             final double sampleY = startY + look.y() * travel;
             final double sampleZ = startZ + look.z() * travel;
-            if (!ShipWaterPocketManager.isWorldPosInShipAirPocket(mc.level, sampleX, sampleY, sampleZ)) {
+            if (!isWorldPosInShipPocketRenderZone(mc.level, sampleX, sampleY, sampleZ)) {
                 exitDistance = travel;
                 break;
             }
@@ -553,6 +554,22 @@ public final class ShipInteriorFogRenderer {
             return true;
         }
         return now - lastInteriorFogActiveAtMs <= INTERIOR_FOG_GRACE_PERIOD_MS;
+    }
+
+    private static boolean isCameraInShipPocketRenderZone(final net.minecraft.client.multiplayer.ClientLevel level,
+        final Camera camera) {
+        return isWorldPosInShipPocketRenderZone(
+            level,
+            camera.getPosition().x,
+            camera.getPosition().y,
+            camera.getPosition().z
+        );
+    }
+
+    private static boolean isWorldPosInShipPocketRenderZone(final net.minecraft.client.multiplayer.ClientLevel level,
+        final double x, final double y, final double z) {
+        return ShipWaterPocketManager.isWorldPosInShipAirPocket(level, x, y, z) ||
+            ShipWaterPocketManager.isWorldPosInShipWorldFluidSuppressionZone(level, x, y, z);
     }
 
     private static void setMat4(final EffectInstance effect, final String uniformName, final Matrix4f value) {

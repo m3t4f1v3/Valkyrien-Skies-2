@@ -232,7 +232,10 @@ public final class ShipWaterPocketLiquidOverlay {
         if (level == null || mc.gameRenderer == null) return;
 
         final Camera camera = mc.gameRenderer.getMainCamera();
-        if (camera.getFluidInCamera() != FogType.NONE) return;
+        if (camera.getFluidInCamera() != FogType.NONE &&
+            !isCameraInShipPocketRenderZone(level, camera.getPosition())) {
+            return;
+        }
 
         ensureExteriorFluidCacheLevel(level);
 
@@ -2092,5 +2095,10 @@ public final class ShipWaterPocketLiquidOverlay {
             return clientShip.getRenderTransform();
         }
         return ship.getShipTransform();
+    }
+
+    private static boolean isCameraInShipPocketRenderZone(final net.minecraft.client.multiplayer.ClientLevel level, final Vec3 pos) {
+        return ShipWaterPocketManager.isWorldPosInShipAirPocket(level, pos.x, pos.y, pos.z) ||
+            ShipWaterPocketManager.isWorldPosInShipWorldFluidSuppressionZone(level, pos.x, pos.y, pos.z);
     }
 }
