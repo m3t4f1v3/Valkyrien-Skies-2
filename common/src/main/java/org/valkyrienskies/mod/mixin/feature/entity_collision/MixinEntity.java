@@ -79,7 +79,7 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider,
         final EntityDraggingInformation draggingInformation = getDraggingInformation();
         final boolean isDraggedByShip = draggingInformation != null && draggingInformation.isEntityBeingDraggedByAShip();
 
-        if (!isDraggedByShip && EntityShipCollisionUtils.isCollidingWithUnloadedShips(Entity.class.cast(this))) {
+        if (EntityShipCollisionUtils.isCollidingWithUnloadedShips(Entity.class.cast(this))) {
             ci.cancel();
         }
     }
@@ -261,10 +261,10 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider,
         final Entity self = Entity.class.cast(this);
 
         if (level != null && level.isClientSide && tickCount > 1) { //baseTick sets the firstTick false, use tickCount instead.
-            if (!(self.isControlledByLocalInstance() || (self instanceof final Player player && player.isLocalPlayer()))) {
-                entityDraggingInformation.setMountedToEntity(self.getVehicle() != null);
-                return;
-            }
+//            if (!(self.isControlledByLocalInstance() || (self instanceof final Player player && player.isLocalPlayer()))) {
+//                entityDraggingInformation.setMountedToEntity(self.getVehicle() != null);
+//                return;
+//            }
             final Ship ship = VSGameUtilsKt.getLoadedShipManagingPos(level, getOnPos());
             if (ship != null) {
 //                if (entityDraggingInformation.getLastShipStoodOnServerWriteOnly() == null) {
