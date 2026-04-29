@@ -36,6 +36,12 @@ public abstract class MixinDefaultChunkRenderer {
             ((ShaderChunkRendererAccessor) instance).setActiveProgram(SodiumCompat.getOrCreateShipProgram(options));
             ((ShaderChunkRendererAccessor) instance).getActiveProgram().bind();
             SodiumCompat.setupShipShaderState(((ShaderChunkRendererAccessor) instance).getActiveProgram(), matrices, transform);
+            // Ship-on-ship: bind the per-frame voxel lists to the same units
+            // setupShipShaderState wrote into the shader's samplers. Without
+            // this the ship shader would sample whatever was last bound
+            // (typically nothing on the first ship pass of the frame).
+            SodiumCompat.getShipEmitterList().bind(SodiumCompat.SHIP_EMITTER_LIST_TEXTURE_UNIT);
+            SodiumCompat.getShipOccluderList().bind(SodiumCompat.SHIP_OCCLUDER_LIST_TEXTURE_UNIT);
             return;
         }
         // World chunk path: when ship-to-world dynamic lighting is on AND

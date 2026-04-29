@@ -101,7 +101,13 @@ void main() {
     v_WorldNormal = vs_faceSlotToWorldNormal(faceSlot);
     v_IsShaded = (faceSlot < 6u) ? 1 : 0;
 
-    v_LightCoord = _vert_tex_light_coord;
+    // Sodium's _vert_tex_light_coord is an ivec2 in [0, 255] (raw byte pair
+    // from the chunk vertex). Sodium's stock _sample_lightmap divides by
+    // 256 before sampling u_LightTex; we sample per-fragment in the FSH so
+    // do the divide here once. Without this, the FSH samples u_LightTex at
+    // clamped (~31/32, ~31/32) every fragment and the world renders
+    // uniformly maxed out — vanilla torch falloff disappears.
+    v_LightCoord = vec2(_vert_tex_light_coord) / 256.0;
     v_TexCoord = (_vert_tex_diffuse_coord_bias * u_TexCoordShrink) + _vert_tex_diffuse_coord;
 
     v_MaterialMipBias = _material_mip_bias(_material_params);

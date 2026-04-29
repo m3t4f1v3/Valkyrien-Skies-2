@@ -38,6 +38,11 @@ public class ShipThing extends ChunkShaderInterface {
     // another ship that happens to be nearby in world space.
     private final GlUniformInt uniformShipEmitters;
     private final GlUniformInt uniformShipEmitterCount;
+    // Same per-frame solid-voxel list the world FSH uses for ship-to-world
+    // AO; binding it on the ship shader too lets one ship's voxels shadow
+    // another ship's surface (and the same ship's own concave geometry).
+    private final GlUniformInt uniformShipOccluders;
+    private final GlUniformInt uniformShipOccluderCount;
 
     public ShipThing(ShaderBindingContext context, ChunkShaderOptions options, int features) {
         super(context, options);
@@ -66,6 +71,10 @@ public class ShipThing extends ChunkShaderInterface {
                 ? context.bindUniform("u_VsShipEmitters", GlUniformInt::new) : null;
         this.uniformShipEmitterCount = shipOnShip
                 ? context.bindUniform("u_VsShipEmitterCount", GlUniformInt::new) : null;
+        this.uniformShipOccluders = shipOnShip
+                ? context.bindUniform("u_VsShipOccluders", GlUniformInt::new) : null;
+        this.uniformShipOccluderCount = shipOnShip
+                ? context.bindUniform("u_VsShipOccluderCount", GlUniformInt::new) : null;
     }
 
     public void setTransformMatrix(Matrix4fc matrix) {
@@ -99,5 +108,10 @@ public class ShipThing extends ChunkShaderInterface {
     public void setShipEmitters(int textureUnit, int count) {
         if (this.uniformShipEmitters != null) this.uniformShipEmitters.setInt(textureUnit);
         if (this.uniformShipEmitterCount != null) this.uniformShipEmitterCount.setInt(count);
+    }
+
+    public void setShipOccluders(int textureUnit, int count) {
+        if (this.uniformShipOccluders != null) this.uniformShipOccluders.setInt(textureUnit);
+        if (this.uniformShipOccluderCount != null) this.uniformShipOccluderCount.setInt(count);
     }
 }

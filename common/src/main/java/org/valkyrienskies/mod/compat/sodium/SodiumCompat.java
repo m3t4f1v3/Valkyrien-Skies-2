@@ -224,6 +224,7 @@ public class SodiumCompat {
         shipInterface.setBiomeSectionsSampler(BIOME_SECTIONS_TEXTURE_UNIT);
         shipInterface.setBiomeLutSampler(BIOME_LUT_TEXTURE_UNIT);
         shipInterface.setShipEmitters(SHIP_EMITTER_LIST_TEXTURE_UNIT, getShipEmitterList().size());
+        shipInterface.setShipOccluders(SHIP_OCCLUDER_LIST_TEXTURE_UNIT, getShipOccluderList().size());
     }
 
     /** Stores transform for the next render() call on the current thread. */

@@ -34,12 +34,27 @@ uniform usamplerBuffer u_VsLightSections;
 uniform usamplerBuffer u_VsLightLut;
 #endif
 #ifdef VS_SHIP_ON_SHIP
-// Per-frame ship-emitter list as vec4(worldX, worldY, worldZ, lightLevel)
-// entries. Lets emitters on one ship illuminate other ships' surfaces with
-// sub-block precision (the emitter coords are floats — as a ship moves the
-// lit area on neighbours tracks continuously, no per-block snapping).
+// Per-frame ship-emitter list. TWO RGBA32F texels per emitter:
+//   texel 2i:   vec4(worldX, worldY, worldZ, lightLevel)
+//   texel 2i+1: vec4(qx, qy, qz, qw)   ship-to-world rotation quaternion
+// Manhattan distance is taken in the emitter's owning-ship local frame
+// (offset rotated by q^-1) so the octahedral light bubble rotates with
+// the hull.
 uniform samplerBuffer u_VsShipEmitters;
 uniform int u_VsShipEmitterCount;
+// Per-frame solid ship voxel list (same 2-texel layout, position .w = 0).
+// Used for ship-to-ship AO so one ship's voxels can cast smooth-tracking
+// octagonal shadows on another ship's surface (and on the same ship's
+// own concave faces).
+uniform samplerBuffer u_VsShipOccluders;
+uniform int u_VsShipOccluderCount;
+
+// Inverse-rotate v by quaternion q (apply q^-1 = (-q.xyz, q.w) to v) so
+// the SDF / distance metrics line up with the owning ship's axes.
+vec3 vs_sosQuatRotateInv(vec4 q, vec3 v) {
+    vec3 qNeg = -q.xyz;
+    return v + 2.0 * cross(qNeg, cross(qNeg, v) + q.w * v);
+}
 #endif
 
 out vec4 fragColor;
@@ -298,24 +313,81 @@ bool vs_lightSmooth(vec3 worldPos, vec3 normal, out VsLightAo lightAoOut) {
 
 #ifdef VS_SHIP_ON_SHIP
 // ===== Ship-on-ship: distance-attenuated emitter list ====================
-// Loop bound for the per-fragment scan over u_VsShipEmitters. Should be ≤
-// VsShipEmitterList.MAX_EMITTERS — 128 covers most real ship setups.
+// Loop bounds for the per-fragment scans. Should be ≤ the corresponding
+// MAX_* constants in the Java lists; 128 covers most real ship setups.
 const int VS_SOS_EMITTER_LOOP_CAP = 128;
+const int VS_SOS_OCCLUDER_LOOP_CAP = 128;
 
 // Max distance-attenuated contribution from any ship emitter (incl. own
-// ship) at this fragment's world position. Vanilla-style 1-per-block
-// Manhattan falloff. No occlusion — light passes through walls; the user
-// explicitly chose this trade-off for smoothness over physical accuracy.
+// ship) at this fragment's world position. Manhattan falloff is taken in
+// the emitter's owning-ship frame so the octahedral light bubble rotates
+// with the hull.
 float vs_sosEmitterLight(vec3 worldPos) {
     float maxLight = 0.0;
     int n = min(u_VsShipEmitterCount, VS_SOS_EMITTER_LOOP_CAP);
     for (int i = 0; i < n; i++) {
-        vec4 e = texelFetch(u_VsShipEmitters, i);
-        float dist = abs(worldPos.x - e.x) + abs(worldPos.y - e.y) + abs(worldPos.z - e.z);
+        vec4 e = texelFetch(u_VsShipEmitters, i * 2);
+        vec4 q = texelFetch(u_VsShipEmitters, i * 2 + 1);
+        vec3 offset_ship = vs_sosQuatRotateInv(q, worldPos - e.xyz);
+        float dist = abs(offset_ship.x) + abs(offset_ship.y) + abs(offset_ship.z);
         float light = max(0.0, e.w - dist);
         maxLight = max(maxLight, light);
     }
     return maxLight;
+}
+
+// Per-fragment ship-to-ship AO. Mirrors the world-FSH ws_shipAo: each
+// solid ship voxel projects an octagonal Manhattan tent on the face,
+// computed in the voxel's owning-ship local frame so the shadow rotates
+// with the hull. Diagonal corner cells get the bilinear-vs-Manhattan
+// extra (cornerExtra) gated by ≥2 contributors so isolated and adjacent
+// voxels keep their clean octagonal shadow but X-X gaps and rows fill
+// in to vanilla brightness.
+float vs_sosShipAo(vec3 worldPosWorld, vec3 nf) {
+    int n = min(u_VsShipOccluderCount, VS_SOS_OCCLUDER_LOOP_CAP);
+
+    float occlusionManhattan = 0.0;
+    float occlusionCorner = 0.0;
+    int cornerContributors = 0;
+
+    for (int i = 0; i < n; i++) {
+        vec4 voxel = texelFetch(u_VsShipOccluders, i * 2);
+        vec4 q = texelFetch(u_VsShipOccluders, i * 2 + 1);
+
+        vec3 d_world = voxel.xyz - worldPosWorld;
+        vec3 d_ship = vs_sosQuatRotateInv(q, d_world);
+        vec3 nf_ship = vs_sosQuatRotateInv(q, nf);
+
+        float d_n = dot(d_ship, nf_ship);
+        if (d_n <= 0.0 || d_n >= 1.5) continue;
+        float fn = 1.0 - smoothstep(0.5, 1.5, d_n);
+
+        vec3 absNf = abs(nf_ship);
+        vec3 uAxis = absNf.x > 0.5 ? vec3(0, 1, 0) : vec3(1, 0, 0);
+        vec3 vAxis = absNf.z > 0.5 ? vec3(0, 1, 0) : vec3(0, 0, 1);
+        float du = dot(d_ship, uAxis);
+        float dv = dot(d_ship, vAxis);
+
+        float dU = abs(du) - 0.5;
+        float dV = abs(dv) - 0.5;
+        float manhattan = max(0.0, 1.0 - max(dU, 0.0) - max(dV, 0.0));
+
+        float fU = clamp(1.0 - dU, 0.0, 1.0);
+        float fV = clamp(1.0 - dV, 0.0, 1.0);
+        float cornerExtra = max(0.0, fU * fV - manhattan);
+
+        occlusionManhattan += (1.0 / 3.0) * fn * manhattan;
+        float contribC = (1.0 / 3.0) * fn * cornerExtra;
+        occlusionCorner += contribC;
+        if (contribC > 0.0) {
+            cornerContributors++;
+        }
+    }
+
+    float occlusion = occlusionManhattan
+            + (cornerContributors >= 2 ? occlusionCorner : 0.0);
+    occlusion = clamp(occlusion, 0.0, 1.0);
+    return mix(0.2, 1.0, 1.0 - occlusion);
 }
 #endif // VS_SHIP_ON_SHIP
 
@@ -419,6 +491,7 @@ void main() {
     // this fragment's world block lets nearby ships shadow / illuminate this
     // ship's surface. Skipped for fullbright quads (already at max lightmap)
     // and reuses v_CameraRelWorldPos / u_VsRenderOrigin from VS_DYNAMIC_LIGHT.
+    float sosShipAo = 1.0;
     if (!isFullbright) {
         // Ship emitters anywhere (own ship + other ships). The emitter list
         // stores world-space FLOAT coords, so as a ship slides sub-block the
@@ -429,11 +502,26 @@ void main() {
         if (sosLight > 0.0) {
             lightCoord.x = max(lightCoord.x, (sosLight + 0.5) / 16.0);
         }
+
+        // Ship-to-ship AO: own ship's voxels casting shadows on this ship's
+        // concave faces, plus any other ship's voxels that happen to be
+        // adjacent in world space. Both run through the same SDF, in each
+        // contributing voxel's ship-frame, so shadows track each hull's
+        // rotation independently.
+        sosShipAo = vs_sosShipAo(sosWorldPos, worldN);
     }
 #endif
 
     vec4 lightSample = texture(u_LightTex, lightCoord);
     diffuseColor.rgb *= vertTint * lightSample.rgb;
+
+#ifdef VS_SHIP_ON_SHIP
+    // Stack the ship-to-ship AO with the existing aoMultiplier additively
+    // (in occlusion-loss space) — same compounding rule the world FSH uses
+    // for vanilla×ship AO so two op cells at a corner sum to loss 0.4
+    // instead of 0.64. Floor at 0.2 matches sodium's deepest opaque AO.
+    aoMultiplier = max(0.2, aoMultiplier - (1.0 - sosShipAo));
+#endif
 
 #ifdef VS_DYNAMIC_SHADE
     // Directional shade (vanilla "side darkening"): applied only when the quad
