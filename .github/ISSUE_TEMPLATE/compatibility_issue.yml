@@ -65,4 +65,4 @@ body:
 - type: textarea
   attributes:
     label: Logs
-    description: Go to `.minecraft/logs` and drag and drop the `latest.log` and `debug.log` file into this text field
+    description: Upload to https://mclo.gs/ and paste a link, or alternatively go to `.minecraft/logs` and drag and drop the `latest.log` and `debug.log` file into this text field.
