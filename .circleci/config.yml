@@ -272,7 +272,7 @@ jobs:
       - discord/status:
           success_message: ${DISCORD_MSG}
           success_only: true
-          webhook: ${VS2_1192_WEBHOOK}
+          webhook: ${VS2_120_WEBHOOK}
 
 workflows:
   build:
