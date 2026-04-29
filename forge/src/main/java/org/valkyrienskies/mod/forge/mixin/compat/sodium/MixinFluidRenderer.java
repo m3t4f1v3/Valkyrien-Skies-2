@@ -34,7 +34,7 @@ import org.valkyrienskies.mod.compat.sodium.light.VsVertexFlagPacker;
 @Mixin(value = FluidRenderer.class, remap = false)
 public class MixinFluidRenderer {
     @Unique
-    private boolean vs$inShipyard = false;
+    private boolean vs$shouldPack = false;
     @Unique
     private int vs$resolverType = 0;
 
@@ -43,11 +43,20 @@ public class MixinFluidRenderer {
                                       LightPipeline lighter, Direction dir, float brightness,
                                       ColorProvider<FluidState> colorProvider, FluidState fluidState,
                                       CallbackInfo ci) {
-        if (!VSGameConfig.CLIENT.getDynamicShipBiomeTinting() && !VSGameConfig.CLIENT.getDynamicShipLighting()) {
+        boolean anyShipFeature = VSGameConfig.CLIENT.getDynamicShipBiomeTinting()
+                || VSGameConfig.CLIENT.getDynamicShipLighting();
+        boolean worldFromShip = VSGameConfig.CLIENT.getDynamicShipToWorldLighting();
+        if (!anyShipFeature && !worldFromShip) {
+            vs$shouldPack = false;
             return;
         }
-        vs$inShipyard = VsVertexFlagPacker.isShipyardBlock(pos);
-        vs$resolverType = vs$inShipyard ? VsVertexFlagPacker.resolverTypeFor(fluidState) : 0;
+        boolean inShipyard = VsVertexFlagPacker.isShipyardBlock(pos);
+        // Pack shipyard fluids when ship features are on, and world fluids
+        // when ship-to-world lighting is on (so the world FSH gets the
+        // FACE_UNSHADED slot and skips its AO sample for water surfaces).
+        vs$shouldPack = (inShipyard && anyShipFeature) || (!inShipyard && worldFromShip);
+        vs$resolverType = (inShipyard && vs$shouldPack)
+                ? VsVertexFlagPacker.resolverTypeFor(fluidState) : 0;
     }
 
     @WrapOperation(method = "updateQuad",
@@ -55,9 +64,7 @@ public class MixinFluidRenderer {
                     target = "Lorg/embeddedt/embeddium/render/chunk/ChunkColorWriter;writeColor(IF)I",
                     remap = false))
     private int vs$packFluidColor(ChunkColorWriter writer, int origColor, float brAndBrightness, Operation<Integer> original) {
-        if (!vs$inShipyard || (!VSGameConfig.CLIENT.getDynamicShipBiomeTinting() && !VSGameConfig.CLIENT.getDynamicShipLighting())) {
-            return original.call(writer, origColor, brAndBrightness);
-        }
+        if (!vs$shouldPack) return original.call(writer, origColor, brAndBrightness);
         // Fluids aren't directionally shaded (lighter.calculate is called with
         // shade=false), so brAndBrightness is ao*brightness with no shade to
         // divide out. Pack with the UNSHADED face slot so the FSH doesn't add

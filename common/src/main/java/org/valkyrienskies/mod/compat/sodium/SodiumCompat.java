@@ -36,7 +36,10 @@ import org.valkyrienskies.mod.common.hooks.VSGameEvents;
 import org.valkyrienskies.mod.common.hooks.VSGameEvents.ShipRenderEventSodium;
 import org.valkyrienskies.mod.compat.VSRenderer;
 import org.valkyrienskies.mod.compat.sodium.light.VsShipBiomeColorStorage;
+import org.valkyrienskies.mod.compat.sodium.light.VsShipEmitterList;
+import org.valkyrienskies.mod.compat.sodium.light.VsShipOccluderList;
 import org.valkyrienskies.mod.compat.sodium.light.VsShipLightStorage;
+import org.valkyrienskies.mod.compat.sodium.light.VsWorldFromShipLightStorage;
 import org.valkyrienskies.mod.mixin.ValkyrienCommonMixinConfigPlugin;
 import org.valkyrienskies.mod.mixin.mod_compat.sodium.RenderSectionManagerAccessor;
 import org.valkyrienskies.mod.mixinducks.mod_compat.sodium.RenderSectionManagerDuck;
@@ -59,6 +62,9 @@ public class SodiumCompat {
     static final int FEATURE_BIOME = 1;
     static final int FEATURE_LIGHT = 2;
     static final int FEATURE_SHADE = 4;
+    /** Ship FSH also queries the world-from-ship storage (populated for the
+     *  world chunk shader) so ship-A voxels can shadow / illuminate ship-B. */
+    static final int FEATURE_SHIP_ON_SHIP = 8;
 
     static Map<ShaderCacheKey, GlProgram<ShipThing>> cachedPrograms = new HashMap<>();
     private static final ThreadLocal<Matrix4f> CURRENT_TRANSFORM = new ThreadLocal<>();
@@ -73,9 +79,32 @@ public class SodiumCompat {
     public static final int LIGHT_LUT_TEXTURE_UNIT = 7;
     public static final int BIOME_SECTIONS_TEXTURE_UNIT = 8;
     public static final int BIOME_LUT_TEXTURE_UNIT = 9;
+    /** Ship voxels projected into world coords for sky-occlusion + emitter
+     *  contribution on the world's chunk shader (and ship-on-ship in the ship
+     *  shader). Populated by {@link VsWorldFromShipLightStorage}. */
+    public static final int WORLD_FROM_SHIP_SECTIONS_TEXTURE_UNIT = 10;
+    public static final int WORLD_FROM_SHIP_LUT_TEXTURE_UNIT = 11;
+    /** Buffer texture (RGBA32F) holding the per-frame ship-emitter list as
+     *  vec4(worldX, worldY, worldZ, lightLevel) entries. Used by both the
+     *  world chunk shader (ship lights world) and ship chunk shader (ship
+     *  lights other ships) for sub-block-precise glow that tracks ship
+     *  motion smoothly. */
+    public static final int SHIP_EMITTER_LIST_TEXTURE_UNIT = 12;
+    /** Buffer texture (RGBA32F) holding the per-frame ship-occluder list as
+     *  vec4(worldX, worldY, worldZ, 0) entries — every solid voxel of every
+     *  loaded ship. Used by the world chunk shader's per-fragment ship AO so
+     *  the shadow shape follows ship rotation/translation continuously
+     *  (cell-storage-based AO can only morph between cell-aligned configs). */
+    public static final int SHIP_OCCLUDER_LIST_TEXTURE_UNIT = 13;
 
     private static VsShipLightStorage lightStorage;
     private static VsShipBiomeColorStorage biomeStorage;
+    private static VsWorldFromShipLightStorage worldFromShipStorage;
+    private static VsShipEmitterList shipEmitterList;
+    private static VsShipOccluderList shipOccluderList;
+
+    /** Cached VS world chunk programs, keyed by sodium's render-pass options. */
+    private static final Map<ChunkShaderOptions, GlProgram<WorldThing>> cachedWorldPrograms = new HashMap<>();
 
     public static VsShipLightStorage getLightStorage() {
         if (lightStorage == null) {
@@ -89,6 +118,55 @@ public class SodiumCompat {
             biomeStorage = new VsShipBiomeColorStorage();
         }
         return biomeStorage;
+    }
+
+    public static VsWorldFromShipLightStorage getWorldFromShipStorage() {
+        if (worldFromShipStorage == null) {
+            worldFromShipStorage = new VsWorldFromShipLightStorage();
+        }
+        return worldFromShipStorage;
+    }
+
+    public static VsShipEmitterList getShipEmitterList() {
+        if (shipEmitterList == null) {
+            shipEmitterList = new VsShipEmitterList();
+        }
+        return shipEmitterList;
+    }
+
+    public static VsShipOccluderList getShipOccluderList() {
+        if (shipOccluderList == null) {
+            shipOccluderList = new VsShipOccluderList();
+        }
+        return shipOccluderList;
+    }
+
+    /**
+     * Populate the world-from-ship storage AND the ship-emitter list once per
+     * frame, called from {@code MixinSodiumWorldRenderer.setupTerrain} HEAD so
+     * the data is ready when sodium starts rendering world chunks (which
+     * happens before VS's ship pass each frame).
+     */
+    public static void populateWorldFromShipsForFrame(net.minecraft.client.multiplayer.ClientLevel level) {
+        if (!VSGameConfig.CLIENT.getDynamicShipToWorldLighting()) return;
+        if (level == null) return;
+        VsWorldFromShipLightStorage storage = getWorldFromShipStorage();
+        VsShipEmitterList emitters = getShipEmitterList();
+        VsShipOccluderList occluders = getShipOccluderList();
+        storage.beginFrame();
+        emitters.beginFrame();
+        occluders.beginFrame();
+        org.valkyrienskies.mod.common.VSGameUtilsKt.getShipObjectWorld(
+                net.minecraft.client.Minecraft.getInstance()).getLoadedShips().forEach(ship -> {
+            ClientShip cs = (ClientShip) ship;
+            storage.populateFromShip(level, cs);
+            emitters.populateFromShip(level, cs);
+            occluders.populateFromShip(level, cs);
+        });
+        storage.pruneUnused();
+        storage.upload();
+        emitters.upload();
+        occluders.upload();
     }
 
     public static GlProgram<ChunkShaderInterface> getOrCreateShipProgram(ChunkShaderOptions options) {
@@ -108,6 +186,7 @@ public class SodiumCompat {
         if (VSGameConfig.CLIENT.getDynamicShipBiomeTinting()) bits |= FEATURE_BIOME;
         if (VSGameConfig.CLIENT.getDynamicShipLighting()) bits |= FEATURE_LIGHT;
         if (VSGameConfig.CLIENT.getBetterVanillaShipShading()) bits |= FEATURE_SHADE;
+        if (VSGameConfig.CLIENT.getDynamicShipToWorldLighting()) bits |= FEATURE_SHIP_ON_SHIP;
         return bits;
     }
 
@@ -144,6 +223,7 @@ public class SodiumCompat {
         shipInterface.setLightLutSampler(LIGHT_LUT_TEXTURE_UNIT);
         shipInterface.setBiomeSectionsSampler(BIOME_SECTIONS_TEXTURE_UNIT);
         shipInterface.setBiomeLutSampler(BIOME_LUT_TEXTURE_UNIT);
+        shipInterface.setShipEmitters(SHIP_EMITTER_LIST_TEXTURE_UNIT, getShipEmitterList().size());
     }
 
     /** Stores transform for the next render() call on the current thread. */
@@ -197,13 +277,19 @@ public class SodiumCompat {
         final ClientLevel level = net.minecraft.client.Minecraft.getInstance().level;
         final boolean dynamicLight = VSGameConfig.CLIENT.getDynamicShipLighting();
         final boolean dynamicBiome = VSGameConfig.CLIENT.getDynamicShipBiomeTinting();
+        final boolean dynamicShipToWorld = VSGameConfig.CLIENT.getDynamicShipToWorldLighting();
         final VsShipLightStorage storage = dynamicLight ? getLightStorage() : null;
         final VsShipBiomeColorStorage biomeStorageLocal = dynamicBiome ? getBiomeStorage() : null;
+        // World-from-ship storage and the emitter list are populated in
+        // MixinSodiumWorldRenderer's setupTerrain HEAD hook, not here — sodium
+        // renders world chunks before this VS ship pass, so populating in
+        // vsRenderLayer would leave the storage empty during world rendering.
         if (level != null) {
             if (storage != null) storage.beginFrame();
             if (biomeStorageLocal != null) biomeStorageLocal.beginFrame();
             ((RenderSectionManagerDuck) renderSectionManager).vs_getShipRenderLists().forEach((ship, renderList) -> {
-                final AABBdc aabb = ((ClientShip) ship).getRenderAABB();
+                final ClientShip clientShip = (ClientShip) ship;
+                final AABBdc aabb = clientShip.getRenderAABB();
                 if (aabb != null) {
                     if (storage != null) {
                         storage.requestSectionsInAabb(level,
@@ -284,6 +370,11 @@ public class SodiumCompat {
             // is never read when its feature is off.
             if (storage != null) storage.bind(LIGHT_SECTIONS_TEXTURE_UNIT, LIGHT_LUT_TEXTURE_UNIT);
             if (biomeStorageLocal != null) biomeStorageLocal.bind(BIOME_SECTIONS_TEXTURE_UNIT, BIOME_LUT_TEXTURE_UNIT);
+            // Same world-from-ship storage the world chunk shader queries —
+            // bound here so the ship shader can read it for ship-on-ship.
+            if (VSGameConfig.CLIENT.getDynamicShipToWorldLighting()) {
+                getShipEmitterList().bind(SHIP_EMITTER_LIST_TEXTURE_UNIT);
+            }
 
             chunkRenderer.render(newMatrices, commandList, renderList, pass,
                 new CameraTransform(cameraShipSpace.x(), cameraShipSpace.y(), cameraShipSpace.z()));
@@ -312,6 +403,96 @@ public class SodiumCompat {
         }
 
         commandList.close();
+    }
+
+    public static GlProgram<ChunkShaderInterface> getOrCreateWorldProgram(ChunkShaderOptions options) {
+        GlProgram<WorldThing> program = cachedWorldPrograms.get(options);
+        if (program == null) {
+            program = createWorldShader("blocks/world_layer_opaque", options);
+            cachedWorldPrograms.put(options, program);
+        }
+        return (GlProgram<ChunkShaderInterface>) (Object) program;
+    }
+
+    public static void setupWorldShaderState(GlProgram<ChunkShaderInterface> program, ChunkRenderMatrices matrices) {
+        WorldThing wt = (WorldThing) program.getInterface();
+        wt.setupState();
+        wt.setProjectionMatrix(matrices.projection());
+        wt.setModelViewMatrix(matrices.modelView());
+
+        // Sodium hands the VSH `position = vertex - cameraExact`. We want
+        // `vertex - floor(camera)` so that floor() at the fragment is stable
+        // as the camera's fractional drifts through an integer boundary. The
+        // VSH adds u_VsCameraFrac to convert; the FSH then does
+        //   block = floor(v_CameraRelWorldPos) + u_VsRenderOrigin
+        // = floor(vertex - floor(camera)) + floor(camera) = floor(vertex).
+        net.minecraft.world.phys.Vec3 cameraPos =
+                net.minecraft.client.Minecraft.getInstance().gameRenderer.getMainCamera().getPosition();
+        int ox = (int) Math.floor(cameraPos.x);
+        int oy = (int) Math.floor(cameraPos.y);
+        int oz = (int) Math.floor(cameraPos.z);
+        wt.setRenderOrigin(ox, oy, oz);
+        wt.setCameraFrac(
+                (float) (cameraPos.x - ox),
+                (float) (cameraPos.y - oy),
+                (float) (cameraPos.z - oz));
+        wt.setShipEmitters(SHIP_EMITTER_LIST_TEXTURE_UNIT, getShipEmitterList().size());
+        wt.setShipOccluders(SHIP_OCCLUDER_LIST_TEXTURE_UNIT, getShipOccluderList().size());
+    }
+
+    private static GlProgram<WorldThing> createWorldShader(String path, ChunkShaderOptions options) {
+        ShaderConstants constants = createWorldShaderConstants(options);
+
+        GlShader vertShader = ShaderLoader.loadShader(ShaderType.VERTEX,
+                new ResourceLocation("valkyrienskies", path + ".vsh"), constants);
+        GlShader fragShader = ShaderLoader.loadShader(ShaderType.FRAGMENT,
+                new ResourceLocation("valkyrienskies", path + ".fsh"), constants);
+
+        try {
+            return GlProgram.builder(new ResourceLocation("valkyrienskies", "world_chunk_shader"))
+                    .attachShader(vertShader)
+                    .attachShader(fragShader)
+                    .bindAttribute("a_Position", ChunkShaderBindingPoints.ATTRIBUTE_POSITION)
+                    .bindAttribute("a_Color", ChunkShaderBindingPoints.ATTRIBUTE_COLOR)
+                    .bindAttribute("a_TexCoord", ChunkShaderBindingPoints.ATTRIBUTE_TEXTURE)
+                    .bindAttribute("a_LightAndData", ChunkShaderBindingPoints.ATTRIBUTE_LIGHT_MATERIAL_INDEX)
+                    .bindFragmentData("fragColor", ChunkShaderBindingPoints.FRAG_COLOR)
+                    .link((shader) -> new WorldThing(shader, options));
+        } finally {
+            vertShader.delete();
+            fragShader.delete();
+        }
+    }
+
+    private static ShaderConstants createWorldShaderConstants(ChunkShaderOptions options) {
+        // Sodium's stock chunk shader uses USE_FRAGMENT_DISCARD / USE_FOG /
+        // USE_VANILLA_COLOR_FORMAT defines from the pass options. We want the
+        // same set so the world shader handles cutout / translucent passes
+        // correctly. USE_VANILLA_COLOR_FORMAT is dropped — our shader doesn't
+        // implement that compatibility branch.
+        ShaderConstants.Builder builder = ShaderConstants.builder();
+        for (String define : options.constants().getDefineStrings()) {
+            String[] parts = define.split("\\s+", 3);
+            if (parts.length < 2 || !"#define".equals(parts[0])) continue;
+            String name = parts[1];
+            if ("USE_VANILLA_COLOR_FORMAT".equals(name)) continue;
+            if (parts.length == 2) builder.add(name);
+            else builder.add(name, parts[2]);
+        }
+        return builder.build();
+    }
+
+    /**
+     * True when ship-to-world dynamic lighting should override sodium's stock
+     * chunk shader. Gated only on the config because the mesher mixin packs
+     * face-slot bits into the alpha byte for world chunks whenever the config
+     * is on; sodium's stock shader would misinterpret those bits as plain AO,
+     * so the swap MUST stay aligned with the packing — no "skip when no ships
+     * are nearby" optimization. The world shader runs fine with empty storage
+     * (LUT lookups return 0, emitter loop runs 0 times, no visible effect).
+     */
+    public static boolean shouldUseWorldFromShipShader() {
+        return VSGameConfig.CLIENT.getDynamicShipToWorldLighting();
     }
 
     private static GlProgram<ShipThing> createShader(String path, ChunkShaderOptions options, int features) {
@@ -365,6 +546,7 @@ public class SodiumCompat {
         if ((features & FEATURE_BIOME) != 0) builder.add("VS_DYNAMIC_BIOME");
         if ((features & FEATURE_LIGHT) != 0) builder.add("VS_DYNAMIC_LIGHT");
         if ((features & FEATURE_SHADE) != 0) builder.add("VS_DYNAMIC_SHADE");
+        if ((features & FEATURE_SHIP_ON_SHIP) != 0) builder.add("VS_SHIP_ON_SHIP");
 
         return builder.build();
     }

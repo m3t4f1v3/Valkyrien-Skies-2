@@ -35,7 +35,7 @@ import org.valkyrienskies.mod.compat.sodium.light.VsVertexFlagPacker;
 @Mixin(value = BlockRenderer.class, remap = false)
 public class MixinBlockRenderer {
     @Unique
-    private boolean vs$inShipyard = false;
+    private boolean vs$shouldPack = false;
     @Unique
     private int vs$resolverType = 0;
     @Unique
@@ -47,26 +47,31 @@ public class MixinBlockRenderer {
     private void vs$captureFlags(BlockRenderContext ctx, ChunkModelBuilder builder, Vec3 origin,
                                  Material material, BakedQuadView quad, int[] colors, QuadLightData light,
                                  CallbackInfo ci) {
-        // Skip per-quad detection entirely if no ship-shader feature is on.
-        // Shade matters in addition to biome/light because the face-slot bits
-        // drive the per-vertex world-normal that vanillaShadeFromNormal uses.
-        if (!VSGameConfig.CLIENT.getDynamicShipBiomeTinting()
-                && !VSGameConfig.CLIENT.getDynamicShipLighting()
-                && !VSGameConfig.CLIENT.getBetterVanillaShipShading()) {
+        boolean anyShipFeature = VSGameConfig.CLIENT.getDynamicShipBiomeTinting()
+                || VSGameConfig.CLIENT.getDynamicShipLighting()
+                || VSGameConfig.CLIENT.getBetterVanillaShipShading();
+        boolean worldFromShip = VSGameConfig.CLIENT.getDynamicShipToWorldLighting();
+        if (!anyShipFeature && !worldFromShip) {
+            vs$shouldPack = false;
             return;
         }
-        vs$inShipyard = VsVertexFlagPacker.isShipyardBlock(ctx.pos());
+        boolean inShipyard = VsVertexFlagPacker.isShipyardBlock(ctx.pos());
+        // Pack for shipyard blocks when any ship feature is on, and for world
+        // blocks when ship-to-world lighting is on (the world FSH decodes the
+        // face slot to get an exact world normal for AO sampling).
+        vs$shouldPack = (inShipyard && anyShipFeature) || (!inShipyard && worldFromShip);
+        if (!vs$shouldPack) return;
         // A quad is biome-tinted only if it has a tintIndex (>=0). A grass
         // block's dirt-side faces are colorIndex == -1 even though the block
         // type maps to GRASS in BiomeColorResolvers, so without this gate we'd
         // white-out their RGB and re-tint them at fragment time, which is wrong.
-        vs$resolverType = (vs$inShipyard && quad.hasColor())
+        // World blocks always get resolverType=0 — biome tinting on world
+        // chunks goes through sodium's stock BlockColors path (already baked
+        // into the per-vertex RGB), no shipyard biome remapping.
+        vs$resolverType = (inShipyard && quad.hasColor())
                 ? VsVertexFlagPacker.resolverTypeFor(ctx.state())
                 : 0;
         boolean isShaded = quad.hasShade();
-        // Emissive quads (model JSON "emissive": true, glowstone, etc.) get the
-        // dedicated FULLBRIGHT face slot — overrides direction so the FSH skips
-        // shade and AO and forces the lightmap UV to max.
         boolean emissive = VsVertexFlagPacker.isEmissiveQuad((BakedQuad) quad);
         vs$faceSlot = emissive
                 ? VsVertexFlagPacker.FACE_FULLBRIGHT
@@ -79,15 +84,11 @@ public class MixinBlockRenderer {
                     target = "Lorg/embeddedt/embeddium/render/chunk/ChunkColorWriter;writeColor(IF)I",
                     remap = false))
     private int vs$packVertexColor(ChunkColorWriter writer, int origColor, float br, Operation<Integer> original) {
-        if (!vs$inShipyard
-                || (!VSGameConfig.CLIENT.getDynamicShipBiomeTinting()
-                    && !VSGameConfig.CLIENT.getDynamicShipLighting()
-                    && !VSGameConfig.CLIENT.getBetterVanillaShipShading())) {
-            return original.call(writer, origColor, br);
-        }
-        // Divide out the directional shade sodium pre-multiplied so the FSH can
-        // re-apply it from the ship's actual world-space orientation without
-        // double-darkening.
+        if (!vs$shouldPack) return original.call(writer, origColor, br);
+        // Divide out the directional shade sodium pre-multiplied so the FSH
+        // can re-apply it from the actual world-space orientation (ship: via
+        // u_TransformMatrix; world: identity, the face slot already maps
+        // directly to a world-space normal). Ensures no double-darkening.
         float ao = vs$shadeFactor > 1e-6f ? br / vs$shadeFactor : br;
         return VsVertexFlagPacker.packColor(origColor, ao, vs$resolverType, vs$faceSlot);
     }

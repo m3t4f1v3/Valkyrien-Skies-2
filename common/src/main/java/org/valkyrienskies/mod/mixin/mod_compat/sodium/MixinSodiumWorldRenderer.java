@@ -125,6 +125,13 @@ public abstract class MixinSodiumWorldRenderer {
             this.renderSectionManager.markGraphDirty();
         }
         vs$prevFrameHadShips = curFrameHasShips;
+
+        // Populate world-from-ship storage + ship-emitter list BEFORE chunk
+        // rendering. The world FSH samples both during world chunk rendering,
+        // which happens after setupTerrain but before VS's ship pass — so
+        // populating here is the only place the data is ready in time.
+        org.valkyrienskies.mod.compat.sodium.SodiumCompat.populateWorldFromShipsForFrame(
+                Minecraft.getInstance().level);
     }
 
     /**

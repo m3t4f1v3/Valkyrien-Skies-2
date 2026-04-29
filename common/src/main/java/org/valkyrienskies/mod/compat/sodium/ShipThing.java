@@ -33,14 +33,20 @@ public class ShipThing extends ChunkShaderInterface {
     // World-biome buffer textures; only when VS_DYNAMIC_BIOME.
     private final GlUniformInt uniformBiomeSections;
     private final GlUniformInt uniformBiomeLut;
+    // World-from-ship buffer textures; only when VS_SHIP_ON_SHIP. Same data
+    // the world chunk shader queries so one ship can shadow / illuminate
+    // another ship that happens to be nearby in world space.
+    private final GlUniformInt uniformShipEmitters;
+    private final GlUniformInt uniformShipEmitterCount;
 
     public ShipThing(ShaderBindingContext context, ChunkShaderOptions options, int features) {
         super(context, options);
         boolean light = (features & SodiumCompat.FEATURE_LIGHT) != 0;
         boolean biome = (features & SodiumCompat.FEATURE_BIOME) != 0;
         boolean shade = (features & SodiumCompat.FEATURE_SHADE) != 0;
+        boolean shipOnShip = (features & SodiumCompat.FEATURE_SHIP_ON_SHIP) != 0;
         boolean wantTransform = light || shade;
-        boolean wantLocalToCamera = light || biome;
+        boolean wantLocalToCamera = light || biome || shipOnShip;
 
         this.uniformTransformMatrix = wantTransform
                 ? context.bindUniform("u_TransformMatrix", GlUniformMatrix4f::new) : null;
@@ -56,6 +62,10 @@ public class ShipThing extends ChunkShaderInterface {
                 ? context.bindUniform("u_VsBiomeSections", GlUniformInt::new) : null;
         this.uniformBiomeLut = biome
                 ? context.bindUniform("u_VsBiomeLut", GlUniformInt::new) : null;
+        this.uniformShipEmitters = shipOnShip
+                ? context.bindUniform("u_VsShipEmitters", GlUniformInt::new) : null;
+        this.uniformShipEmitterCount = shipOnShip
+                ? context.bindUniform("u_VsShipEmitterCount", GlUniformInt::new) : null;
     }
 
     public void setTransformMatrix(Matrix4fc matrix) {
@@ -84,5 +94,10 @@ public class ShipThing extends ChunkShaderInterface {
 
     public void setBiomeLutSampler(int unit) {
         if (this.uniformBiomeLut != null) this.uniformBiomeLut.setInt(unit);
+    }
+
+    public void setShipEmitters(int textureUnit, int count) {
+        if (this.uniformShipEmitters != null) this.uniformShipEmitters.setInt(textureUnit);
+        if (this.uniformShipEmitterCount != null) this.uniformShipEmitterCount.setInt(count);
     }
 }

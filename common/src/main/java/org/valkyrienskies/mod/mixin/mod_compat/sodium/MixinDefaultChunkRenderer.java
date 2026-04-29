@@ -29,17 +29,36 @@ public abstract class MixinDefaultChunkRenderer {
         // native byte format, so sodium's stock shader renders ship blocks
         // correctly. Skipping the swap also avoids compiling/binding an
         // effectively-empty program.
-        if (SodiumCompat.isRenderingShip()
-                && !(LoadedMods.getIris() && IrisCompat.isIrisShaderActive())
-                && SodiumCompat.anyShipShaderFeatureEnabled()) {
+        boolean irisActive = LoadedMods.getIris() && IrisCompat.isIrisShaderActive();
+        if (SodiumCompat.isRenderingShip() && !irisActive && SodiumCompat.anyShipShaderFeatureEnabled()) {
             renderPass.startDrawing();
             ChunkShaderOptions options = new ChunkShaderOptions(ChunkFogMode.SMOOTH, renderPass, ((ShaderChunkRendererAccessor) instance).getVertexType());
             ((ShaderChunkRendererAccessor) instance).setActiveProgram(SodiumCompat.getOrCreateShipProgram(options));
             ((ShaderChunkRendererAccessor) instance).getActiveProgram().bind();
             SodiumCompat.setupShipShaderState(((ShaderChunkRendererAccessor) instance).getActiveProgram(), matrices, transform);
-        } else {
-            ((ShaderChunkRendererAccessor) (Object) this).invokeBegin(renderPass);
             return;
         }
+        // World chunk path: when ship-to-world dynamic lighting is on AND
+        // ships are projecting voxels into the world's section grid, swap in
+        // the VS world shader so ground beneath ships gets shadowed and ship
+        // emitters illuminate world blocks. Same iris guard as the ship path.
+        if (!SodiumCompat.isRenderingShip() && !irisActive && SodiumCompat.shouldUseWorldFromShipShader()) {
+            renderPass.startDrawing();
+            ChunkShaderOptions options = new ChunkShaderOptions(ChunkFogMode.SMOOTH, renderPass, ((ShaderChunkRendererAccessor) instance).getVertexType());
+            ((ShaderChunkRendererAccessor) instance).setActiveProgram(SodiumCompat.getOrCreateWorldProgram(options));
+            ((ShaderChunkRendererAccessor) instance).getActiveProgram().bind();
+            SodiumCompat.setupWorldShaderState(((ShaderChunkRendererAccessor) instance).getActiveProgram(), matrices);
+            // Bind ship-voxel storage to the units the world FSH samples.
+            SodiumCompat.getShipEmitterList().bind(SodiumCompat.SHIP_EMITTER_LIST_TEXTURE_UNIT);
+            // World-from-ship storage (occluder strength) for the AO sample.
+            SodiumCompat.getWorldFromShipStorage().bind(
+                    SodiumCompat.WORLD_FROM_SHIP_SECTIONS_TEXTURE_UNIT,
+                    SodiumCompat.WORLD_FROM_SHIP_LUT_TEXTURE_UNIT);
+            // Per-frame ship occluder voxel list — used by the per-fragment
+            // AO loop in the world FSH for rotation-aware shadow shape.
+            SodiumCompat.getShipOccluderList().bind(SodiumCompat.SHIP_OCCLUDER_LIST_TEXTURE_UNIT);
+            return;
+        }
+        ((ShaderChunkRendererAccessor) (Object) this).invokeBegin(renderPass);
     }
 }

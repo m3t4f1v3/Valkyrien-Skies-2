@@ -12,7 +12,7 @@ flat in int v_ResolverType;  // 0 none, 1 grass, 2 foliage, 3 water
 flat in int v_IsShaded;      // 0 unshaded (skip directional shade), 1 shaded
 flat in int v_IsFullbright;  // 1 if BakedQuad was tagged emissive in its source model JSON
 in vec3 v_VertexBiomeTint;   // rasterizer-blended world biome RGB, vec3(1.0) on non-biome quads
-#ifdef VS_DYNAMIC_LIGHT
+#if defined(VS_DYNAMIC_LIGHT) || defined(VS_SHIP_ON_SHIP)
 in vec3 v_CameraRelWorldPos; // camera-relative WORLD pos; +u_VsRenderOrigin == absolute world pos
 #endif
 #if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_SHADE)
@@ -26,10 +26,20 @@ uniform vec4 u_FogColor;
 uniform float u_FogStart;
 uniform float u_FogEnd;
 
-#ifdef VS_DYNAMIC_LIGHT
+#if defined(VS_DYNAMIC_LIGHT) || defined(VS_SHIP_ON_SHIP)
 uniform ivec3 u_VsRenderOrigin;
+#endif
+#ifdef VS_DYNAMIC_LIGHT
 uniform usamplerBuffer u_VsLightSections;
 uniform usamplerBuffer u_VsLightLut;
+#endif
+#ifdef VS_SHIP_ON_SHIP
+// Per-frame ship-emitter list as vec4(worldX, worldY, worldZ, lightLevel)
+// entries. Lets emitters on one ship illuminate other ships' surfaces with
+// sub-block precision (the emitter coords are floats — as a ship moves the
+// lit area on neighbours tracks continuously, no per-block snapping).
+uniform samplerBuffer u_VsShipEmitters;
+uniform int u_VsShipEmitterCount;
 #endif
 
 out vec4 fragColor;
@@ -286,6 +296,29 @@ bool vs_lightSmooth(vec3 worldPos, vec3 normal, out VsLightAo lightAoOut) {
 }
 #endif // VS_DYNAMIC_LIGHT
 
+#ifdef VS_SHIP_ON_SHIP
+// ===== Ship-on-ship: distance-attenuated emitter list ====================
+// Loop bound for the per-fragment scan over u_VsShipEmitters. Should be ≤
+// VsShipEmitterList.MAX_EMITTERS — 128 covers most real ship setups.
+const int VS_SOS_EMITTER_LOOP_CAP = 128;
+
+// Max distance-attenuated contribution from any ship emitter (incl. own
+// ship) at this fragment's world position. Vanilla-style 1-per-block
+// Manhattan falloff. No occlusion — light passes through walls; the user
+// explicitly chose this trade-off for smoothness over physical accuracy.
+float vs_sosEmitterLight(vec3 worldPos) {
+    float maxLight = 0.0;
+    int n = min(u_VsShipEmitterCount, VS_SOS_EMITTER_LOOP_CAP);
+    for (int i = 0; i < n; i++) {
+        vec4 e = texelFetch(u_VsShipEmitters, i);
+        float dist = abs(worldPos.x - e.x) + abs(worldPos.y - e.y) + abs(worldPos.z - e.z);
+        float light = max(0.0, e.w - dist);
+        maxLight = max(maxLight, light);
+    }
+    return maxLight;
+}
+#endif // VS_SHIP_ON_SHIP
+
 // (No biome helpers in the FSH — biome lookup happens per-vertex in the VSH
 // and arrives via the v_VertexBiomeTint varying. The FSH just multiplies it.)
 
@@ -379,6 +412,25 @@ void main() {
     // multiply yields just the world-biome color smoothly blended across the
     // quad's vertices.
     vec3 vertTint = v_Color.rgb * v_VertexBiomeTint;
+
+#ifdef VS_SHIP_ON_SHIP
+    // Ship-on-ship: the world-from-ship storage holds every ship's voxels
+    // projected into world coords (and dilated emitter values). Reading it at
+    // this fragment's world block lets nearby ships shadow / illuminate this
+    // ship's surface. Skipped for fullbright quads (already at max lightmap)
+    // and reuses v_CameraRelWorldPos / u_VsRenderOrigin from VS_DYNAMIC_LIGHT.
+    if (!isFullbright) {
+        // Ship emitters anywhere (own ship + other ships). The emitter list
+        // stores world-space FLOAT coords, so as a ship slides sub-block the
+        // distance from each fragment varies continuously — the lit area
+        // tracks ship motion without any block-grid quantization.
+        vec3 sosWorldPos = v_CameraRelWorldPos + vec3(u_VsRenderOrigin);
+        float sosLight = vs_sosEmitterLight(sosWorldPos);
+        if (sosLight > 0.0) {
+            lightCoord.x = max(lightCoord.x, (sosLight + 0.5) / 16.0);
+        }
+    }
+#endif
 
     vec4 lightSample = texture(u_LightTex, lightCoord);
     diffuseColor.rgb *= vertTint * lightSample.rgb;
