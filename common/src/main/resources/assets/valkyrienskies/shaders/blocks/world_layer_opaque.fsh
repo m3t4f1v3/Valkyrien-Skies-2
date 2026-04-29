@@ -38,13 +38,25 @@ uniform ivec3 u_VsRenderOrigin;
 uniform samplerBuffer u_VsShipEmitters;
 uniform int u_VsShipEmitterCount;
 
-// Per-frame list of solid ship voxel CENTERS in world space (post-ship-
-// transform). Each texel: vec4(worldX, worldY, worldZ, 0). Used by the
-// rotation-aware AO loop below — voxel positions are continuous floats
-// so the AO follows the ship's transform smoothly (cell-storage-based
-// AO can only morph between cell-aligned configs as voxels move).
+// Per-frame list of solid ship voxel CENTERS in world space, paired with
+// each voxel's owning-ship rotation quaternion. Two RGBA32F texels per
+// voxel:
+//   texel 2i:   vec4(worldX, worldY, worldZ, 0)
+//   texel 2i+1: vec4(qx, qy, qz, qw)   ship-to-world rotation
+// The shader applies the inverse rotation to the fragment-to-voxel
+// offset so the Manhattan SDF runs in the voxel's ship-local frame.
+// That makes each voxel's octagonal shadow rotate with its ship instead
+// of staying world-axis-aligned.
 uniform samplerBuffer u_VsShipOccluders;
 uniform int u_VsShipOccluderCount;
+
+// Inverse-rotate v by quaternion q (i.e., apply q^-1 = (-q.xyz, q.w) to v).
+// Used to express world-frame offsets in the owning ship's local frame so
+// the SDF / distance metrics line up with the ship's axes.
+vec3 vs_quatRotateInv(vec4 q, vec3 v) {
+    vec3 qNeg = -q.xyz;
+    return v + 2.0 * cross(qNeg, cross(qNeg, v) + q.w * v);
+}
 
 out vec4 fragColor;
 
@@ -78,29 +90,37 @@ const int VS_OCCLUDER_LOOP_CAP = 128;
 float ws_shipAo(vec3 worldPosWorld, vec3 nf) {
     int n = min(u_VsShipOccluderCount, VS_OCCLUDER_LOOP_CAP);
 
-    // Build face-local 2D axes (u, v) from the face normal. Axis-aligned
-    // faces only — fine for cube blocks.
-    vec3 absNf = abs(nf);
-    vec3 uAxis = absNf.x > 0.5 ? vec3(0, 1, 0) : vec3(1, 0, 0);
-    vec3 vAxis = absNf.z > 0.5 ? vec3(0, 1, 0) : vec3(0, 0, 1);
-
-    float fragU = dot(worldPosWorld, uAxis);
-    float fragV = dot(worldPosWorld, vAxis);
-
     float occlusionManhattan = 0.0;
     float occlusionCorner = 0.0;
     int cornerContributors = 0;
 
     for (int i = 0; i < n; i++) {
-        vec4 voxel = texelFetch(u_VsShipOccluders, i);
-        vec3 d = voxel.xyz - worldPosWorld;
-        float d_n = dot(d, nf);
+        // Two texels per voxel: position (with payload in .w) and the
+        // owning ship's rotation quaternion. Apply q^-1 to the
+        // fragment-to-voxel offset and to the world face normal to get
+        // both into the voxel's ship-local frame; pick face-local U/V
+        // from the rotated normal so the SDF axes track the ship.
+        vec4 voxel = texelFetch(u_VsShipOccluders, i * 2);
+        vec4 q = texelFetch(u_VsShipOccluders, i * 2 + 1);
+
+        vec3 d_world = voxel.xyz - worldPosWorld;
+        vec3 d_ship = vs_quatRotateInv(q, d_world);
+        vec3 nf_ship = vs_quatRotateInv(q, nf);
+
+        float d_n = dot(d_ship, nf_ship);
         if (d_n <= 0.0 || d_n >= 1.5) continue;
         float fn = 1.0 - smoothstep(0.5, 1.5, d_n);
 
-        vec3 voxelProj = voxel.xyz - d_n * nf;
-        float du = dot(voxelProj, uAxis) - fragU;
-        float dv = dot(voxelProj, vAxis) - fragV;
+        // Build face-local 2D axes (u, v) from the SHIP-frame face
+        // normal. For a Y-axis-rotated ship, an upward world face stays
+        // upward in ship frame too, so this picks ship-X / ship-Z;
+        // arbitrary rotations land on whatever pair of ship axes spans
+        // the face plane.
+        vec3 absNf = abs(nf_ship);
+        vec3 uAxis = absNf.x > 0.5 ? vec3(0, 1, 0) : vec3(1, 0, 0);
+        vec3 vAxis = absNf.z > 0.5 ? vec3(0, 1, 0) : vec3(0, 0, 1);
+        float du = dot(d_ship, uAxis);
+        float dv = dot(d_ship, vAxis);
 
         // Manhattan-distance SDF of the voxel's face-plane box. Reproduces
         // vanilla MC's exact AO shape for an isolated occluder:
@@ -169,15 +189,17 @@ float vs_shipEmitterLight(vec3 worldPos) {
     float maxLight = 0.0;
     int n = min(u_VsShipEmitterCount, VS_EMITTER_LOOP_CAP);
     for (int i = 0; i < n; i++) {
-        vec4 e = texelFetch(u_VsShipEmitters, i);
-        // Manhattan distance roughly matches vanilla's BFS step cost (1 per
-        // axis-aligned step). Euclidean would give a rounder falloff but
-        // doesn't match how vanilla light propagates. Pick whichever you
-        // prefer — Manhattan keeps "torch reach = 14 blocks" visually exact.
-        float dx = abs(worldPos.x - e.x);
-        float dy = abs(worldPos.y - e.y);
-        float dz = abs(worldPos.z - e.z);
-        float dist = dx + dy + dz;
+        // Two texels per emitter: position+light and ship rotation.
+        // Manhattan distance is computed in ship-frame so the
+        // octahedral light bubble rotates with the hull instead of
+        // staying world-axis-aligned. Manhattan still roughly matches
+        // vanilla's BFS step cost (1 per axis-aligned step in ship
+        // frame), keeping "torch reach = 14 blocks" visually exact for
+        // an axis-aligned ship.
+        vec4 e = texelFetch(u_VsShipEmitters, i * 2);
+        vec4 q = texelFetch(u_VsShipEmitters, i * 2 + 1);
+        vec3 offset_ship = vs_quatRotateInv(q, worldPos - e.xyz);
+        float dist = abs(offset_ship.x) + abs(offset_ship.y) + abs(offset_ship.z);
         float light = max(0.0, e.w - dist);
         maxLight = max(maxLight, light);
     }
@@ -253,13 +275,13 @@ void main() {
     // Tiny +lightSample.rgb keeps u_LightTex alive against GLSL dead-code
     // elimination — without it the compiler strips the texture sample
     // and sodium's bindUniform throws NPE at link time.
-    {
-        // DEBUG: red = ship AO loss; green = vanilla AO loss.
-        float dbgVanillaLoss = clamp((1.0 - v_Color.a) * 1.25, 0.0, 1.0);
-        float dbgShipLoss = clamp((1.0 - shipAo) * 1.25, 0.0, 1.0);
-        diffuseColor.rgb = vec3(dbgShipLoss, dbgVanillaLoss, 0.0)
-                + lightSample.rgb * 1e-3;
-    }
+    // {
+    //     // DEBUG: red = ship AO loss; green = vanilla AO loss.
+    //     float dbgVanillaLoss = clamp((1.0 - v_Color.a) * 1.25, 0.0, 1.0);
+    //     float dbgShipLoss = clamp((1.0 - shipAo) * 1.25, 0.0, 1.0);
+    //     diffuseColor.rgb = vec3(dbgShipLoss, dbgVanillaLoss, 0.0)
+    //             + lightSample.rgb * 1e-3;
+    // }
 
     fragColor = _linearFog(diffuseColor, v_FragDistance, u_FogColor, u_FogStart, u_FogEnd);
 }

@@ -14,6 +14,7 @@ import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.block.state.BlockState;
 
 import org.joml.Matrix4dc;
+import org.joml.Quaterniond;
 import org.joml.Vector3d;
 import org.joml.primitives.AABBic;
 
@@ -36,9 +37,16 @@ import org.valkyrienskies.core.api.ships.properties.ShipTransform;
  */
 public class VsShipOccluderList {
     /** Cap on occluders tracked per frame. The shader's loop is bounded
-     *  too; keep these in sync. 1024 entries × 16 bytes = 16 KB GPU buffer. */
+     *  too; keep these in sync. 1024 entries × 32 bytes = 32 KB GPU buffer
+     *  (each voxel uses 2 RGBA32F texels: vec4 position + vec4 quaternion). */
     public static final int MAX_OCCLUDERS = 1024;
-    private static final int BYTES_PER_OCCLUDER = 16; // 4 floats
+    /** 8 floats per voxel: position vec4 (worldX, worldY, worldZ, payload)
+     *  followed by ship-frame rotation quaternion (qx, qy, qz, qw). The
+     *  shader fetches both texels per voxel and rotates the
+     *  fragment-to-voxel offset into ship frame so the Manhattan SDF
+     *  axes line up with the ship's axes — that way the AO octagon
+     *  visibly rotates with the ship instead of staying world-aligned. */
+    private static final int BYTES_PER_OCCLUDER = 32;
 
     private final long arenaPtr;
     private int count = 0;
@@ -48,6 +56,7 @@ public class VsShipOccluderList {
     private int currentByteSize = 0;
 
     private final Vector3d scratch = new Vector3d();
+    private final Quaterniond scratchQuat = new Quaterniond();
     private final BlockPos.MutableBlockPos scratchBlockPos = new BlockPos.MutableBlockPos();
 
     public VsShipOccluderList() {
@@ -75,6 +84,16 @@ public class VsShipOccluderList {
 
         ShipTransform xform = ship.getRenderTransform();
         Matrix4dc shipToWorld = xform.getShipToWorld();
+        // Pull the rotation out of the ship's transform once per ship —
+        // every voxel of this ship shares the same quaternion. The shader
+        // applies its inverse to the fragment-to-voxel offset to express
+        // the SDF in the ship's local frame, so the Manhattan tent
+        // (octagonal shadow) rotates with the ship.
+        shipToWorld.getNormalizedRotation(scratchQuat);
+        float qx = (float) scratchQuat.x;
+        float qy = (float) scratchQuat.y;
+        float qz = (float) scratchQuat.z;
+        float qw = (float) scratchQuat.w;
 
         int xMin = shipyardAabb.minX();
         int yMin = shipyardAabb.minY();
@@ -106,6 +125,10 @@ public class VsShipOccluderList {
                     MemoryUtil.memPutFloat(offset + 4,    (float) scratch.y);
                     MemoryUtil.memPutFloat(offset + 8,    (float) scratch.z);
                     MemoryUtil.memPutFloat(offset + 12,   0.0f);
+                    MemoryUtil.memPutFloat(offset + 16,   qx);
+                    MemoryUtil.memPutFloat(offset + 20,   qy);
+                    MemoryUtil.memPutFloat(offset + 24,   qz);
+                    MemoryUtil.memPutFloat(offset + 28,   qw);
                     count++;
                 }
             }

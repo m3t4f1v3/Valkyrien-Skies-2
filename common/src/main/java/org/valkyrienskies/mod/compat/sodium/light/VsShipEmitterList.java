@@ -14,6 +14,7 @@ import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.block.state.BlockState;
 
 import org.joml.Matrix4dc;
+import org.joml.Quaterniond;
 import org.joml.Vector3d;
 import org.joml.primitives.AABBic;
 
@@ -36,9 +37,15 @@ import org.valkyrienskies.core.api.ships.properties.ShipTransform;
  */
 public class VsShipEmitterList {
     /** Cap on emitters tracked per frame. The shader's loop is bounded too;
-     *  keep these in sync. 1024 entries × 16 bytes = 16 KB GPU buffer. */
+     *  keep these in sync. 1024 entries × 32 bytes = 32 KB GPU buffer
+     *  (each emitter uses 2 RGBA32F texels: vec4 position+light + vec4 quaternion). */
     public static final int MAX_EMITTERS = 1024;
-    private static final int BYTES_PER_EMITTER = 16; // 4 floats
+    /** 8 floats per emitter: position vec4 (worldX, worldY, worldZ, lightLevel)
+     *  followed by ship-frame rotation quaternion (qx, qy, qz, qw). The shader
+     *  applies its inverse to the fragment-to-emitter offset and computes
+     *  Manhattan distance in ship-frame, so a torch's octahedral light
+     *  bubble rotates with the ship instead of staying world-aligned. */
+    private static final int BYTES_PER_EMITTER = 32;
 
     private final long arenaPtr;
     private int count = 0;
@@ -48,6 +55,7 @@ public class VsShipEmitterList {
     private int currentByteSize = 0;
 
     private final Vector3d scratch = new Vector3d();
+    private final Quaterniond scratchQuat = new Quaterniond();
     private final BlockPos.MutableBlockPos scratchBlockPos = new BlockPos.MutableBlockPos();
 
     public VsShipEmitterList() {
@@ -75,6 +83,15 @@ public class VsShipEmitterList {
 
         ShipTransform xform = ship.getRenderTransform();
         Matrix4dc shipToWorld = xform.getShipToWorld();
+        // Pull the rotation out once per ship — same for every emitter on
+        // this hull. The shader uses its inverse to express the
+        // emitter-to-fragment offset in ship-frame, so the Manhattan light
+        // bubble rotates with the ship.
+        shipToWorld.getNormalizedRotation(scratchQuat);
+        float qx = (float) scratchQuat.x;
+        float qy = (float) scratchQuat.y;
+        float qz = (float) scratchQuat.z;
+        float qw = (float) scratchQuat.w;
 
         int xMin = shipyardAabb.minX();
         int yMin = shipyardAabb.minY();
@@ -101,6 +118,10 @@ public class VsShipEmitterList {
                     MemoryUtil.memPutFloat(offset + 4,    (float) scratch.y);
                     MemoryUtil.memPutFloat(offset + 8,    (float) scratch.z);
                     MemoryUtil.memPutFloat(offset + 12,   (float) lightLevel);
+                    MemoryUtil.memPutFloat(offset + 16,   qx);
+                    MemoryUtil.memPutFloat(offset + 20,   qy);
+                    MemoryUtil.memPutFloat(offset + 24,   qz);
+                    MemoryUtil.memPutFloat(offset + 28,   qw);
                     count++;
                 }
             }
