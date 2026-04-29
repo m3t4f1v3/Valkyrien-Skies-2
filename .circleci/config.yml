@@ -278,7 +278,6 @@ jobs:
     executor: java_large
     steps:
       - checkout_and_cache
-      - run: echo 'export ORG_GRADLE_PROJECT_CustomReleaseVersion=${CIRCLE_TAG}' >> "$BASH_ENV"
       - run:
           name: Build
           command: "./gradlew build --no-daemon --stacktrace"
