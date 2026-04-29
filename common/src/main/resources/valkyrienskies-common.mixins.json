@@ -285,7 +285,6 @@
     "feature.air_pockets.MixinClientPacketListener",
     "feature.air_pockets.client.MixinCamera",
     "feature.air_pockets.client.MixinMinecraft",
-    "feature.air_pockets.client.renderer.MixinBiomeColors",
     "feature.air_pockets.client.renderer.MixinLevelRenderer",
     "feature.air_pockets.client.renderer.MixinShaderInstance",
     "feature.block_tint.MixinClientLevel",
