@@ -587,6 +587,12 @@ object ShipWaterPocketManager {
         val geometryInFlight = (state.pendingGeometryFuture?.isDone == false) || state.geometryJobInFlight
         state.dirty = true
         state.persistDirty = true
+        if (level.isClientSide) {
+            state.pendingWaterSolveFuture?.cancel(true)
+            state.pendingWaterSolveFuture = null
+            state.waterSolveJobInFlight = false
+            state.lastClientWaterSolveSubmittedTransformKey = Long.MIN_VALUE
+        }
         if (!wasAlreadyDirty || geometryInFlight) {
             state.geometryInvalidationStamp++
         }
@@ -1191,6 +1197,7 @@ object ShipWaterPocketManager {
     private fun applyGeometryResult(
         state: ShipPocketState,
         result: GeometryAsyncResult,
+        preserveLiveFloodState: Boolean,
     ) {
         val wasRestored = state.restoredFromPersistence
         val previousSignature = state.geometrySignature
@@ -1273,44 +1280,46 @@ object ShipWaterPocketManager {
         state.floodPlaneByComponent.clear()
         clearFloodWriteQueues(state)
 
-        val preservedFlooded = remapStateMask(
-            mask = liveFlooded,
-            oldMinX = prevMinX,
-            oldMinY = prevMinY,
-            oldMinZ = prevMinZ,
-            oldSizeX = prevSizeX,
-            oldSizeY = prevSizeY,
-            oldSizeZ = prevSizeZ,
-            newMinX = result.minX,
-            newMinY = result.minY,
-            newMinZ = result.minZ,
-            newSizeX = result.sizeX,
-            newSizeY = result.sizeY,
-            newSizeZ = result.sizeZ,
-        )
-        preservedFlooded.and(state.open)
-        preservedFlooded.and(state.simulationDomain)
-        state.flooded.or(preservedFlooded)
+        if (preserveLiveFloodState) {
+            val preservedFlooded = remapStateMask(
+                mask = liveFlooded,
+                oldMinX = prevMinX,
+                oldMinY = prevMinY,
+                oldMinZ = prevMinZ,
+                oldSizeX = prevSizeX,
+                oldSizeY = prevSizeY,
+                oldSizeZ = prevSizeZ,
+                newMinX = result.minX,
+                newMinY = result.minY,
+                newMinZ = result.minZ,
+                newSizeX = result.sizeX,
+                newSizeY = result.sizeY,
+                newSizeZ = result.sizeZ,
+            )
+            preservedFlooded.and(state.open)
+            preservedFlooded.and(state.simulationDomain)
+            state.flooded.or(preservedFlooded)
 
-        val preservedMaterialized = remapStateMask(
-            mask = liveMaterialized,
-            oldMinX = prevMinX,
-            oldMinY = prevMinY,
-            oldMinZ = prevMinZ,
-            oldSizeX = prevSizeX,
-            oldSizeY = prevSizeY,
-            oldSizeZ = prevSizeZ,
-            newMinX = result.minX,
-            newMinY = result.minY,
-            newMinZ = result.minZ,
-            newSizeX = result.sizeX,
-            newSizeY = result.sizeY,
-            newSizeZ = result.sizeZ,
-        )
-        preservedMaterialized.and(state.open)
-        preservedMaterialized.and(state.simulationDomain)
-        state.materializedWater.or(preservedMaterialized)
-        state.flooded.or(state.materializedWater)
+            val preservedMaterialized = remapStateMask(
+                mask = liveMaterialized,
+                oldMinX = prevMinX,
+                oldMinY = prevMinY,
+                oldMinZ = prevMinZ,
+                oldSizeX = prevSizeX,
+                oldSizeY = prevSizeY,
+                oldSizeZ = prevSizeZ,
+                newMinX = result.minX,
+                newMinY = result.minY,
+                newMinZ = result.minZ,
+                newSizeX = result.sizeX,
+                newSizeY = result.sizeY,
+                newSizeZ = result.sizeZ,
+            )
+            preservedMaterialized.and(state.open)
+            preservedMaterialized.and(state.simulationDomain)
+            state.materializedWater.or(preservedMaterialized)
+            state.flooded.or(state.materializedWater)
+        }
 
         state.brokenByFlood = remapStateMask(
             mask = liveBrokenByFlood,
@@ -1414,6 +1423,7 @@ object ShipWaterPocketManager {
         sizeX: Int,
         sizeY: Int,
         sizeZ: Int,
+        preserveLiveFloodState: Boolean,
     ): Boolean {
         val future = state.pendingGeometryFuture ?: return false
         if (!future.isDone) return false
@@ -1453,7 +1463,11 @@ object ShipWaterPocketManager {
             return false
         }
 
-        applyGeometryResult(state, result)
+        applyGeometryResult(
+            state = state,
+            result = result,
+            preserveLiveFloodState = preserveLiveFloodState,
+        )
         geometryComputeNanosTotal.addAndGet(result.computeNanos)
         val completed = geometryJobsCompleted.incrementAndGet()
         val avgMs = geometryComputeNanosTotal.get().toDouble() / completed.toDouble() / 1_000_000.0
@@ -2503,6 +2517,7 @@ object ShipWaterPocketManager {
                 sizeX = sizeX,
                 sizeY = sizeY,
                 sizeZ = sizeZ,
+                preserveLiveFloodState = true,
             )
             val shipChunksLoaded = areShipyardChunksLoaded(level, baseMinX, baseMinY, baseMinZ, baseSizeX, baseSizeY, baseSizeZ)
             if (state.componentGraphDegraded) {
@@ -3113,6 +3128,7 @@ object ShipWaterPocketManager {
                 sizeX = sizeX,
                 sizeY = sizeY,
                 sizeZ = sizeZ,
+                preserveLiveFloodState = false,
             )
             val needsRecompute =
                 state.dirty || boundsMismatch(state, minX, minY, minZ, sizeX, sizeY, sizeZ)
