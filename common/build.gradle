@@ -62,6 +62,8 @@ dependencies {
     modCompileOnly("curse.maven:entity-model-features-844662:5696901")
     modCompileOnly("curse.maven:entity-texture-features-fabric-568563:5697084")
 
+    modCompileOnly("curse.maven:vista-1368607:7929284")
+
     // Weather2 1.20.1
     modCompileOnly("curse.maven:weather-storms-tornadoes-237746:5244118")
 
