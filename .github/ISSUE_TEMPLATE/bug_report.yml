@@ -15,9 +15,9 @@ body:
     label: Minecraft Version
     description: Which Minecraft versions display this issue?
     options:
-      - 1.20.x
-      - 1.21.x
-      - Older (Unsupported)
+      - label: 1.20.x
+      - label: 1.21.x
+      - label: Older (Unsupported)
   validations:
     required: true
 - type: checkboxes
@@ -25,10 +25,10 @@ body:
     label: Mod Loader
     description: Which mod loaders display this issue??
     options:
-      - Forge
-      - NeoForge
-      - Fabric
-      - Quilt
+      - label: Forge
+      - label: NeoForge
+      - label: Fabric
+      - label: Quilt
   validations:
     required: true
 - type: textarea
