@@ -277,10 +277,8 @@ jobs:
   deploy_to_lilypad:
     executor: java_large
     steps:
-      - checkout_and_cache
-      - run:
-          name: Build
-          command: "./gradlew build --no-daemon --stacktrace"
+      - attach_workspace:
+          at: .
       - run:
           name: Find built Forge mod jar
           command: |
@@ -374,6 +372,8 @@ workflows:
             - github_maven
 
       - deploy_to_lilypad:
+          requires:
+            - notify_playtesters
           filters:
             tags:
               only: /^playtest\/1\.20\.1\/.*/
