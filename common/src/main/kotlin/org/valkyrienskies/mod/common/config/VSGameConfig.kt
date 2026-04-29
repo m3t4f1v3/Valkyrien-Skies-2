@@ -86,6 +86,9 @@ object VSGameConfig {
         @ConfigEntry(description = "Sample world block/sky light at the ship's rendered position so torches and sunlight in the world correctly light the ship (sodium/embeddium only). Disable for a moderate perf gain — ship blocks fall back to the shipyard's baked lightmap.")
         var dynamicShipLighting = false
 
+        @ConfigEntry(description = "Project ships into the world's lighting at render time so ships occlude sunlight on the ground beneath them and ship-internal torches illuminate nearby world blocks (sodium/embeddium only). Experimental — overrides sodium's stock world-chunk shader. Disable for the default vanilla behavior where ships don't affect world lighting.")
+        var dynamicShipToWorldLighting = false
+
     }
 
     class Server {
