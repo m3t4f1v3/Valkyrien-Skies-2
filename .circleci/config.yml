@@ -278,7 +278,7 @@ jobs:
     executor: java_large
     steps:
       - checkout_and_cache
-      - run: echo 'export ORG_GRADLE_PROJECT_CustomReleaseVersion=PLAYTEST' >> "$BASH_ENV"
+      - run: echo 'export ORG_GRADLE_PROJECT_CustomReleaseVersion=${CIRCLE_TAG}' >> "$BASH_ENV"
       - run:
           name: Build
           command: "./gradlew build --no-daemon --stacktrace"
@@ -292,7 +292,12 @@ jobs:
               ls -la artifacts || true
               exit 1
             fi
-            echo "export FORGE_MOD_JAR=${FORGE_JAR}" >> "$BASH_ENV"
+            
+            PLAYTEST_JAR="$(pwd)/vs-playtest.jar"
+            cp "${FORGE_JAR}" "${PLAYTEST_JAR}"
+
+            echo "Prepared playtest jar: ${PLAYTEST_JAR}"
+            echo "export FORGE_MOD_JAR='${PLAYTEST_JAR}'" >> "$BASH_ENV"
       - run:
           name: Install SSH tools
           command: sudo apt-get update && sudo apt-get install -y openssh-client
@@ -315,7 +320,7 @@ jobs:
       - run:
           name: Restart Lilypad server
           command: |
-            curl -X POST "https://panel.lilypad.gg/api/client/servers/${LILYPAD_SERVER_ID}/power" \
+            curl --fail-with-body -X POST "https://panel.lilypad.gg/api/client/servers/${LILYPAD_SERVER_ID}/power" \
               -H "Authorization: Bearer ${LILYPAD_API_KEY}" \
               -H "Accept: application/json" \
               -H "Content-Type: application/json" \
