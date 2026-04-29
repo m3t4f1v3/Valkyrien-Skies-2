@@ -377,7 +377,7 @@ workflows:
       - deploy_to_lilypad:
           filters:
             tags:
-              only: /^playtest\/1\.20\.1-.*/
+              only: /^playtest\/1\.20\.1\/.*/
             branches:
               ignore: /.*/
           context:
