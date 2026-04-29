@@ -312,7 +312,7 @@ jobs:
               -i ~/.ssh/lilypad_key \
               -o StrictHostKeyChecking=no \
               -P "${LILYPAD_SFTP_PORT}" \
-              "${LILYPAD_SFTP_USER}@${LILYPAD_SFTP_HOST}" <<EOF
+              "${LILYPAD_SFTP_USER}@${LILYPAD_SFTP_HOST}" \<<EOF
             cd mods
             put "${FORGE_MOD_JAR}"
             bye
