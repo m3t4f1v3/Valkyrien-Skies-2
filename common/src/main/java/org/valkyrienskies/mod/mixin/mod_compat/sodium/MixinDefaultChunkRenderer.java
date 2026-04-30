@@ -1,6 +1,8 @@
 package org.valkyrienskies.mod.mixin.mod_compat.sodium;
 
 import org.joml.Matrix4f;
+import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL20;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
@@ -12,6 +14,8 @@ import me.jellysquid.mods.sodium.client.render.chunk.shader.ChunkFogMode;
 import me.jellysquid.mods.sodium.client.render.chunk.shader.ChunkShaderOptions;
 import me.jellysquid.mods.sodium.client.render.chunk.terrain.TerrainRenderPass;
 
+import org.valkyrienskies.mod.air_pockets.client.ShipWaterPocketExternalWaterCull;
+import org.valkyrienskies.mod.air_pockets.client.ShipWaterPocketExternalWaterCullRenderContext;
 import org.valkyrienskies.mod.compat.LoadedMods;
 import org.valkyrienskies.mod.compat.iris.IrisCompat;
 import org.valkyrienskies.mod.compat.sodium.SodiumCompat;
@@ -63,6 +67,15 @@ public abstract class MixinDefaultChunkRenderer {
             // Per-frame ship occluder voxel list — used by the per-fragment
             // AO loop in the world FSH for rotation-aware shadow shape.
             SodiumCompat.getShipOccluderList().bind(SodiumCompat.SHIP_OCCLUDER_LIST_TEXTURE_UNIT);
+            if (ShipWaterPocketExternalWaterCullRenderContext.isInWorldFluidChunkLayer()) {
+                ShipWaterPocketExternalWaterCull.setupForWorldTranslucentPassProgram(
+                    GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM),
+                    ShipWaterPocketExternalWaterCullRenderContext.getLevel(),
+                    ShipWaterPocketExternalWaterCullRenderContext.getCamX(),
+                    ShipWaterPocketExternalWaterCullRenderContext.getCamY(),
+                    ShipWaterPocketExternalWaterCullRenderContext.getCamZ()
+                );
+            }
             return;
         }
         ((ShaderChunkRendererAccessor) (Object) this).invokeBegin(renderPass);
