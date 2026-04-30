@@ -330,6 +330,7 @@
     "mod_compat.sodium.MixinChunkTracker",
     "mod_compat.sodium.MixinRenderSection",
     "mod_compat.sodium.MixinRenderSectionManager",
+    "mod_compat.sodium.MixinSodiumOptionsGUI",
     "mod_compat.sodium.MixinSodiumWorldRenderer",
     "mod_compat.sodium.RenderSectionManagerAccessor",
     "mod_compat.sound_physics_remastered.MixinSoundPhysics",
