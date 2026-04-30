@@ -56,7 +56,7 @@ object SodiumOptionsMenu {
             val enumClass = entry.default!!::class.java as Class<T>
 
             return OptionImpl.createBuilder(enumClass, ops)
-                .setName(Component.literal(entry.name))
+                .setName(Component.literal(entry.fancyName))
                 .setTooltip(Component.literal(entry.description ?: ""))
                 .setBinding(
                     { _, value -> setConfigOption(entry.name, value) },
@@ -69,7 +69,7 @@ object SodiumOptionsMenu {
         @Suppress("UNCHECKED_CAST")
         fun defineBoolean(): OptionImpl.Builder<String, Boolean> {
             return OptionImpl.createBuilder(Boolean::class.java, ops)
-                .setName(Component.literal(entry.name))
+                .setName(Component.literal(entry.fancyName))
                 .setTooltip(Component.literal(entry.description ?: ""))
                 .setBinding(
                     { _, value -> setConfigOption(entry.name, value) },
@@ -81,7 +81,7 @@ object SodiumOptionsMenu {
         @Suppress("UNCHECKED_CAST")
         fun defineInt(min: Int, max: Int): OptionImpl.Builder<String, Int> {
             return OptionImpl.createBuilder(Int::class.java, ops)
-                .setName(Component.literal(entry.name))
+                .setName(Component.literal(entry.fancyName))
                 .setTooltip(Component.literal(entry.description ?: ""))
                 .setBinding(
                     { _, value -> setConfigOption(entry.name, value) },
@@ -111,3 +111,12 @@ object SodiumOptionsMenu {
         (VSConfigUpdater.forgeConfigValuesMap.get(key) as ForgeConfigSpec.ConfigValue<T>).set(value)
     }
 }
+
+/**
+ * Might want to api-ify this at some point
+ */
+private val VsiConfigModelEntry<*>.fancyName: String
+    get() = this.name
+            .replace(Regex("([a-z])([A-Z])"), "$1 $2")
+            .replaceFirstChar { it.uppercase() }
+
