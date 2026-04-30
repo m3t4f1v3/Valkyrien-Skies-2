@@ -1077,15 +1077,14 @@ public final class ShipWaterPocketExternalWaterCull {
         }
 
         final boolean requiredOk =
-            looksLikeEmbeddiumChunkProgram &&
-                handles.cullEnabledLoc >= 0 &&
+            handles.cullEnabledLoc >= 0 &&
                 handles.isShipPassLoc >= 0 &&
                 handles.cameraWorldPosLoc >= 0 &&
                 handles.fluidMaskLoc >= 0 &&
                 handles.maxMaskSlots > 0 &&
                 handles.shipSlotSupported[0];
 
-        // Candidate Embeddium chunk programs: allow partial operation even if some uniforms are optimized out.
+        // Candidate chunk programs: allow partial operation even if some uniforms are optimized out.
         // Slot 0 must have the required uniforms; other slots and core uniforms are optional.
         handles.supported = requiredOk;
 
