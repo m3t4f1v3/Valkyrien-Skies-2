@@ -2976,11 +2976,10 @@ object ShipWaterPocketManager {
                 val inSimulationDomain = state.simulationDomain.get(idx)
                 if (isWaterloggable &&
                     current.getValue(BlockStateProperties.WATERLOGGED) &&
-                    shouldPreventExteriorWaterlogging(state, idx) &&
-                    (materialized.get(idx) || flooded.get(idx) || brokenByFlood.get(idx))
+                    shouldPreventExteriorWaterlogging(state, idx)
                 ) {
                     val count = blockedExteriorWaterlogAttempts.incrementAndGet()
-                    logThrottledDiag(count, "Drained flood-owned exterior waterlogged block during materialized-fluid sync")
+                    logThrottledDiag(count, "Drained exterior waterlogged block during materialized-fluid sync")
                     beginInternalUpdates()
                     val drained = current.setValue(BlockStateProperties.WATERLOGGED, false)
                     level.setBlock(pos, drained, 3)
