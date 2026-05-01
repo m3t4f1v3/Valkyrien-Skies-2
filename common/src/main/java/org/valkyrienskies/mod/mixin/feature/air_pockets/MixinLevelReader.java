@@ -19,7 +19,7 @@ public interface MixinLevelReader {
         at = @At("RETURN"),
         cancellable = true
     )
-    private void valkyrienair$ignoreWorldWaterInShipAirPockets(final BlockPos pos,
+    default void valkyrienair$ignoreWorldWaterInShipAirPockets(final BlockPos pos,
         final CallbackInfoReturnable<Boolean> cir) {
         if (!cir.getReturnValueZ()) return;
         if (!VSGameConfig.COMMON.getEnableAirPockets()) return;

@@ -47,16 +47,24 @@ public final class ShipPathfindingUtils {
         final double minZ = Math.min(aabb.minZ + insetZ, centerZ);
         final double maxZ = Math.max(aabb.maxZ - insetZ, centerZ);
 
-        final double[][] samplePoints = {
-            {centerX, centerZ},
-            {minX, minZ},
-            {minX, maxZ},
-            {maxX, minZ},
-            {maxX, maxZ}
-        };
+        final AABB supportCheckAabb = getShipSupportCheckAabb(aabb);
+        final AABBd supportQueryAabb = new AABBd(
+            supportCheckAabb.minX, supportCheckAabb.minY, supportCheckAabb.minZ,
+            supportCheckAabb.maxX, supportCheckAabb.maxY, supportCheckAabb.maxZ
+        );
+        final AABBd localSupportQueryAabb = new AABBd();
+        final Vector3d samplePosInGlobal = new Vector3d();
+        final Vector3d samplePosInShip = new Vector3d();
 
-        for (final double[] samplePoint : samplePoints) {
-            final BlockPos supportPos = findSupportingShipBlock(level, samplePoint[0], sampleY, samplePoint[1]);
+        for (final Ship ship : VSGameUtilsKt.getShipsIntersecting(level, supportQueryAabb)) {
+            supportQueryAabb.transform(ship.getWorldToShip(), localSupportQueryAabb);
+            if (!EntityShipCollisionUtils.mayShipIntersectLocalAabb(ship, localSupportQueryAabb)) {
+                continue;
+            }
+
+            final BlockPos supportPos = findSupportingShipBlock(
+                level, ship, sampleY, centerX, centerZ, minX, minZ, maxX, maxZ, samplePosInGlobal, samplePosInShip
+            );
             if (supportPos != null) {
                 return supportPos;
             }
@@ -70,9 +78,6 @@ public final class ShipPathfindingUtils {
     }
 
     public static BlockPos findSupportingShipBlock(final Level level, final Entity entity, final AABB aabb) {
-        if (!hasShipSupport(level, entity, aabb)) {
-            return null;
-        }
         return findSupportingShipBlock(level, aabb);
     }
 
@@ -84,7 +89,12 @@ public final class ShipPathfindingUtils {
             sampleX + radius, sampleY + radius, sampleZ + radius
         );
         final Iterable<Ship> intersectingShips = VSGameUtilsKt.getShipsIntersecting(level, testAABB);
+        final AABBd localTestAABB = new AABBd();
         for (final Ship ship : intersectingShips) {
+            testAABB.transform(ship.getWorldToShip(), localTestAABB);
+            if (!EntityShipCollisionUtils.mayShipIntersectLocalAabb(ship, localTestAABB)) {
+                continue;
+            }
             final Vector3d samplePosInGlobal = new Vector3d(sampleX, sampleY, sampleZ);
             final Vector3d blockPosInLocal =
                 ship.getTransform().getWorldToShip().transformPosition(samplePosInGlobal, new Vector3d());
@@ -96,6 +106,41 @@ public final class ShipPathfindingUtils {
         }
 
         return null;
+    }
+
+    private static BlockPos findSupportingShipBlock(final Level level, final Ship ship, final Vector3d samplePosInGlobal,
+        final Vector3d samplePosInShip) {
+        ship.getWorldToShip().transformPosition(samplePosInGlobal, samplePosInShip);
+        final BlockPos blockPos = BlockPos.containing(samplePosInShip.x(), samplePosInShip.y(), samplePosInShip.z());
+        final BlockState blockState = level.getBlockState(blockPos);
+        return blockState.isAir() ? null : blockPos;
+    }
+
+    private static BlockPos findSupportingShipBlock(final Level level, final Ship ship, final double sampleY,
+        final double centerX, final double centerZ, final double minX, final double minZ, final double maxX,
+        final double maxZ, final Vector3d samplePosInGlobal, final Vector3d samplePosInShip) {
+        BlockPos supportPos = findSupportingShipBlock(
+            level, ship, samplePosInGlobal.set(centerX, sampleY, centerZ), samplePosInShip);
+        if (supportPos != null) {
+            return supportPos;
+        }
+
+        supportPos = findSupportingShipBlock(level, ship, samplePosInGlobal.set(minX, sampleY, minZ), samplePosInShip);
+        if (supportPos != null) {
+            return supportPos;
+        }
+
+        supportPos = findSupportingShipBlock(level, ship, samplePosInGlobal.set(minX, sampleY, maxZ), samplePosInShip);
+        if (supportPos != null) {
+            return supportPos;
+        }
+
+        supportPos = findSupportingShipBlock(level, ship, samplePosInGlobal.set(maxX, sampleY, minZ), samplePosInShip);
+        if (supportPos != null) {
+            return supportPos;
+        }
+
+        return findSupportingShipBlock(level, ship, samplePosInGlobal.set(maxX, sampleY, maxZ), samplePosInShip);
     }
 
     public static BlockPos findExactShipBlock(final Level level, final BlockPos blockPos) {

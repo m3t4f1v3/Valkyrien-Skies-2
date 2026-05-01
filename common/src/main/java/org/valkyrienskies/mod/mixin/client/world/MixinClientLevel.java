@@ -206,8 +206,11 @@ public abstract class MixinClientLevel implements IShipObjectWorldClientProvider
         final double blocksToTickAsDouble = volume * regionBlockProbability;
         int blocksToTick = (int) Math.floor(blocksToTickAsDouble);
         // Handle the case of partial blocks to tick
-        if (vsRandom.nextDouble() > blocksToTickAsDouble - blocksToTick) {
+        if (vsRandom.nextDouble() < blocksToTickAsDouble - blocksToTick) {
             blocksToTick++;
+        }
+        if (blocksToTick <= 0) {
+            return;
         }
         final ClientLevel thisAsClientLevel = ClientLevel.class.cast(this);
         final BlockPos.MutableBlockPos mutableBlockPos = new BlockPos.MutableBlockPos();

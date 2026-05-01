@@ -12,6 +12,8 @@ import org.valkyrienskies.mod.air_pockets.client.ShipWaterPocketExternalWaterCul
 import org.valkyrienskies.mod.air_pockets.client.ShipInteriorFogRenderer;
 import org.valkyrienskies.mod.air_pockets.client.ShipWaterPocketLiquidOverlay;
 import org.valkyrienskies.mod.common.air_pockets.ShipWaterPocketManager;
+import org.valkyrienskies.mod.mixinducks.client.world.ClientChunkCacheDuck;
+import org.valkyrienskies.mod.util.ClientConnectivityUpdateQueue;
 
 @Mixin(value = Minecraft.class, priority = 900)
 public abstract class MixinMinecraft {
@@ -25,6 +27,10 @@ public abstract class MixinMinecraft {
         if (level == null) return;
 
         ShipWaterPocketManager.tickClientLevel(level);
+        ClientConnectivityUpdateQueue.drainQueuedChunks(8);
+        if (level.getChunkSource() instanceof final ClientChunkCacheDuck chunkCache) {
+            chunkCache.vs$drainShipChunkUnloadQueue();
+        }
     }
 
     @Inject(method = "clearLevel", at = @At("TAIL"))

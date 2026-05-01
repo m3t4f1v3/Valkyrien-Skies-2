@@ -24,8 +24,11 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.chunk.LevelChunkSection;
 
 import org.joml.Matrix4dc;
+import org.joml.Quaterniond;
 import org.joml.Vector3d;
 import org.joml.primitives.AABBic;
 
@@ -92,6 +95,7 @@ public class VsWorldFromShipLightStorage {
     private ByteBuffer lutUploadBuf = null;
 
     private final Vector3d scratchPos = new Vector3d();
+    private final Quaterniond scratchQuat = new Quaterniond();
     private final BlockPos.MutableBlockPos scratchBlockPos = new BlockPos.MutableBlockPos();
 
     // Reusable BFS queue (parallel int arrays, cleared per emitter). Used to
@@ -139,6 +143,11 @@ public class VsWorldFromShipLightStorage {
      * are allocated as needed and zeroed before first write each frame.
      */
     public void populateFromShip(LevelAccessor level, ClientShip ship) {
+        populateFromShip(level, ship, null, null);
+    }
+
+    public void populateFromShip(LevelAccessor level, ClientShip ship, VsShipEmitterList emitters,
+        VsShipOccluderList occluders) {
         AABBic shipyardAabb = ship.getShipAABB();
         if (shipyardAabb == null) return;
 
@@ -154,14 +163,52 @@ public class VsWorldFromShipLightStorage {
 
         ShipTransform xform = ship.getRenderTransform();
         Matrix4dc shipToWorld = xform.getShipToWorld();
+        shipToWorld.getNormalizedRotation(scratchQuat);
+        final float qx = (float) scratchQuat.x;
+        final float qy = (float) scratchQuat.y;
+        final float qz = (float) scratchQuat.z;
+        final float qw = (float) scratchQuat.w;
 
-        for (int sy = yMin; sy <= yMax; sy++) {
-            for (int sz = zMin; sz <= zMax; sz++) {
-                for (int sx = xMin; sx <= xMax; sx++) {
-                    scratchBlockPos.set(sx, sy, sz);
-                    BlockState state = level.getBlockState(scratchBlockPos);
+        int minChunkX = xMin >> 4;
+        int maxChunkX = xMax >> 4;
+        int minChunkZ = zMin >> 4;
+        int maxChunkZ = zMax >> 4;
+        int minSectionY = yMin >> 4;
+        int maxSectionY = yMax >> 4;
+
+        for (int chunkX = minChunkX; chunkX <= maxChunkX; chunkX++) {
+            int sectionXMin = Math.max(xMin, chunkX << 4);
+            int sectionXMax = Math.min(xMax, (chunkX << 4) + 15);
+
+            for (int chunkZ = minChunkZ; chunkZ <= maxChunkZ; chunkZ++) {
+                ChunkAccess chunk = level.getChunk(chunkX, chunkZ);
+
+                int sectionZMin = Math.max(zMin, chunkZ << 4);
+                int sectionZMax = Math.min(zMax, (chunkZ << 4) + 15);
+
+                for (int sectionY = minSectionY; sectionY <= maxSectionY; sectionY++) {
+                    int sectionIndex = sectionY - level.getMinSection();
+                    if (sectionIndex < 0 || sectionIndex >= chunk.getSections().length) {
+                        continue;
+                    }
+
+                    LevelChunkSection section = chunk.getSection(sectionIndex);
+                    if (section.hasOnlyAir()) {
+                        continue;
+                    }
+
+                    int sectionYMin = Math.max(yMin, sectionY << 4);
+                    int sectionYMax = Math.min(yMax, (sectionY << 4) + 15);
+
+                    for (int sy = sectionYMin; sy <= sectionYMax; sy++) {
+                        int localY = sy & 15;
+                        for (int sz = sectionZMin; sz <= sectionZMax; sz++) {
+                            int localZ = sz & 15;
+                            for (int sx = sectionXMin; sx <= sectionXMax; sx++) {
+                                BlockState state = section.getBlockState(sx & 15, localY, localZ);
                     if (state.isAir()) continue;
 
+                    scratchBlockPos.set(sx, sy, sz);
                     boolean isSolid = state.canOcclude() && state.isCollisionShapeFullBlock(level, scratchBlockPos);
                     int blockLight = state.getLightEmission();
                     if (!isSolid && blockLight == 0) continue;
@@ -215,6 +262,9 @@ public class VsWorldFromShipLightStorage {
                         // shadow on the ground tracks the motion instead of
                         // jumping at integer crossings.
                         splatOccluderStrength(cwx, cwy, cwz);
+                        if (occluders != null) {
+                            occluders.appendOccluder(cwx, cwy, cwz, qx, qy, qz, qw);
+                        }
                     }
                     if (blockLight > 0) {
                         // Defer BFS dilation to pass 2 — solid bits for this
@@ -231,7 +281,13 @@ public class VsWorldFromShipLightStorage {
                         // jumps a full block whenever the ship's sub-block
                         // position crosses an integer.
                         splatEmitterSeeds(cwx, cwy, cwz, blockLight & 0xF);
+                        if (emitters != null) {
+                            emitters.appendEmitter(cwx, cwy, cwz, blockLight, qx, qy, qz, qw);
+                        }
                     }
+                }
+            }
+        }
                 }
             }
         }

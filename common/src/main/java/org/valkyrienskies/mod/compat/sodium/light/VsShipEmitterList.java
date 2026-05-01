@@ -108,19 +108,26 @@ public class VsShipEmitterList {
                     scratch.set(sx + 0.5, sy + 0.5, sz + 0.5);
                     shipToWorld.transformPosition(scratch);
 
-                    long offset = arenaPtr + (long) count * BYTES_PER_EMITTER;
-                    MemoryUtil.memPutFloat(offset,        (float) scratch.x);
-                    MemoryUtil.memPutFloat(offset + 4,    (float) scratch.y);
-                    MemoryUtil.memPutFloat(offset + 8,    (float) scratch.z);
-                    MemoryUtil.memPutFloat(offset + 12,   (float) lightLevel);
-                    MemoryUtil.memPutFloat(offset + 16,   qx);
-                    MemoryUtil.memPutFloat(offset + 20,   qy);
-                    MemoryUtil.memPutFloat(offset + 24,   qz);
-                    MemoryUtil.memPutFloat(offset + 28,   qw);
-                    count++;
+                    appendEmitter(scratch.x, scratch.y, scratch.z, lightLevel, qx, qy, qz, qw);
                 }
             }
         }
+    }
+
+    public void appendEmitter(final double worldX, final double worldY, final double worldZ, final int lightLevel,
+        final float qx, final float qy, final float qz, final float qw) {
+        if (lightLevel <= 0 || count >= MAX_EMITTERS) return;
+
+        long offset = arenaPtr + (long) count * BYTES_PER_EMITTER;
+        MemoryUtil.memPutFloat(offset,        (float) worldX);
+        MemoryUtil.memPutFloat(offset + 4,    (float) worldY);
+        MemoryUtil.memPutFloat(offset + 8,    (float) worldZ);
+        MemoryUtil.memPutFloat(offset + 12,   (float) lightLevel);
+        MemoryUtil.memPutFloat(offset + 16,   qx);
+        MemoryUtil.memPutFloat(offset + 20,   qy);
+        MemoryUtil.memPutFloat(offset + 24,   qz);
+        MemoryUtil.memPutFloat(offset + 28,   qw);
+        count++;
     }
 
     public void upload() {

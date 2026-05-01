@@ -76,9 +76,6 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider,
         cancellable = true
     )
     private void beforeMove(final MoverType type, final Vec3 pos, final CallbackInfo ci) {
-        final EntityDraggingInformation draggingInformation = getDraggingInformation();
-        final boolean isDraggedByShip = draggingInformation != null && draggingInformation.isEntityBeingDraggedByAShip();
-
         if (EntityShipCollisionUtils.isCollidingWithUnloadedShips(Entity.class.cast(this))) {
             ci.cancel();
         }
@@ -173,18 +170,55 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider,
 
     // region Block standing on friction and sprinting particles mixins
     @Unique
-    private BlockPos getPosStandingOnFromShips(final Vector3dc blockPosInGlobal) {
-        return ShipPathfindingUtils.findSupportingShipBlock(level, Entity.class.cast(this), getBoundingBox());
+    private int vs$shipSupportCacheTick = Integer.MIN_VALUE;
+    @Unique
+    private double vs$shipSupportCacheMinX;
+    @Unique
+    private double vs$shipSupportCacheMinY;
+    @Unique
+    private double vs$shipSupportCacheMinZ;
+    @Unique
+    private double vs$shipSupportCacheMaxX;
+    @Unique
+    private double vs$shipSupportCacheMaxY;
+    @Unique
+    private double vs$shipSupportCacheMaxZ;
+    @Unique
+    private BlockPos vs$shipSupportCacheResult;
+
+    @Unique
+    private BlockPos getPosStandingOnFromShips() {
+        final AABB box = getBoundingBox();
+        if (vs$isShipSupportCacheValid(box)) {
+            return vs$shipSupportCacheResult;
+        }
+
+        final BlockPos result = ShipPathfindingUtils.findSupportingShipBlock(level, Entity.class.cast(this), box);
+        vs$shipSupportCacheTick = tickCount;
+        vs$shipSupportCacheMinX = box.minX;
+        vs$shipSupportCacheMinY = box.minY;
+        vs$shipSupportCacheMinZ = box.minZ;
+        vs$shipSupportCacheMaxX = box.maxX;
+        vs$shipSupportCacheMaxY = box.maxY;
+        vs$shipSupportCacheMaxZ = box.maxZ;
+        vs$shipSupportCacheResult = result;
+        return result;
+    }
+
+    @Unique
+    private boolean vs$isShipSupportCacheValid(final AABB box) {
+        return vs$shipSupportCacheTick == tickCount
+            && vs$shipSupportCacheMinX == box.minX
+            && vs$shipSupportCacheMinY == box.minY
+            && vs$shipSupportCacheMinZ == box.minZ
+            && vs$shipSupportCacheMaxX == box.maxX
+            && vs$shipSupportCacheMaxY == box.maxY
+            && vs$shipSupportCacheMaxZ == box.maxZ;
     }
 
     @Inject(method = "getBlockPosBelowThatAffectsMyMovement", at = @At("HEAD"), cancellable = true)
     private void preGetBlockPosBelowThatAffectsMyMovement(final CallbackInfoReturnable<BlockPos> cir) {
-        final Vector3dc blockPosInGlobal = new Vector3d(
-            position.x,
-            getBoundingBox().minY - 0.5,
-            position.z
-        );
-        final BlockPos blockPosStandingOnFromShip = getPosStandingOnFromShips(blockPosInGlobal);
+        final BlockPos blockPosStandingOnFromShip = getPosStandingOnFromShips();
         if (blockPosStandingOnFromShip != null) {
             cir.setReturnValue(blockPosStandingOnFromShip);
         }
@@ -197,12 +231,7 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider,
      */
     @Inject(method = "getOnPos(F)Lnet/minecraft/core/BlockPos;", at = @At("HEAD"), cancellable = true)
     private void preGetOnPos(final CallbackInfoReturnable<BlockPos> cir) {
-        final Vector3dc blockPosInGlobal = new Vector3d(
-            position.x,
-            position.y - 0.2,
-            position.z
-        );
-        final BlockPos blockPosStandingOnFromShip = getPosStandingOnFromShips(blockPosInGlobal);
+        final BlockPos blockPosStandingOnFromShip = getPosStandingOnFromShips();
         if (blockPosStandingOnFromShip != null) {
             cir.setReturnValue(blockPosStandingOnFromShip);
         }
@@ -218,7 +247,7 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider,
     private void addShipSupportToOnGroundState(final Entity entity, final boolean onGround, final Vec3 movement,
         final Operation<Void> original) {
         final BlockPos shipSupportPos =
-            onGround ? null : ShipPathfindingUtils.findSupportingShipBlock(level, entity, getBoundingBox());
+            onGround ? null : getPosStandingOnFromShips();
         final boolean shouldBeGrounded = onGround || shipSupportPos != null;
         original.call(entity, shouldBeGrounded, movement);
         if (shipSupportPos != null) {
@@ -265,7 +294,8 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider,
 //                entityDraggingInformation.setMountedToEntity(self.getVehicle() != null);
 //                return;
 //            }
-            final Ship ship = VSGameUtilsKt.getLoadedShipManagingPos(level, getOnPos());
+            final BlockPos onPos = getOnPos();
+            final Ship ship = VSGameUtilsKt.getLoadedShipManagingPos(level, onPos);
             if (ship != null) {
 //                if (entityDraggingInformation.getLastShipStoodOnServerWriteOnly() == null) {
 //                    return;
@@ -277,7 +307,7 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider,
                     passengerDraggingInformation.setLastShipStoodOn(ship.getId());
                 });
             } else {
-                if (!level.getBlockState(getOnPos()).isAir()) {
+                if (!level.getBlockState(onPos).isAir()) {
                     if (entityDraggingInformation.getIgnoreNextGroundStand()) {
                         entityDraggingInformation.setIgnoreNextGroundStand(false);
                     } else {

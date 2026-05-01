@@ -120,19 +120,26 @@ public class VsShipOccluderList {
                     scratch.set(sx + 0.5, sy + 0.5, sz + 0.5);
                     shipToWorld.transformPosition(scratch);
 
-                    long offset = arenaPtr + (long) count * BYTES_PER_OCCLUDER;
-                    MemoryUtil.memPutFloat(offset,        (float) scratch.x);
-                    MemoryUtil.memPutFloat(offset + 4,    (float) scratch.y);
-                    MemoryUtil.memPutFloat(offset + 8,    (float) scratch.z);
-                    MemoryUtil.memPutFloat(offset + 12,   0.0f);
-                    MemoryUtil.memPutFloat(offset + 16,   qx);
-                    MemoryUtil.memPutFloat(offset + 20,   qy);
-                    MemoryUtil.memPutFloat(offset + 24,   qz);
-                    MemoryUtil.memPutFloat(offset + 28,   qw);
-                    count++;
+                    appendOccluder(scratch.x, scratch.y, scratch.z, qx, qy, qz, qw);
                 }
             }
         }
+    }
+
+    public void appendOccluder(final double worldX, final double worldY, final double worldZ,
+        final float qx, final float qy, final float qz, final float qw) {
+        if (count >= MAX_OCCLUDERS) return;
+
+        long offset = arenaPtr + (long) count * BYTES_PER_OCCLUDER;
+        MemoryUtil.memPutFloat(offset,        (float) worldX);
+        MemoryUtil.memPutFloat(offset + 4,    (float) worldY);
+        MemoryUtil.memPutFloat(offset + 8,    (float) worldZ);
+        MemoryUtil.memPutFloat(offset + 12,   0.0f);
+        MemoryUtil.memPutFloat(offset + 16,   qx);
+        MemoryUtil.memPutFloat(offset + 20,   qy);
+        MemoryUtil.memPutFloat(offset + 24,   qz);
+        MemoryUtil.memPutFloat(offset + 28,   qw);
+        count++;
     }
 
     public void upload() {

@@ -10,6 +10,11 @@ import me.jellysquid.mods.sodium.client.gl.shader.ShaderType;
 import me.jellysquid.mods.sodium.client.render.chunk.ChunkRenderMatrices;
 import me.jellysquid.mods.sodium.client.render.chunk.DefaultChunkRenderer;
 import me.jellysquid.mods.sodium.client.render.chunk.RenderSectionManager;
+import me.jellysquid.mods.sodium.client.render.SodiumWorldRenderer;
+import me.jellysquid.mods.sodium.client.render.chunk.data.SectionRenderDataStorage;
+import me.jellysquid.mods.sodium.client.render.chunk.data.SectionRenderDataUnsafe;
+import me.jellysquid.mods.sodium.client.render.chunk.lists.ChunkRenderList;
+import me.jellysquid.mods.sodium.client.render.chunk.lists.SortedRenderLists;
 import me.jellysquid.mods.sodium.client.render.chunk.map.ChunkStatus;
 import me.jellysquid.mods.sodium.client.render.chunk.map.ChunkTrackerHolder;
 import me.jellysquid.mods.sodium.client.render.chunk.shader.ChunkShaderBindingPoints;
@@ -18,11 +23,16 @@ import me.jellysquid.mods.sodium.client.render.chunk.shader.ChunkShaderOptions;
 import me.jellysquid.mods.sodium.client.render.chunk.terrain.DefaultTerrainRenderPasses;
 import me.jellysquid.mods.sodium.client.render.chunk.terrain.TerrainRenderPass;
 import me.jellysquid.mods.sodium.client.render.viewport.CameraTransform;
+import me.jellysquid.mods.sodium.client.render.viewport.Viewport;
+import me.jellysquid.mods.sodium.client.util.iterator.ByteIterator;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.Mth;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 import org.joml.Matrix4d;
 import org.joml.Matrix4dc;
@@ -32,6 +42,7 @@ import org.joml.Vector3d;
 import org.joml.Vector3dc;
 import org.valkyrienskies.core.api.ships.properties.ShipTransform;
 import org.valkyrienskies.mod.common.config.VSGameConfig;
+import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.hooks.VSGameEvents;
 import org.valkyrienskies.mod.common.hooks.VSGameEvents.ShipRenderEventSodium;
 import org.valkyrienskies.mod.compat.VSRenderer;
@@ -43,6 +54,7 @@ import org.valkyrienskies.mod.compat.sodium.light.VsWorldFromShipLightStorage;
 import org.valkyrienskies.mod.mixin.ValkyrienCommonMixinConfigPlugin;
 import org.valkyrienskies.mod.mixin.mod_compat.sodium.RenderSectionManagerAccessor;
 import org.valkyrienskies.mod.mixinducks.mod_compat.sodium.RenderSectionManagerDuck;
+import org.valkyrienskies.mod.mixinducks.mod_compat.sodium.SodiumWorldRendererDuck;
 import org.valkyrienskies.core.api.ships.ClientShip;
 import org.joml.primitives.AABBdc;
 
@@ -103,6 +115,8 @@ public class SodiumCompat {
     private static VsShipEmitterList shipEmitterList;
     private static VsShipOccluderList shipOccluderList;
 
+    private static final double WORLD_FROM_SHIP_VISIBILITY_PADDING = 32.0;
+
     /** Cached VS world chunk programs, keyed by sodium's render-pass options. */
     private static final Map<ChunkShaderOptions, GlProgram<WorldThing>> cachedWorldPrograms = new HashMap<>();
 
@@ -148,6 +162,11 @@ public class SodiumCompat {
      * happens before VS's ship pass each frame).
      */
     public static void populateWorldFromShipsForFrame(net.minecraft.client.multiplayer.ClientLevel level) {
+        populateWorldFromShipsForFrame(level, null);
+    }
+
+    public static void populateWorldFromShipsForFrame(net.minecraft.client.multiplayer.ClientLevel level,
+            Viewport viewport) {
         if (!VSGameConfig.CLIENT.getDynamicShipToWorldLighting()) return;
         if (level == null) return;
         VsWorldFromShipLightStorage storage = getWorldFromShipStorage();
@@ -159,14 +178,39 @@ public class SodiumCompat {
         org.valkyrienskies.mod.common.VSGameUtilsKt.getShipObjectWorld(
                 net.minecraft.client.Minecraft.getInstance()).getLoadedShips().forEach(ship -> {
             ClientShip cs = (ClientShip) ship;
-            storage.populateFromShip(level, cs);
-            emitters.populateFromShip(level, cs);
-            occluders.populateFromShip(level, cs);
+            if (!isShipRelevantToWorldFromShipFrame(cs, viewport)) return;
+            storage.populateFromShip(level, cs, emitters, occluders);
         });
         storage.pruneUnused();
         storage.upload();
         emitters.upload();
         occluders.upload();
+    }
+
+    private static boolean isShipRelevantToWorldFromShipFrame(ClientShip ship, Viewport viewport) {
+        if (viewport == null) return true;
+        final AABBdc aabb = ship.getRenderAABB();
+        if (aabb == null) return false;
+        return isExpandedAabbVisible(viewport, aabb, WORLD_FROM_SHIP_VISIBILITY_PADDING);
+    }
+
+    private static boolean isExpandedAabbVisible(Viewport viewport, AABBdc aabb, double padding) {
+        final double minX = aabb.minX() - padding;
+        final double minY = aabb.minY() - padding;
+        final double minZ = aabb.minZ() - padding;
+        final double maxX = aabb.maxX() + padding;
+        final double maxY = aabb.maxY() + padding;
+        final double maxZ = aabb.maxZ() + padding;
+        final double centerX = (minX + maxX) * 0.5;
+        final double centerY = (minY + maxY) * 0.5;
+        final double centerZ = (minZ + maxZ) * 0.5;
+        final int x = Mth.floor(centerX);
+        final int y = Mth.floor(centerY);
+        final int z = Mth.floor(centerZ);
+        final float extentX = (float) ((maxX - minX) * 0.5 + Math.abs(centerX - x) + 1.0);
+        final float extentY = (float) ((maxY - minY) * 0.5 + Math.abs(centerY - y) + 1.0);
+        final float extentZ = (float) ((maxZ - minZ) * 0.5 + Math.abs(centerZ - z) + 1.0);
+        return viewport.isBoxVisible(x, y, z, extentX, extentY, extentZ);
     }
 
     public static GlProgram<ChunkShaderInterface> getOrCreateShipProgram(ChunkShaderOptions options) {
@@ -254,12 +298,36 @@ public class SodiumCompat {
     public static void onChunkAdded(final ClientLevel level, final int x, final int z) {
         if (ValkyrienCommonMixinConfigPlugin.getVSRenderer() == VSRenderer.SODIUM) {
             ChunkTrackerHolder.get(level).onChunkStatusAdded(x, z, ChunkStatus.FLAG_HAS_BLOCK_DATA);
+            markShipSectionCacheDirty(level, x, z);
         }
     }
 
     public static void onChunkRemoved(final ClientLevel level, final int x, final int z) {
         if (ValkyrienCommonMixinConfigPlugin.getVSRenderer() == VSRenderer.SODIUM) {
             ChunkTrackerHolder.get(level).onChunkStatusRemoved(x, z, ChunkStatus.FLAG_HAS_BLOCK_DATA);
+            markShipSectionCacheDirty(level, x, z);
+        }
+    }
+
+    public static void markShipRenderListsDirty() {
+        final SodiumWorldRenderer renderer = SodiumWorldRenderer.instanceNullable();
+        if (renderer instanceof SodiumWorldRendererDuck duck) {
+            duck.vs$markShipRenderListsDirty();
+        }
+    }
+
+    public static void markShipSectionCacheDirty(final ClientShip ship) {
+        final SodiumWorldRenderer renderer = SodiumWorldRenderer.instanceNullable();
+        if (renderer instanceof SodiumWorldRendererDuck duck) {
+            duck.vs$invalidateShipSectionCache(ship);
+        }
+    }
+
+    public static void markShipSectionCacheDirty(final ClientLevel level, final int x, final int z) {
+        if (VSGameUtilsKt.getShipManagingPos(level, x, z) instanceof ClientShip ship) {
+            markShipSectionCacheDirty(ship);
+        } else {
+            markShipRenderListsDirty();
         }
     }
 
@@ -281,6 +349,17 @@ public class SodiumCompat {
         final boolean dynamicShipToWorld = VSGameConfig.CLIENT.getDynamicShipToWorldLighting();
         final VsShipLightStorage storage = dynamicLight ? getLightStorage() : null;
         final VsShipBiomeColorStorage biomeStorageLocal = dynamicBiome ? getBiomeStorage() : null;
+        final ArrayList<ClientShip> renderableShips = new ArrayList<>();
+        final ArrayList<SortedRenderLists> renderableRenderLists = new ArrayList<>();
+        ((RenderSectionManagerDuck) renderSectionManager).vs_getShipRenderLists().forEach((ship, renderList) -> {
+            if (hasRenderableGeometryForPass(renderList, pass)) {
+                renderableShips.add((ClientShip) ship);
+                renderableRenderLists.add(renderList);
+            }
+        });
+        if (renderableShips.isEmpty()) {
+            return;
+        }
         // World-from-ship storage and the emitter list are populated in
         // MixinSodiumWorldRenderer's setupTerrain HEAD hook, not here — sodium
         // renders world chunks before this VS ship pass, so populating in
@@ -288,8 +367,8 @@ public class SodiumCompat {
         if (level != null) {
             if (storage != null) storage.beginFrame();
             if (biomeStorageLocal != null) biomeStorageLocal.beginFrame();
-            ((RenderSectionManagerDuck) renderSectionManager).vs_getShipRenderLists().forEach((ship, renderList) -> {
-                final ClientShip clientShip = (ClientShip) ship;
+            for (int i = 0; i < renderableShips.size(); i++) {
+                final ClientShip clientShip = renderableShips.get(i);
                 final AABBdc aabb = clientShip.getRenderAABB();
                 if (aabb != null) {
                     if (storage != null) {
@@ -303,7 +382,7 @@ public class SodiumCompat {
                                 aabb.maxX(), aabb.maxY(), aabb.maxZ());
                     }
                 }
-            });
+            }
             if (storage != null) {
                 storage.pruneUnused();
                 storage.upload();
@@ -314,7 +393,9 @@ public class SodiumCompat {
             }
         }
 
-        ((RenderSectionManagerDuck) renderSectionManager).vs_getShipRenderLists().forEach((ship, renderList) -> {
+        for (int i = 0; i < renderableShips.size(); i++) {
+            final ClientShip ship = renderableShips.get(i);
+            final SortedRenderLists renderList = renderableRenderLists.get(i);
             VSGameEvents.INSTANCE.getRenderShipSodium().emit(new ShipRenderEventSodium(pass, matrices, x, y, z, ship, renderList));
             final ShipTransform shipTransform = ship.getRenderTransform();
 
@@ -379,7 +460,6 @@ public class SodiumCompat {
 
             chunkRenderer.render(newMatrices, commandList, renderList, pass,
                 new CameraTransform(cameraShipSpace.x(), cameraShipSpace.y(), cameraShipSpace.z()));
-            commandList.close();
             IS_RENDERING_SHIP.set(false);
 
              if (distanceScaling != 1f) {
@@ -388,22 +468,59 @@ public class SodiumCompat {
             }
 
             VSGameEvents.INSTANCE.getPostRenderShipSodium().emit(new ShipRenderEventSodium(pass, matrices, x, y, z, ship, renderList));
-        });
+        }
+    }
+
+    private static boolean hasRenderableGeometryForPass(final SortedRenderLists renderList, final TerrainRenderPass pass) {
+        final Iterator<ChunkRenderList> iterator = renderList.iterator(pass.isReverseOrder());
+        while (iterator.hasNext()) {
+            final ChunkRenderList chunkRenderList = iterator.next();
+            if (pass == DefaultTerrainRenderPasses.SOLID && chunkRenderList.getSectionsWithEntitiesCount() > 0) {
+                return true;
+            }
+            if (chunkRenderList.getSectionsWithGeometryCount() <= 0) {
+                continue;
+            }
+
+            final SectionRenderDataStorage storage = chunkRenderList.getRegion().getStorage(pass);
+            if (storage == null) {
+                continue;
+            }
+
+            final ByteIterator sections = chunkRenderList.sectionsWithGeometryIterator(pass.isReverseOrder());
+            if (sections == null) {
+                continue;
+            }
+
+            while (sections.hasNext()) {
+                final int sectionIndex = sections.nextByteAsInt();
+                if (SectionRenderDataUnsafe.getSliceMask(storage.getDataPointer(sectionIndex)) != 0) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
 
     public static void renderShips(RenderSectionManager renderSectionManager, RenderType renderLayer, ChunkRenderMatrices matrices, double x, double y, double z) {
-        RenderDevice device = RenderDevice.INSTANCE;
-        CommandList commandList = device.createCommandList();
-
         if (renderLayer == RenderType.solid()) {
-            vsRenderLayer(renderSectionManager, matrices, DefaultTerrainRenderPasses.SOLID, x, y, z, commandList);
-            vsRenderLayer(renderSectionManager, matrices, DefaultTerrainRenderPasses.CUTOUT, x, y, z, commandList);
+            renderShipsForPass(renderSectionManager, matrices, DefaultTerrainRenderPasses.SOLID, x, y, z);
+            renderShipsForPass(renderSectionManager, matrices, DefaultTerrainRenderPasses.CUTOUT, x, y, z);
         } else if (renderLayer == RenderType.translucent()) {
-            vsRenderLayer(renderSectionManager, matrices, DefaultTerrainRenderPasses.TRANSLUCENT, x, y, z, commandList);
+            renderShipsForPass(renderSectionManager, matrices, DefaultTerrainRenderPasses.TRANSLUCENT, x, y, z);
         }
+    }
 
-        commandList.close();
+    private static void renderShipsForPass(RenderSectionManager renderSectionManager, ChunkRenderMatrices matrices,
+            TerrainRenderPass pass, double x, double y, double z) {
+        CommandList commandList = RenderDevice.INSTANCE.createCommandList();
+        try {
+            vsRenderLayer(renderSectionManager, matrices, pass, x, y, z, commandList);
+        } finally {
+            commandList.close();
+            IS_RENDERING_SHIP.set(false);
+        }
     }
 
     public static GlProgram<ChunkShaderInterface> getOrCreateWorldProgram(ChunkShaderOptions options) {

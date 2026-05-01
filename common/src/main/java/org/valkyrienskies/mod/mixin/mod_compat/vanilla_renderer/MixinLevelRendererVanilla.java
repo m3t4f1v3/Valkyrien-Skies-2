@@ -57,6 +57,8 @@ import org.valkyrienskies.mod.common.config.ShipRendererKt;
 import org.valkyrienskies.mod.common.config.VSGameConfig;
 import org.valkyrienskies.mod.common.hooks.VSGameEvents;
 import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
+import org.valkyrienskies.mod.compat.LoadedMods;
+import org.valkyrienskies.mod.compat.LoadedMods.FlywheelVersion;
 import org.valkyrienskies.mod.compat.VSRenderer;
 import org.valkyrienskies.mod.mixin.ValkyrienCommonMixinConfigPlugin;
 import org.valkyrienskies.mod.mixinducks.client.render.IVSViewAreaMethods;
@@ -238,9 +240,12 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
     private void drainShipChunksBeforeLightUpdate(final Camera camera, final Frustum frustum, final boolean bl, final boolean bl2, final CallbackInfo ci) {
         final SeamlessChunksManager manager = SeamlessChunksManager.get();
         if (manager != null) {
+            if (LoadedMods.getFlywheel() == FlywheelVersion.V1) {
+                return;
+            }
             manager.drainDeferredBatch();
             // Drain all queued light updates so the light engine has the latest data
-            while (!level.isLightUpdateQueueEmpty()) {
+            if (!level.isLightUpdateQueueEmpty()) {
                 level.pollLightUpdates();
             }
         }
@@ -299,9 +304,9 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
             if (ShipRendererKt.getShipRenderer(shipObject) != ShipRenderer.VANILLA)
                 continue;
 
-            // Don't bother rendering the ship if its AABB isn't visible to the frustum
-            if (!frustum.isVisible(VectorConversionsMCKt.toMinecraft(shipObject.getRenderAABB())))
+            if (!frustum.isVisible(VectorConversionsMCKt.toMinecraft(shipObject.getRenderAABB()))) {
                 continue;
+            }
 
             final var shipToWorld = shipObject.getRenderTransform().getShipToWorld();
 
@@ -371,13 +376,27 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
         renderChunkLayer.call(receiver, renderType, poseStack, camX, camY, camZ, matrix4f);
 
         if (!shipRenderChunks.isEmpty()) {
+            final ObjectArrayList<ClientShip> renderableShips = new ObjectArrayList<>();
+            final ObjectArrayList<ObjectList<RenderChunkInfo>> renderableChunkLists = new ObjectArrayList<>();
+            shipRenderChunks.forEach((ship, chunks) -> {
+                if (vs$hasRenderableChunks(chunks, renderType)) {
+                    renderableShips.add(ship);
+                    renderableChunkLists.add(chunks);
+                }
+            });
+            if (renderableShips.isEmpty()) {
+                return;
+            }
+
             if (!this.vs$emittedShipsStartRenderingThisFrame) {
                 this.vs$emittedShipsStartRenderingThisFrame = true;
                 VSGameEvents.INSTANCE.getShipsStartRendering().emit(new VSGameEvents.ShipStartRenderEvent(
                     receiver, renderType, poseStack, camX, camY, camZ, matrix4f
                 ));
             }
-            shipRenderChunks.forEach((ship, chunks) -> {
+            for (int i = 0; i < renderableShips.size(); i++) {
+                final ClientShip ship = renderableShips.get(i);
+                final ObjectList<RenderChunkInfo> chunks = renderableChunkLists.get(i);
                 poseStack.pushPose();
                 final ShipTransform shipTransform = ship.getRenderTransform();
                 final Vector3dc cameraShipSpace = shipTransform.getWorldToShip().transformPosition(new Vector3d(camX, camY, camZ));
@@ -394,8 +413,20 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
                 renderChunkLayer(renderType, poseStack, cameraShipSpace.x(), cameraShipSpace.y(), cameraShipSpace.z(), matrix4f, chunks);
                 VSGameEvents.INSTANCE.getPostRenderShip().emit(event);
                 poseStack.popPose();
-            });
+            }
         }
+    }
+
+    @Unique
+    private boolean vs$hasRenderableChunks(final ObjectList<RenderChunkInfo> chunks, final RenderType renderType) {
+        for (int i = 0; i < chunks.size(); i++) {
+            final RenderChunkInfo renderChunkInfo = chunks.get(i);
+            final ChunkRenderDispatcher.RenderChunk renderChunk = ((RenderChunkInfoAccessor) renderChunkInfo).getChunk();
+            if (!renderChunk.getCompiledChunk().isEmpty(renderType)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Unique
@@ -479,7 +510,7 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
             }
 
             RenderChunkInfo renderChunkInfo2 = bl ? (RenderChunkInfo)objectListIterator.next() : (RenderChunkInfo)objectListIterator.previous();
-            ChunkRenderDispatcher.RenderChunk renderChunk = renderChunkInfo2.chunk;
+            ChunkRenderDispatcher.RenderChunk renderChunk = ((RenderChunkInfoAccessor) renderChunkInfo2).getChunk();
             if (!renderChunk.getCompiledChunk().isEmpty(renderType)) {
                 VertexBuffer vertexBuffer = renderChunk.getBuffer(renderType);
                 BlockPos blockPos = renderChunk.getOrigin();

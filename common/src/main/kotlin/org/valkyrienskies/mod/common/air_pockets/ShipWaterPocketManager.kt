@@ -42,6 +42,7 @@ import org.valkyrienskies.mod.common.getShipManagingPos
 import org.valkyrienskies.mod.common.isBlockInShipyard
 import org.valkyrienskies.mod.common.shipObjectWorld
 import org.valkyrienskies.mod.common.util.BuoyancyHandlerAttachment
+import org.valkyrienskies.mod.common.util.EntityShipCollisionUtils
 import org.valkyrienskies.mod.util.FluidStateManager
 
 object ShipWaterPocketManager {
@@ -3855,7 +3856,12 @@ object ShipWaterPocketManager {
         }
 
         val ships = ArrayList<Ship>()
+        val localQueryAabb = AABBd()
         for (ship in level.shipObjectWorld.loadedShips.getIntersecting(queryAabb, level.dimensionId)) {
+            queryAabb.transform(ship.worldToShip, localQueryAabb)
+            if (!EntityShipCollisionUtils.mayShipIntersectLocalAabb(ship, localQueryAabb)) {
+                continue
+            }
             ships.add(ship)
         }
 

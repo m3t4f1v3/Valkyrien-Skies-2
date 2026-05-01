@@ -22,6 +22,7 @@ import org.valkyrienskies.mod.common.allShips
 import org.valkyrienskies.mod.common.dimensionId
 import org.valkyrienskies.mod.common.getLoadedShipManagingPos
 import org.valkyrienskies.mod.common.shipObjectWorld
+import org.valkyrienskies.mod.common.unloadedShips
 import org.valkyrienskies.mod.common.vsCore
 import org.valkyrienskies.mod.mixinducks.feature.tickets.PlayerKnownShipsDuck
 import org.valkyrienskies.mod.util.BugFixUtil
@@ -77,7 +78,7 @@ object EntityShipCollisionUtils {
     private fun getAllShipsIntersectingEvenIfNotYetFullyLoaded(level: Level, aabb: AABBd): Stream<Ship> {
         // shipAABB and worldAABB are sometimes too small when ship was just loaded for the first time.
         // To circumvent this, we use activeChunksSet to find a rougher bounding box which should always contain the entire ship.
-        return level.allShips.stream().filter { ship ->
+        return level.unloadedShips.stream().filter { ship ->
             ship.chunkClaimDimension == level.dimensionId &&
             getShipyardChunkAABBAround(ship).toAABBd(AABBd()).transform(ship.shipToWorld).intersectsAABB(aabb)
         }
@@ -90,6 +91,9 @@ object EntityShipCollisionUtils {
         if (level is ServerLevel || (level.isClientSide && level is ClientLevel)) {
             if (level.isClientSide && level is ClientLevel && !level.shipObjectWorld.isSyncedWithServer) {
                 return true
+            }
+            if (level.unloadedShips.isEmpty()) {
+                return false
             }
 
             val aabb = entity.boundingBox.toJOML()
@@ -133,6 +137,36 @@ object EntityShipCollisionUtils {
         }
 
         return true
+    }
+
+    @JvmStatic
+    fun overlapsAnyActiveChunk(ship: Ship, aABB: AABBdc): Boolean {
+        val minX = (Mth.floor(aABB.minX() - 1.0E-7) - 1) shr 4
+        val maxX = (Mth.floor(aABB.maxX() + 1.0E-7) + 1) shr 4
+        val minZ = (Mth.floor(aABB.minZ() - 1.0E-7) - 1) shr 4
+        val maxZ = (Mth.floor(aABB.maxZ() + 1.0E-7) + 1) shr 4
+
+        for (chunkX in minX..maxX) {
+            for (chunkZ in minZ..maxZ) {
+                if (ship.activeChunksSet.contains(chunkX, chunkZ)) {
+                    return true
+                }
+            }
+        }
+
+        return false
+    }
+
+    @JvmStatic
+    fun mayShipIntersectLocalAabb(ship: Ship, aABB: AABBdc): Boolean {
+        val shipAabb = ship.shipAABB ?: return false
+        return shipAabb.minX() <= aABB.maxX() &&
+            shipAabb.maxX() >= aABB.minX() &&
+            shipAabb.minY() <= aABB.maxY() &&
+            shipAabb.maxY() >= aABB.minY() &&
+            shipAabb.minZ() <= aABB.maxZ() &&
+            shipAabb.maxZ() >= aABB.minZ() &&
+            overlapsAnyActiveChunk(ship, aABB)
     }
 
     /**
@@ -189,20 +223,29 @@ object EntityShipCollisionUtils {
         entityBoundingBox: AABB,
         world: Level
     ): List<VsiConvexPolygonc> {
+        if (world.shipObjectWorld.loadedShips.isEmpty()) {
+            return emptyList()
+        }
+
         val entityBoxWithMovement = entityBoundingBox.expandTowards(movement)
         val collidingPolygons: MutableList<VsiConvexPolygonc> = ArrayList()
         val entityBoundingBoxExtended = entityBoundingBox.toJOML().extend(movement.toJOML())
+        val entityBoxWithMovementJoml = entityBoxWithMovement.toJOML()
+        val entityBoundingBoxInShipCoordinates = AABBd()
         for (shipObject in world.shipObjectWorld.loadedShips.getIntersecting(entityBoundingBoxExtended, world.dimensionId)) {
             val shipTransform = shipObject.transform
-            val entityPolyInShipCoordinates: VsiConvexPolygonc = collider.createPolygonFromAABB(
-                entityBoxWithMovement.toJOML(),
-                shipTransform.worldToShip
-            )
-            val entityBoundingBoxInShipCoordinates: AABBdc = entityPolyInShipCoordinates.getEnclosingAABB(AABBd())
+            entityBoxWithMovementJoml.transform(shipTransform.worldToShip, entityBoundingBoxInShipCoordinates)
             if (BugFixUtil.isCollisionBoxTooBig(entityBoundingBoxInShipCoordinates.toMinecraft())) {
                 // Box too large, skip it
                 continue
             }
+            if (!mayShipIntersectLocalAabb(shipObject, entityBoundingBoxInShipCoordinates)) {
+                continue
+            }
+            val entityPolyInShipCoordinates: VsiConvexPolygonc = collider.createPolygonFromAABB(
+                entityBoxWithMovementJoml,
+                shipTransform.worldToShip
+            )
             val shipBlockCollisionStream =
                 world.getBlockCollisions(entity, entityBoundingBoxInShipCoordinates.toMinecraft())
             shipBlockCollisionStream.forEach { voxelShape: VoxelShape ->
