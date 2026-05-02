@@ -31,6 +31,9 @@ object VSGameConfig {
         @ConfigCategory(title = "Underwater")
         val Underwater = UNDERWATER()
 
+        @ConfigCategory(title = "Performance")
+        val Performance = PERFORMANCE()
+
         @ConfigEntry(description = "Renders the VS2 debug HUD with TPS")
         var renderDebugText = false
 
@@ -94,6 +97,36 @@ object VSGameConfig {
 
             @ConfigEntry(description = "Custom fog effected by vanilla fog modifiers (Water Breathing, Fire Resist, Conduits)")
             var fogEffects = true
+        }
+
+        class PERFORMANCE {
+            @ConfigEntry(
+                description = "Base per-frame time budget, in milliseconds, for applying deferred ship chunk packets on the client.",
+                min = 1.0,
+                max = 200.0
+            )
+            var shipChunkPacketBaseBudgetMs = 5
+
+            @ConfigEntry(
+                description = "Per-frame time budget, in milliseconds, for applying deferred ship chunk packets when a small backlog is present.",
+                min = 1.0,
+                max = 300.0
+            )
+            var shipChunkPacketBacklogBudgetMs = 20
+
+            @ConfigEntry(
+                description = "Per-frame time budget, in milliseconds, for applying deferred ship chunk packets when a large backlog is present.",
+                min = 1.0,
+                max = 500.0
+            )
+            var shipChunkPacketLargeBacklogBudgetMs = 80
+
+            @ConfigEntry(
+                description = "Maximum number of cached ship chunks to unload per client tick.",
+                min = 1.0,
+                max = 1024.0
+            )
+            var shipChunkUnloadBatchSize = 64
         }
 
         @ConfigEntry(
@@ -189,11 +222,44 @@ object VSGameConfig {
         @ConfigCategory(title = "CBC")
         val Cbc = CBC()
 
+        @ConfigCategory(title = "Performance")
+        val Performance = PERFORMANCE()
+
         class CBC {
             @ConfigEntry(description = "Should cannon shots apply a recoil force to ships")
             var shellRecoil = false
             @ConfigEntry(description = "The force multiplier applied to recoil on ships")
             var shellRecoilMult = 500000.0
+        }
+
+        class PERFORMANCE {
+            @ConfigEntry(
+                description = "Maximum number of ship chunk watch tasks processed per server tick.",
+                min = 1.0,
+                max = 4096.0
+            )
+            var shipChunkWatchTasksPerTick = 128
+
+            @ConfigEntry(
+                description = "Maximum number of ship chunk unwatch tasks processed per server tick.",
+                min = 1.0,
+                max = 4096.0
+            )
+            var shipChunkUnwatchTasksPerTick = 256
+
+            @ConfigEntry(
+                description = "Maximum number of ship terrain chunks registered with VS core per server level tick.",
+                min = 1.0,
+                max = 4096.0
+            )
+            var shipTerrainChunkLoadsPerTick = 64
+
+            @ConfigEntry(
+                description = "Maximum number of ship terrain chunks unregistered from VS core per server level tick.",
+                min = 1.0,
+                max = 4096.0
+            )
+            var shipTerrainChunkUnloadsPerTick = 64
         }
 
 

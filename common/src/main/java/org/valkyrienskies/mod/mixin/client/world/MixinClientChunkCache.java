@@ -60,9 +60,6 @@ import org.valkyrienskies.mod.util.ClientConnectivityUpdateQueue;
  */
 @Mixin(ClientChunkCache.class)
 public abstract class MixinClientChunkCache implements ClientChunkCacheDuck {
-    @Unique
-    private static final int VS$MAX_SHIP_CHUNK_UNLOADS_PER_TICK = 8;
-
     @Shadow
     volatile ClientChunkCache.Storage storage;
     @Shadow
@@ -258,7 +255,9 @@ public abstract class MixinClientChunkCache implements ClientChunkCacheDuck {
         final ArrayList<VsiTerrainUpdate> voxelShapeUpdates = updateConnectivity ? new ArrayList<>() : null;
 
         int removedChunks = 0;
-        while (removedChunks < VS$MAX_SHIP_CHUNK_UNLOADS_PER_TICK && !this.vs$pendingShipChunkUnloadQueue.isEmpty()) {
+        final int maxRemovedChunks =
+            Math.max(1, Math.min(1024, VSGameConfig.CLIENT.getPerformance().getShipChunkUnloadBatchSize()));
+        while (removedChunks < maxRemovedChunks && !this.vs$pendingShipChunkUnloadQueue.isEmpty()) {
             final long chunkPos = this.vs$pendingShipChunkUnloadQueue.dequeueLong();
             if (!this.vs$pendingShipChunkUnloads.remove(chunkPos)) {
                 continue;

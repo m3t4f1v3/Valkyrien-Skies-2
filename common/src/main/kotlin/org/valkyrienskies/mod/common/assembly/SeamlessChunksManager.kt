@@ -15,6 +15,7 @@ import org.valkyrienskies.core.util.pollUntilEmpty
 import org.valkyrienskies.mod.api.vsApi
 import org.valkyrienskies.mod.common.getShipManagingPos
 import org.valkyrienskies.mod.common.isChunkInShipyard
+import org.valkyrienskies.mod.common.config.VSGameConfig
 import org.valkyrienskies.mod.common.networking.PacketRestartChunkUpdates
 import org.valkyrienskies.mod.common.networking.PacketStopChunkUpdates
 import org.valkyrienskies.mod.common.util.toMinecraft
@@ -107,8 +108,6 @@ class SeamlessChunksManager(private val listener: ClientPacketListener) {
     // a 1000-ship perf-test spawn just landed), we temporarily widen the budget to
     // BACKLOG_BUDGET_MS. That costs a frame hitch but settles the world in ~3s
     // instead of ~6s, which matters far more than one bad frame.
-    private val CHUNK_BUDGET_MS = 5L
-    private val BACKLOG_BUDGET_MS = 20L
     // Threshold kept low: ship packets trickle in at ~5-10/frame during a bulk
     // spawn (the server sends them as each ship's chunk is finalised), so if we
     // wait for the queue to pile up to 100 the fast path never fires. 10 is
@@ -184,11 +183,15 @@ class SeamlessChunksManager(private val listener: ClientPacketListener) {
         // (~5000) now spreads over ~1.5× more frames, so END-TO-END grows
         // by ~1 s. In return p99 drops from ~100 ms (budget-dominated) to
         // ~50 ms, which is what the user felt as "choppy."
+        val perf = VSGameConfig.CLIENT.Performance
+        val baseBudget = perf.shipChunkPacketBaseBudgetMs.coerceIn(1, 200).toLong()
+        val backlogBudget = perf.shipChunkPacketBacklogBudgetMs.coerceIn(1, 300).toLong()
+        val largeBacklogBudget = perf.shipChunkPacketLargeBacklogBudgetMs.coerceIn(1, 500).toLong()
         val budget = when {
-            size >= 200 -> 40L
+            size >= 200 -> largeBacklogBudget
             size >= 50 -> 30L
-            size >= BACKLOG_FAST_PATH -> BACKLOG_BUDGET_MS
-            else -> CHUNK_BUDGET_MS
+            size >= BACKLOG_FAST_PATH -> backlogBudget
+            else -> baseBudget
         }
         val deadline = System.currentTimeMillis() + budget
         val frameStart = System.nanoTime()

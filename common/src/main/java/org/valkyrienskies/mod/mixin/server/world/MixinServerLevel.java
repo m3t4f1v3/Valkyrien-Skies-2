@@ -54,6 +54,7 @@ import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod;
 import org.valkyrienskies.mod.common.block.WingBlock;
 import org.valkyrienskies.mod.common.config.DimensionParametersResolver;
+import org.valkyrienskies.mod.common.config.VSGameConfig;
 import org.valkyrienskies.mod.common.util.DragInfoReporter;
 import org.valkyrienskies.mod.common.util.VSServerLevel;
 import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
@@ -138,21 +139,6 @@ public abstract class MixinServerLevel implements IShipObjectWorldServerProvider
     // How many ticks we wait before unloading a chunk
     @Unique
     private static final long VS$CHUNK_UNLOAD_THRESHOLD = 100;
-
-    @Unique
-    private static final int VS$MAX_TERRAIN_CHUNK_LOADS_PER_TICK = 16;
-
-    @Unique
-    private static final int VS$MAX_TERRAIN_CHUNK_UNLOADS_PER_TICK = 32;
-
-    @Unique
-    private static final int VS$MAX_TERRAIN_CHUNK_HOLDER_SCANS_PER_TICK = 2048;
-
-    @Unique
-    private int vs$chunkHolderLoadScanCursor = 0;
-
-    @Unique
-    private int vs$knownChunkUnloadScanCursor = 0;
 
     @Nullable
     @Override
@@ -367,10 +353,14 @@ public abstract class MixinServerLevel implements IShipObjectWorldServerProvider
         // Also mark the chunks as loaded in the ship objects
         final List<VsiTerrainUpdate> voxelShapeUpdates = new ArrayList<>();
         final DistanceManagerAccessor distanceManagerAccessor = (DistanceManagerAccessor) chunkSource.chunkMap.getDistanceManager();
+        final int maxTerrainChunkLoads =
+            Math.max(1, Math.min(4096, VSGameConfig.SERVER.getPerformance().getShipTerrainChunkLoadsPerTick()));
+        final int maxTerrainChunkUnloads =
+            Math.max(1, Math.min(4096, VSGameConfig.SERVER.getPerformance().getShipTerrainChunkUnloadsPerTick()));
 
         int loadedChunksThisTick = 0;
         final LongIterator pendingForcedChunkIterator = vs$pendingForcedChunks.iterator();
-        while (pendingForcedChunkIterator.hasNext() && loadedChunksThisTick < VS$MAX_TERRAIN_CHUNK_LOADS_PER_TICK) {
+        while (pendingForcedChunkIterator.hasNext() && loadedChunksThisTick < maxTerrainChunkLoads) {
             final long chunkPosLong = pendingForcedChunkIterator.nextLong();
             if (vs$knownChunks.containsKey(chunkPosLong)) {
                 pendingForcedChunkIterator.remove();
@@ -392,20 +382,10 @@ public abstract class MixinServerLevel implements IShipObjectWorldServerProvider
             }
         }
 
-        int loadScanIndex = 0;
-        int loadScansThisTick = 0;
-        boolean finishedLoadScan = true;
         for (final ChunkHolder chunkHolder : chunkMapAccessor.callGetChunks()) {
-            if (loadScanIndex++ < vs$chunkHolderLoadScanCursor) {
-                continue;
-            }
-            if (loadedChunksThisTick >= VS$MAX_TERRAIN_CHUNK_LOADS_PER_TICK ||
-                loadScansThisTick >= VS$MAX_TERRAIN_CHUNK_HOLDER_SCANS_PER_TICK) {
-                vs$chunkHolderLoadScanCursor = loadScanIndex - 1;
-                finishedLoadScan = false;
+            if (loadedChunksThisTick >= maxTerrainChunkLoads) {
                 break;
             }
-            loadScansThisTick++;
             // Only load chunks that haven't been loaded before, and have a ticket
             final long chunkPosLong = chunkHolder.getPos().toLong();
             if (!vs$knownChunks.containsKey(chunkPosLong) && distanceManagerAccessor.getTickets().containsKey(chunkPosLong)) {
@@ -418,35 +398,18 @@ public abstract class MixinServerLevel implements IShipObjectWorldServerProvider
                 }
             }
         }
-        if (finishedLoadScan) {
-            vs$chunkHolderLoadScanCursor = 0;
-        }
 
         int unloadedChunksThisTick = 0;
         final Iterator<Long2ObjectMap.Entry<List<Vector3ic>>> knownChunkPosIterator =
             vs$knownChunks.long2ObjectEntrySet().fastIterator();
-        int unloadScanIndex = 0;
-        int unloadScansThisTick = 0;
-        boolean finishedUnloadScan = true;
         while (knownChunkPosIterator.hasNext()) {
             final Long2ObjectMap.Entry<List<Vector3ic>> knownChunkPosEntry = knownChunkPosIterator.next();
-            if (unloadScanIndex++ < vs$knownChunkUnloadScanCursor) {
-                continue;
-            }
-            if (unloadScansThisTick >= VS$MAX_TERRAIN_CHUNK_HOLDER_SCANS_PER_TICK) {
-                vs$knownChunkUnloadScanCursor = unloadScanIndex - 1;
-                finishedUnloadScan = false;
-                break;
-            }
-            unloadScansThisTick++;
             final long chunkPos = knownChunkPosEntry.getLongKey();
             // Unload chunks if they don't have tickets or if they're not in the visible chunks
             if ((!distanceManagerAccessor.getTickets().containsKey(chunkPos) || chunkMapAccessor.callGetVisibleChunkIfPresent(chunkPos) == null)) {
                 final long ticksWaitingToUnload = vs$chunksToUnload.getOrDefault(chunkPos, 0L);
                 if (ticksWaitingToUnload > VS$CHUNK_UNLOAD_THRESHOLD) {
-                    if (unloadedChunksThisTick >= VS$MAX_TERRAIN_CHUNK_UNLOADS_PER_TICK) {
-                        vs$knownChunkUnloadScanCursor = unloadScanIndex - 1;
-                        finishedUnloadScan = false;
+                    if (unloadedChunksThisTick >= maxTerrainChunkUnloads) {
                         break;
                     }
                     // Unload this chunk
@@ -462,9 +425,6 @@ public abstract class MixinServerLevel implements IShipObjectWorldServerProvider
                     vs$chunksToUnload.put(chunkPos, ticksWaitingToUnload + 1);
                 }
             }
-        }
-        if (finishedUnloadScan) {
-            vs$knownChunkUnloadScanCursor = 0;
         }
 
         // Send new loaded chunks updates to the ship world

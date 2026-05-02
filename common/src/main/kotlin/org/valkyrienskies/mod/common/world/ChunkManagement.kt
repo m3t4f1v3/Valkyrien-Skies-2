@@ -12,23 +12,23 @@ import org.valkyrienskies.mod.common.executeIf
 import org.valkyrienskies.mod.common.getLevelFromDimensionId
 import org.valkyrienskies.mod.common.isTickingChunk
 import org.valkyrienskies.mod.common.mcPlayer
+import org.valkyrienskies.mod.common.config.VSGameConfig
 import org.valkyrienskies.mod.common.util.MinecraftPlayer
 import org.valkyrienskies.mod.common.util.VSServerLevel
 import org.valkyrienskies.mod.mixin.accessors.server.level.ChunkMapAccessor
 import org.valkyrienskies.mod.util.logger
 
 object ChunkManagement {
-    private const val MAX_WATCH_TASKS_PER_TICK = 32
-    private const val MAX_UNWATCH_TASKS_PER_TICK = 64
-
     @JvmStatic
     fun tickChunkLoading(shipWorld: VsiServerShipWorld, server: MinecraftServer) {
         val (chunkWatchTasks, chunkUnwatchTasks) = shipWorld.getChunkWatchTasks()
-        val executedWatchTasks = ArrayList<VsiChunkWatchTask>(minOf(chunkWatchTasks.size, MAX_WATCH_TASKS_PER_TICK))
+        val maxWatchTasks = VSGameConfig.SERVER.Performance.shipChunkWatchTasksPerTick.coerceIn(1, 4096)
+        val maxUnwatchTasks = VSGameConfig.SERVER.Performance.shipChunkUnwatchTasksPerTick.coerceIn(1, 4096)
+        val executedWatchTasks = ArrayList<VsiChunkWatchTask>(minOf(chunkWatchTasks.size, maxWatchTasks))
         val executedUnwatchTasks =
-            ArrayList<VsiChunkUnwatchTask>(minOf(chunkUnwatchTasks.size, MAX_UNWATCH_TASKS_PER_TICK))
+            ArrayList<VsiChunkUnwatchTask>(minOf(chunkUnwatchTasks.size, maxUnwatchTasks))
 
-        for (chunkWatchTask in chunkWatchTasks.asSequence().take(MAX_WATCH_TASKS_PER_TICK)) {
+        for (chunkWatchTask in chunkWatchTasks.asSequence().take(maxWatchTasks)) {
             logger.debug(
                 "Watch task for dimension " + chunkWatchTask.dimensionId + ": " +
                     chunkWatchTask.chunkX + " : " + chunkWatchTask.chunkZ
@@ -58,7 +58,7 @@ object ChunkManagement {
             executedWatchTasks.add(chunkWatchTask)
         }
 
-        for (chunkUnwatchTask in chunkUnwatchTasks.asSequence().take(MAX_UNWATCH_TASKS_PER_TICK)) {
+        for (chunkUnwatchTask in chunkUnwatchTasks.asSequence().take(maxUnwatchTasks)) {
             logger.debug(
                 "Unwatch task for dimension " + chunkUnwatchTask.dimensionId + ": " +
                     chunkUnwatchTask.chunkX + " : " + chunkUnwatchTask.chunkZ
