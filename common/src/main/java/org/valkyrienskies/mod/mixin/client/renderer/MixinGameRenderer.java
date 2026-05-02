@@ -12,6 +12,7 @@ import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix3f;
@@ -96,10 +97,18 @@ public abstract class MixinGameRenderer {
     public HitResult modifyCrosshairTargetBlocks(final Entity receiver, final double maxDistance, final float tickDelta,
         final boolean includeFluids, final Operation<HitResult> pick) {
 
-        final HitResult original = entityRaycastNoTransform(receiver, maxDistance, tickDelta, includeFluids);
-        ((MinecraftDuck) this.minecraft).vs$setOriginalCrosshairTarget(original);
-
-        return pick.call(receiver, maxDistance, tickDelta, includeFluids);
+        HitResult result = pick.call(receiver, maxDistance, tickDelta, includeFluids);
+        HitResult noTransform;
+        if(result instanceof BlockHitResult blockHitResult) {
+            noTransform = new BlockHitResult(
+                VSGameUtilsKt.toShipRenderCoordinates(Minecraft.getInstance().level, blockHitResult.getBlockPos().getCenter(), blockHitResult.location),
+                blockHitResult.getDirection(),
+                blockHitResult.getBlockPos(),
+                blockHitResult.isInside()
+            );
+        } else noTransform = result;
+        ((MinecraftDuck) this.minecraft).vs$setOriginalCrosshairTarget(noTransform);
+        return result;
     }
 
     @WrapOperation(
