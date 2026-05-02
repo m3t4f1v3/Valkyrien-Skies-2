@@ -10,7 +10,6 @@ import com.mojang.blaze3d.vertex.VertexBuffer;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import it.unimi.dsi.fastutil.objects.ObjectList;
 import java.util.ArrayList;
-import java.util.List;
 import java.util.ListIterator;
 import java.util.WeakHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -59,6 +58,8 @@ import org.valkyrienskies.mod.common.config.ShipRenderer;
 import org.valkyrienskies.mod.common.config.ShipRendererKt;
 import org.valkyrienskies.mod.common.config.VSGameConfig;
 import org.valkyrienskies.mod.common.hooks.VSGameEvents;
+import org.valkyrienskies.mod.common.render.ShipSectionCache;
+import org.valkyrienskies.mod.common.render.ShipSectionCandidate;
 import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
 import org.valkyrienskies.mod.compat.LoadedMods;
 import org.valkyrienskies.mod.compat.LoadedMods.FlywheelVersion;
@@ -84,7 +85,7 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
     @Unique
     private final WeakHashMap<ClientShip, ObjectList<RenderChunkInfo>> vs$shipTripwireRenderChunks = new WeakHashMap<>();
     @Unique
-    private final WeakHashMap<ClientShip, VS$ShipSectionCache> vs$shipSectionCaches = new WeakHashMap<>();
+    private final WeakHashMap<ClientShip, ShipSectionCache> vs$shipSectionCaches = new WeakHashMap<>();
     @Shadow
     private ClientLevel level;
 
@@ -359,7 +360,7 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
 
             final var shipToWorld = shipObject.getRenderTransform().getShipToWorld();
 
-            for (final VS$ShipSectionCandidate candidate : vs$getShipSectionCache(shipObject).sections) {
+            for (final ShipSectionCandidate candidate : vs$getShipSectionCache(shipObject).sections) {
                 final int x = candidate.x;
                 final int y = candidate.y;
                 final int z = candidate.z;
@@ -400,7 +401,7 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
     }
 
     @Unique
-    private VS$ShipSectionCache vs$getShipSectionCache(final ClientShip ship) {
+    private ShipSectionCache vs$getShipSectionCache(final ClientShip ship) {
         final long[] activeChunkSignature = {0L};
         final int[] activeChunkCount = {0};
         ship.getActiveChunksSet().forEach((x, z) -> {
@@ -410,7 +411,7 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
             activeChunkSignature[0] ^= Long.rotateLeft(chunkKey, 32);
         });
 
-        final VS$ShipSectionCache cached = this.vs$shipSectionCaches.get(ship);
+        final ShipSectionCache cached = this.vs$shipSectionCaches.get(ship);
         if (
             cached != null
                 && cached.activeChunkCount == activeChunkCount[0]
@@ -420,18 +421,18 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
             return cached;
         }
 
-        final ArrayList<VS$ShipSectionCandidate> sections = new ArrayList<>();
+        final ArrayList<ShipSectionCandidate> sections = new ArrayList<>();
         ship.getActiveChunksSet().forEach((x, z) -> {
             final LevelChunk levelChunk = level.getChunk(x, z);
             for (int y = level.getMinSection(); y < level.getMaxSection(); y++) {
                 final LevelChunkSection levelChunkSection = levelChunk.getSection(y - level.getMinSection());
                 if (!levelChunkSection.hasOnlyAir()) {
-                    sections.add(new VS$ShipSectionCandidate(x, y, z));
+                    sections.add(new ShipSectionCandidate(x, y, z));
                 }
             }
         });
 
-        final VS$ShipSectionCache rebuilt = new VS$ShipSectionCache(
+        final ShipSectionCache rebuilt = new ShipSectionCache(
             sections, activeChunkCount[0], activeChunkSignature[0], this.vs$shipSectionCacheGeneration);
         this.vs$shipSectionCaches.put(ship, rebuilt);
         return rebuilt;
@@ -679,32 +680,4 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
         this.vs$renderableLayerCachesDirty = true;
     }
 
-    @Unique
-    private static final class VS$ShipSectionCandidate {
-        private final int x;
-        private final int y;
-        private final int z;
-
-        private VS$ShipSectionCandidate(final int x, final int y, final int z) {
-            this.x = x;
-            this.y = y;
-            this.z = z;
-        }
-    }
-
-    @Unique
-    private static final class VS$ShipSectionCache {
-        private final List<VS$ShipSectionCandidate> sections;
-        private final int activeChunkCount;
-        private final long activeChunkSignature;
-        private final int dirtyGeneration;
-
-        private VS$ShipSectionCache(final List<VS$ShipSectionCandidate> sections, final int activeChunkCount,
-            final long activeChunkSignature, final int dirtyGeneration) {
-            this.sections = sections;
-            this.activeChunkCount = activeChunkCount;
-            this.activeChunkSignature = activeChunkSignature;
-            this.dirtyGeneration = dirtyGeneration;
-        }
-    }
 }
