@@ -453,6 +453,13 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
         final RenderType renderType, final PoseStack poseStack, final double camX, final double camY, final double camZ,
         final Matrix4f matrix4f, final Operation<Void> renderChunkLayer) {
 
+        if (!this.vs$emittedShipsStartRenderingThisFrame) {
+            this.vs$emittedShipsStartRenderingThisFrame = true;
+            VSGameEvents.INSTANCE.getShipsStartRendering().emit(new VSGameEvents.ShipStartRenderEvent(
+                receiver, renderType, poseStack, camX, camY, camZ, matrix4f
+            ));
+        }
+
         renderChunkLayer.call(receiver, renderType, poseStack, camX, camY, camZ, matrix4f);
 
         if (this.vs$renderableLayerCachesDirty) {
@@ -471,12 +478,6 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
                 return;
             }
 
-            if (!this.vs$emittedShipsStartRenderingThisFrame) {
-                this.vs$emittedShipsStartRenderingThisFrame = true;
-                VSGameEvents.INSTANCE.getShipsStartRendering().emit(new VSGameEvents.ShipStartRenderEvent(
-                    receiver, renderType, poseStack, camX, camY, camZ, matrix4f
-                ));
-            }
             for (int i = 0; i < renderableShips.size(); i++) {
                 final ClientShip ship = renderableShips.get(i);
                 final ObjectList<RenderChunkInfo> chunks = renderableChunkLists.get(i);

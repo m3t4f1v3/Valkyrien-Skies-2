@@ -39,6 +39,9 @@ object EntityShipCollisionUtils {
      */
     private val recentlySpawnedShips = ConcurrentHashMap<ShipId, Long>()
     private const val SPAWN_GRACE_PERIOD_TICKS = 100L // ~5 seconds
+    private val playerUnloadedShipBlockStartTicks = ConcurrentHashMap<Long, Long>()
+    private val playerClientSyncBlockStartTicks = ConcurrentHashMap<Int, Long>()
+    private const val PLAYER_UNLOADED_SHIP_BLOCK_TIMEOUT_TICKS = 200L // ~10 seconds
 
     @JvmStatic
     fun markShipAsRecentlySpawned(shipId: ShipId, currentTick: Long) {
@@ -56,6 +59,29 @@ object EntityShipCollisionUtils {
     fun isInSpawnGracePeriod(shipId: ShipId): Boolean {
         return recentlySpawnedShips.containsKey(shipId)
     }
+
+    private fun playerShipBlockKey(entity: Entity, shipId: ShipId): Long {
+        val uuid = entity.uuid
+        return uuid.leastSignificantBits xor java.lang.Long.rotateLeft(uuid.mostSignificantBits, 1) xor shipId
+    }
+
+    private fun shouldBlockPlayerForUnloadedShip(entity: Entity, ship: Ship, currentTick: Long): Boolean {
+        if (entity !is Player) {
+            return true
+        }
+        val key = playerShipBlockKey(entity, ship.id)
+        val firstBlockedTick = playerUnloadedShipBlockStartTicks.putIfAbsent(key, currentTick) ?: currentTick
+        return currentTick - firstBlockedTick <= PLAYER_UNLOADED_SHIP_BLOCK_TIMEOUT_TICKS
+    }
+
+    private fun shouldBlockPlayerForClientShipSync(entity: Entity, currentTick: Long): Boolean {
+        if (entity !is Player) {
+            return true
+        }
+        val firstBlockedTick = playerClientSyncBlockStartTicks.putIfAbsent(entity.id, currentTick) ?: currentTick
+        return currentTick - firstBlockedTick <= PLAYER_UNLOADED_SHIP_BLOCK_TIMEOUT_TICKS
+    }
+
     private const val PARTICLE_COLLISION_BOX_EXPANSION = 0.00390625 //1.0 / 256.0
 
     private val collider = vsCore.entityPolygonCollider
@@ -90,13 +116,16 @@ object EntityShipCollisionUtils {
 
         if (level is ServerLevel || (level.isClientSide && level is ClientLevel)) {
             if (level.isClientSide && level is ClientLevel && !level.shipObjectWorld.isSyncedWithServer) {
-                return true
+                return shouldBlockPlayerForClientShipSync(entity, level.gameTime)
+            } else if (entity is Player) {
+                playerClientSyncBlockStartTicks.remove(entity.id)
             }
             if (level.unloadedShips.isEmpty()) {
                 return false
             }
 
             val aabb = entity.boundingBox.toJOML()
+            val currentTick = level.gameTime
             return getAllShipsIntersectingEvenIfNotYetFullyLoaded(level, aabb)
                 .allMatch { ship ->
                     // Skip collision check for recently-spawned ships whose chunks are still
@@ -108,11 +137,16 @@ object EntityShipCollisionUtils {
                     if (isInSpawnGracePeriod(ship.id)) {
                         return@allMatch true // pretend it's loaded → don't block movement
                     }
-                    if (entity is PlayerKnownShipsDuck && !entity.vs_isKnownShip(ship.id)) {
-                        return@allMatch false
-                    }
                     val aabbInShip = AABBd(aabb).transform(ship.worldToShip)
-                    areAllChunksLoaded(ship, aabbInShip, level)
+                    val chunksLoaded = areAllChunksLoaded(ship, aabbInShip, level)
+                    if (chunksLoaded) {
+                        playerUnloadedShipBlockStartTicks.remove(playerShipBlockKey(entity, ship.id))
+                        return@allMatch true
+                    }
+                    if (entity is PlayerKnownShipsDuck && !entity.vs_isKnownShip(ship.id)) {
+                        return@allMatch !shouldBlockPlayerForUnloadedShip(entity, ship, currentTick)
+                    }
+                    !shouldBlockPlayerForUnloadedShip(entity, ship, currentTick)
                 }
                 .not()
         }

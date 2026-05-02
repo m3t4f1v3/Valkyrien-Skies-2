@@ -23,7 +23,6 @@ import org.valkyrienskies.mod.common.vsCore
 import org.valkyrienskies.mod.mixinducks.feature.seamless_copy.SeamlessCopyClientPacketListenerDuck
 import org.valkyrienskies.mod.mixinducks.feature.tickets.PlayerKnownShipsDuck
 import org.valkyrienskies.mod.util.logger
-import java.util.Queue
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 
@@ -124,6 +123,16 @@ class SeamlessChunksManager(private val listener: ClientPacketListener) {
      * with the ship count matching the server's, means the client is caught up.
      */
     fun pendingDeferredCount(): Int = deferredDispatch.size
+
+    fun pendingShipChunkUpdateCount(): Int =
+        shipQueuedUpdates.values.sumOf { it.size }
+
+    fun pendingStalledChunkUpdateCount(): Int =
+        queuedUpdates.values.sumOf { it.size }
+
+    fun pendingShipClaimCount(): Int = shipQueuedUpdates.size
+
+    fun stalledChunkCount(): Int = stalledChunks.size
 
     /**
      * True while {@link #drainDeferredBatch()} is running through its inner loop.
