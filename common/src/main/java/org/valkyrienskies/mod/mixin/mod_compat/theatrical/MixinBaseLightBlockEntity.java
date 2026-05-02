@@ -16,7 +16,9 @@ import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
+import org.valkyrienskies.core.api.ships.Ship;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
+import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
 import org.valkyrienskies.mod.common.world.RaycastUtilsKt;
 
 @Mixin(BaseLightBlockEntity.class)
@@ -46,8 +48,13 @@ public abstract class MixinBaseLightBlockEntity extends BlockEntity {
         double distance = this.getMaxLightDistance();
 
         Vec3 originCenter = this.getBlockPos().getCenter();
+
         // Do our raycasts in worldspace, but with the ability to hit ships
         originCenter = VSGameUtilsKt.toWorldCoordinates(this.level, originCenter);
+        Ship ship = VSGameUtilsKt.getShipManagingPos(level, this.getBlockPos());
+        if (ship != null) {
+            viewVector = VectorConversionsMCKt.toMinecraft(ship.getShipToWorld().transformDirection(VectorConversionsMCKt.toJOML(viewVector)));
+        }
 
         Vec3 clipEnd = originCenter.add(viewVector.x * distance, viewVector.y * distance, viewVector.z * distance);
         ClipContext context = new ClipContext(originCenter, clipEnd, Block.COLLIDER, Fluid.NONE, null);
