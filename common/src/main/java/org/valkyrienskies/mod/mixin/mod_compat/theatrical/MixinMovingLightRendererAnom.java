@@ -2,7 +2,6 @@ package org.valkyrienskies.mod.mixin.mod_compat.theatrical;
 
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
-import dev.imabad.theatrical.blockentities.light.BaseLightBlockEntity;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.Vec3i;
 import net.minecraft.world.level.Level;
@@ -13,12 +12,14 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 
 /**
+ * Anom = anonymous class
+ * This mixin targets an anonymous inner class of MovingLightRenderer.
  * This class makes sure the beams render in world space to prevent them being culled/invisible.
+ *
  * @see MixinMovingLightRenderer
  */
-@Mixin(targets = {"dev.imabad.theatrical.client.blockentities.FixtureRenderer$1"})
-public class MixinFixtureRenderer<T extends BaseLightBlockEntity> {
-
+@Mixin(targets = {"dev.imabad.theatrical.client.blockentities.MovingLightRenderer$1"})
+public class MixinMovingLightRendererAnom {
     @Redirect(
         method = "render",
         at = @At(

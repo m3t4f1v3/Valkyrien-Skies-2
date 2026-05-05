@@ -1,45 +1,40 @@
 package org.valkyrienskies.mod.mixin.mod_compat.theatrical;
 
-import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
-import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.mojang.blaze3d.vertex.PoseStack;
+import dev.imabad.theatrical.blockentities.light.MovingLightBlockEntity;
 import net.minecraft.client.Minecraft;
-import net.minecraft.core.Vec3i;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import org.joml.Quaternionf;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Redirect;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.valkyrienskies.core.api.ships.Ship;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 
-@Mixin(targets = {"dev.imabad.theatrical.client.blockentities.MovingLightRenderer$1"})
+@Mixin(targets = {"dev.imabad.theatrical.client.blockentities.MovingLightRenderer"})
 public class MixinMovingLightRenderer {
-    @Redirect(
-        method = "render",
-        at = @At(
-            value = "INVOKE",
-            target = "Lnet/minecraft/world/phys/Vec3;atLowerCornerOf(Lnet/minecraft/core/Vec3i;)Lnet/minecraft/world/phys/Vec3;"
-        )
+
+    /**
+     * Account for ship rotation when rendering beam
+     */
+    @Inject(
+        method = "preparePoseStack(Ldev/imabad/theatrical/blockentities/light/MovingLightBlockEntity;Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/core/Direction;FZLnet/minecraft/world/level/block/state/BlockState;Z)V",
+        at = @At("HEAD")
     )
-    private Vec3 redirectAtLowerCornerOf(Vec3i pos) {
+    private void injectPose(MovingLightBlockEntity blockEntity, PoseStack poseStack, Direction facing,
+        float partialTicks, boolean isFlipped, BlockState blockState, boolean isHanging, CallbackInfo ci) {
         Level level = Minecraft.getInstance().level;
+        // Don't remove this useless cast, without it, the mixin crashes somehow
+        BlockPos pos = ((BlockEntity) blockEntity).getBlockPos();
 
-        Vec3 vanilla = Vec3.atLowerCornerOf(pos);
+        Ship ship = VSGameUtilsKt.getShipManagingPos(level, pos);
+        if (ship == null) return;
 
-        if (level == null) {
-            return vanilla;
-        }
-
-        return VSGameUtilsKt.toWorldCoordinates(level, vanilla);
-    }
-
-    @WrapMethod(
-        method = "getPos",
-        remap = false
-    )
-    private Vec3 wrapGetPos(float partialTick, Operation<Vec3> original) {
-        Level level = Minecraft.getInstance().level;
-        if (level == null) return original.call(partialTick);
-
-        return VSGameUtilsKt.toWorldCoordinates(level, original.call(partialTick));
+        poseStack.mulPose(new Quaternionf(ship.getTransform().getShipToWorldRotation()));
     }
 }
