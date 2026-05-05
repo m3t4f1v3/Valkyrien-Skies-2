@@ -135,6 +135,10 @@ public class ValkyrienCommonMixinConfigPlugin implements IMixinConfigPlugin {
             return LoadedMods.getAlexCaves();
         }
 
+        if (mixinClassName.equals("org.valkyrienskies.mod.mixin.mod_compat.vista.LevelRendererCameraStateMixin")) {
+            return renderer == VSRenderer.VANILLA;
+        }
+
         return true;
     }
 
