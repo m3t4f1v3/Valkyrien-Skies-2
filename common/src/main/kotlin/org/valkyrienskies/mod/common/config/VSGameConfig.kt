@@ -322,20 +322,8 @@ object VSGameConfig {
             )
             var dryShipCommandPerms = 2
         }
+
     }
 
-    class Common {
-
-        @JvmField
-        @ConfigCategory(title = "Advanced")
-        val ADVANCED = Advanced()
-
-        class Advanced { // Debug configs that may be either side
-            @ConfigEntry(
-                description = "Renders mob pathfinding nodes. Must be set on client and server to work. " +
-                    "Requires the system property -Dorg.valkyrienskies.render_pathfinding=true"
-            )
-            var renderPathfinding = false // Requires ValkyrienCommonMixinConfigPlugin.PATH_FINDING_DEBUG to be true
-        }
-    }
+    class Common
 }

@@ -4,12 +4,15 @@ import net.minecraft.client.multiplayer.ClientLevel
 import net.minecraft.core.SectionPos
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.util.Mth
+import net.minecraft.core.Direction
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.level.Level
 import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
+import net.minecraft.world.phys.shapes.Shapes
 import net.minecraft.world.phys.shapes.VoxelShape
+import org.joml.Vector3d
 import org.joml.primitives.AABBd
 import org.joml.primitives.AABBdc
 import org.joml.primitives.AABBi
@@ -181,6 +184,75 @@ object EntityShipCollisionUtils {
             }
         }
         return newMovement.toMinecraft()
+    }
+
+    @JvmStatic
+    fun adjustEntityMovementForShipyardEntityCollisions(
+        entity: Entity?,
+        movement: Vec3,
+        entityBoundingBox: AABB,
+        world: Level
+    ): Vec3 {
+        val sweptBox = entityBoundingBox.expandTowards(movement).inflate(1.0e-7)
+        val candidates = world.getEntities(entity, sweptBox) { other ->
+            if (entity != null && !entity.canCollideWith(other)) return@getEntities false
+            other.canBeCollidedWith()
+        }
+        if (candidates.isEmpty()) return movement
+
+        val candidatesByShip = LinkedHashMap<Ship, MutableList<Entity>>()
+        for (candidate in candidates) {
+            val ship = world.getLoadedShipManagingPos(candidate.blockPosition()) ?: continue
+            candidatesByShip.getOrPut(ship) { ArrayList() }.add(candidate)
+        }
+        if (candidatesByShip.isEmpty()) return movement
+
+        var currentMovement = movement
+        for ((ship, candList) in candidatesByShip) {
+            currentMovement = clipMovementInShipLocalFrame(
+                ship, candList, entityBoundingBox, currentMovement
+            )
+        }
+        return currentMovement
+    }
+
+    private fun clipMovementInShipLocalFrame(
+        ship: Ship,
+        candidates: List<Entity>,
+        playerWorldAabb: AABB,
+        worldMovement: Vec3
+    ): Vec3 {
+        var playerLocal = AABBd(playerWorldAabb.toJOML()).transform(ship.worldToShip).toMinecraft()
+        val movLocal = ship.worldToShip.transformDirection(worldMovement.toJOML(), Vector3d())
+        var clippedX = movLocal.x
+        var clippedY = movLocal.y
+        var clippedZ = movLocal.z
+
+        var combined: VoxelShape = Shapes.empty()
+        for (candidate in candidates) {
+            combined = Shapes.or(combined, Shapes.create(candidate.boundingBox))
+        }
+
+        if (clippedY != 0.0) {
+            clippedY = combined.collide(Direction.Axis.Y, playerLocal, clippedY)
+            if (clippedY != 0.0) playerLocal = playerLocal.move(0.0, clippedY, 0.0)
+        }
+        val zDominant = Math.abs(clippedX) < Math.abs(clippedZ)
+        if (zDominant && clippedZ != 0.0) {
+            clippedZ = combined.collide(Direction.Axis.Z, playerLocal, clippedZ)
+            playerLocal = playerLocal.move(0.0, 0.0, clippedZ)
+        }
+        if (clippedX != 0.0) {
+            clippedX = combined.collide(Direction.Axis.X, playerLocal, clippedX)
+            if (!zDominant && clippedX != 0.0) playerLocal = playerLocal.move(clippedX, 0.0, 0.0)
+        }
+        if (!zDominant && clippedZ != 0.0) {
+            clippedZ = combined.collide(Direction.Axis.Z, playerLocal, clippedZ)
+        }
+
+        val clippedWorld = ship.shipToWorld.transformDirection(
+            Vector3d(clippedX, clippedY, clippedZ), Vector3d())
+        return Vec3(clippedWorld.x, clippedWorld.y, clippedWorld.z)
     }
 
     fun getShipPolygonsCollidingWithEntity(
