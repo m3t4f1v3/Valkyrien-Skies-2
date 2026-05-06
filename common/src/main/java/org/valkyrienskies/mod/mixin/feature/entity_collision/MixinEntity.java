@@ -106,8 +106,20 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider,
     )
     public Vec3 collideWithShips(final Entity entity, Vec3 movement, final Operation<Vec3> collide) {
         final AABB box = this.getBoundingBox();
-        movement = EntityShipCollisionUtils.INSTANCE
-            .adjustEntityMovementForShipCollisions(entity, movement, box, this.level);
+        
+        //Subdivide the movement if the speed is too high, to avoid clipping through.
+        int subdivision = (int) (movement.length() / 0.5) + 1;
+        Vec3 substep = movement.scale(1.0 / subdivision);
+        for (int i = 0; i < subdivision; i++) {
+            Vec3 partialResult = EntityShipCollisionUtils.INSTANCE
+                .adjustEntityMovementForShipCollisions(entity, substep, box.move(substep.scale(i)), this.level);
+            if (partialResult.distanceToSqr(substep) > 1e-12) {
+                //Collision happened on this step.
+                movement = substep.scale(i).add(partialResult);
+                break;
+            }
+        }
+
         final Vec3 collisionResultWithWorld = collide.call(entity, movement);
 
         if (collisionResultWithWorld.distanceToSqr(movement) > 1e-12) {
