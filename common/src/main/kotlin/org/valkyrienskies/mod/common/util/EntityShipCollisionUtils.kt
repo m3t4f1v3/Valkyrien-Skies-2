@@ -236,7 +236,7 @@ object EntityShipCollisionUtils {
         }
 
         val (newMovement, shipCollidingWith) = collider.adjustEntityMovementForPolygonCollisions(
-            movement.toJOML(), collisionBoundingBox.toJOML(), stepHeight, collidingShipPolygons
+            movement.toJOML(), collisionBoundingBox.toJOML(), stepHeight, collidingShipPolygons, entity?.onGround() ?: false
         )
         if (entity != null) {
             val standingOnShip = entity.level().getLoadedShipManagingPos(entity.onPos)
