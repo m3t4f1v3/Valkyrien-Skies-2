@@ -9,11 +9,13 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MoverType;
-import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import java.util.Optional;
+import net.minecraft.world.phys.shapes.BooleanOp;
+import net.minecraft.world.phys.shapes.Shapes;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
 import org.spongepowered.asm.mixin.Final;
@@ -79,6 +81,31 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider,
         if (EntityShipCollisionUtils.isCollidingWithUnloadedShips(Entity.class.cast(this))) {
             ci.cancel();
         }
+    }
+
+    /**
+     * Will execute suffocation check for ship blocks too.
+     */
+    @Inject(
+        method = "isInWall",
+        at = @At(value = "TAIL"),
+        cancellable = true
+    )
+    private void isInShipWall(CallbackInfoReturnable<Boolean> cir, @Local AABB aabb){
+        if(cir.getReturnValue()) return;
+        VSGameUtilsKt.transformFromWorldToNearbyShipsAndWorld(level, aabb, arg -> {
+            BlockPos.betweenClosedStream(arg).forEach(
+                blockPos -> {
+                    BlockState blockState = level.getBlockState(blockPos);
+                    if(!blockState.isAir()
+                        && blockState.isSuffocating(level, blockPos)
+                        && Shapes.joinIsNotEmpty(blockState.getCollisionShape(level, blockPos).move(blockPos.getX(), blockPos.getY(), blockPos.getZ()), Shapes.create(arg), BooleanOp.AND)
+                    ) {
+                        cir.setReturnValue(true);
+                    }
+                }
+            );
+        });
     }
 
     /**
