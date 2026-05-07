@@ -240,7 +240,7 @@ object EntityShipCollisionUtils {
         )
         if (entity != null) {
             val standingOnShip = entity.level().getLoadedShipManagingPos(entity.onPos)
-            if (shipCollidingWith != null && standingOnShip != null && standingOnShip.id == shipCollidingWith) {
+            if (shipCollidingWith != null && standingOnShip != null && standingOnShip.id == shipCollidingWith && entity.isControlledByLocalInstance) {
                 // Update the [IEntity.lastShipStoodOn]
                 (entity as IEntityDraggingInformationProvider).draggingInformation.lastShipStoodOn = shipCollidingWith
                 for (entityRiding in entity.indirectPassengers) {
