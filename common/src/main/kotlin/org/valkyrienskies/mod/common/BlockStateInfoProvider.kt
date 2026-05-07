@@ -21,6 +21,7 @@ import org.valkyrienskies.core.api.world.connectivity.ConnectionStatus
 import org.valkyrienskies.core.api.world.connectivity.SparseVoxelPosition
 import org.valkyrienskies.core.internal.world.chunks.VsiBlockType
 import org.valkyrienskies.mod.common.block.WingBlock
+import org.valkyrienskies.mod.common.air_pockets.ShipWaterPocketManager
 import org.valkyrienskies.mod.common.config.ConfigType
 import org.valkyrienskies.mod.common.config.MassDatapackResolver
 import org.valkyrienskies.mod.common.config.VSGameConfig
@@ -129,9 +130,16 @@ object BlockStateInfo {
 
         val shipObjectWorld = level.shipObjectWorld
 
-        val (prevBlockMass, prevBlockType) = get(prevBlockState) ?: return
+        val (prevBlockMass, rawPrevBlockType) = get(prevBlockState) ?: return
 
-        val (newBlockMass, newBlockType) = get(newBlockState) ?: return
+        val (newBlockMass, rawNewBlockType) = get(newBlockState) ?: return
+
+        val prevBlockType = resolvePhysicsBlockTypeForAirPocket(
+            level, x, y, z, prevBlockState, rawPrevBlockType
+        )
+        val newBlockType = resolvePhysicsBlockTypeForAirPocket(
+            level, x, y, z, newBlockState, rawNewBlockType
+        )
 
         // region Inject wings
         if (level is ServerLevel) {
@@ -183,6 +191,23 @@ object BlockStateInfo {
         }
 
 
+    }
+
+    private fun resolvePhysicsBlockTypeForAirPocket(
+        level: Level,
+        x: Int,
+        y: Int,
+        z: Int,
+        blockState: BlockState,
+        defaultBlockType: VsiBlockType,
+    ): VsiBlockType {
+        if (!blockState.isAir || !VSGameConfig.COMMON.enableAirPockets) return defaultBlockType
+        val blockPos = BlockPos(x, y, z)
+        return if (ShipWaterPocketManager.isShipyardBlockPosInShipAirPocket(level, blockPos)) {
+            ValkyrienSkiesMod.vsCore.blockTypes.displacementAir
+        } else {
+            defaultBlockType
+        }
     }
 
     /**

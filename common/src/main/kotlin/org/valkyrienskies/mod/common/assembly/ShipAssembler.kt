@@ -36,6 +36,7 @@ import org.valkyrienskies.core.api.util.GameTickOnly
 import org.valkyrienskies.core.impl.config.VSCoreConfig
 import org.valkyrienskies.core.internal.ships.VsiServerShip
 import org.valkyrienskies.mod.common.assembly.ShipAssembler.assembleToShipFull
+import org.valkyrienskies.mod.common.air_pockets.ShipWaterPocketManager
 import org.valkyrienskies.mod.common.dimensionId
 import org.valkyrienskies.mod.common.executeIf
 import org.valkyrienskies.mod.common.forEach
@@ -347,8 +348,10 @@ object ShipAssembler {
                     for (sectionY in 0 until worldChunk.sectionsCount) {
                         val sectionPos = Vector3i(pos.x, worldChunk.getSectionYFromSectionIndex(sectionY), pos.z)
                         val section = chunkSections[sectionY] ?: continue
-                        if (section.hasOnlyAir()) continue
-                        val update = section.toDenseVoxelUpdate(sectionPos)
+                        if (section.hasOnlyAir() &&
+                            !ShipWaterPocketManager.hasShipyardAirPocketCellsInSection(level, pos.x, sectionPos.y, pos.z)
+                        ) continue
+                        val update = section.toDenseVoxelUpdate(sectionPos, level)
                         level.shipObjectWorld.forceUpdateConnectivityChunk(
                             level.dimensionId,
                             sectionPos.x,
@@ -690,8 +693,10 @@ object ShipAssembler {
                     for (sectionY in 0 until worldChunk.sectionsCount) {
                         val sectionPos = Vector3i(pos.x, worldChunk.getSectionYFromSectionIndex(sectionY), pos.z)
                         val section = chunkSections[sectionY] ?: continue
-                        if (section.hasOnlyAir()) continue
-                        val update = section.toDenseVoxelUpdate(sectionPos)
+                        if (section.hasOnlyAir() &&
+                            !ShipWaterPocketManager.hasShipyardAirPocketCellsInSection(level, pos.x, sectionPos.y, pos.z)
+                        ) continue
+                        val update = section.toDenseVoxelUpdate(sectionPos, level)
                         level.shipObjectWorld.forceUpdateConnectivityChunk(
                             level.dimensionId, sectionPos.x, sectionPos.y, sectionPos.z, update
                         )

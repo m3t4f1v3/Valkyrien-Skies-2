@@ -52,6 +52,7 @@ import org.valkyrienskies.mod.common.VS2ChunkAllocator;
 import org.valkyrienskies.mod.common.IShipObjectWorldServerProvider;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod;
+import org.valkyrienskies.mod.common.air_pockets.ShipWaterPocketManager;
 import org.valkyrienskies.mod.common.block.WingBlock;
 import org.valkyrienskies.mod.common.config.DimensionParametersResolver;
 import org.valkyrienskies.mod.common.config.VSGameConfig;
@@ -253,6 +254,7 @@ public abstract class MixinServerLevel implements IShipObjectWorldServerProvider
             final int chunkZ = worldChunk.getPos().z;
 
             final LevelChunkSection[] chunkSections = worldChunk.getSections();
+            final ServerLevel thisAsLevel = ServerLevel.class.cast(this);
 
             for (int sectionY = 0; sectionY < chunkSections.length; sectionY++) {
                 final LevelChunkSection chunkSection = chunkSections[sectionY];
@@ -260,14 +262,15 @@ public abstract class MixinServerLevel implements IShipObjectWorldServerProvider
                     new Vector3i(chunkX, worldChunk.getSectionYFromSectionIndex(sectionY), chunkZ);
                 voxelChunkPositions.add(chunkPos);
 
-                if (chunkSection != null && !chunkSection.hasOnlyAir()) {
+                if (chunkSection != null && (!chunkSection.hasOnlyAir() ||
+                    ShipWaterPocketManager.hasShipyardAirPocketCellsInSection(thisAsLevel, chunkX, chunkPos.y(),
+                        chunkZ))) {
                     // Add this chunk to the ground rigid body
                     final VsiTerrainUpdate voxelShapeUpdate =
-                        VSGameUtilsKt.toDenseVoxelUpdate(chunkSection, chunkPos);
+                        VSGameUtilsKt.toDenseVoxelUpdate(chunkSection, chunkPos, thisAsLevel);
                     voxelShapeUpdates.add(voxelShapeUpdate);
 
                     // region Detect wings
-                    final ServerLevel thisAsLevel = ServerLevel.class.cast(this);
                     final LoadedServerShip
                         ship = VSGameUtilsKt.getLoadedShipManagingPos(thisAsLevel, chunkX, chunkZ);
                     if (ship != null) {
