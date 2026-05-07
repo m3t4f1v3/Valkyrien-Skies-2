@@ -17,6 +17,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.valkyrienskies.core.api.ships.ClientShip;
+import org.valkyrienskies.core.impl.networking.simple.SimplePacket;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod;
 import org.valkyrienskies.mod.common.networking.PacketEntityShipMotion;
@@ -70,7 +71,11 @@ public abstract class MixinLocalPlayer extends Entity implements IEntityDragging
                     realArg = new ServerboundMovePlayerPacket.StatusOnly(isOnGround);
                 }
             }
+        } else if (getDraggingInformation().getDraggingStatusChanged()) {
+            PacketPlayerShipMotion packet = new PacketPlayerShipMotion(-1L, 0.0, 0.0, 0.0, 0.0);
+            ValkyrienSkiesMod.getVsCore().getSimplePacketNetworking().sendToServer(packet);
         }
+        getDraggingInformation().setDraggingStatusChanged(false);
         original.call(instance, realArg);
     }
 
@@ -93,7 +98,11 @@ public abstract class MixinLocalPlayer extends Entity implements IEntityDragging
                         ValkyrienSkiesMod.getVsCore().getSimplePacketNetworking().sendToServer(packet);
                     }
                 }
+            } else if (dragProvider.getDraggingInformation().getDraggingStatusChanged()) {
+                SimplePacket vsPacket = new PacketEntityShipMotion(getRootVehicle().getId(), -1L, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+                ValkyrienSkiesMod.getVsCore().getSimplePacketNetworking().sendToServer(vsPacket);
             }
+            dragProvider.getDraggingInformation().setDraggingStatusChanged(false);
         }
         original.call(instance, arg);
     }

@@ -13,9 +13,11 @@ class EntityDraggingInformation {
     var addedYawRotLastTick: Double = 0.0
     var changedShipLastTick = false
     var shouldImpulseMovement = false
+    var draggingStatusChanged = false
     var lastShipStoodOn: ShipId? = null
         set(value) {
             if(value != null) ticksSinceStoodOnShip = 0 // ensure this is set before boardedShipLastTick check.
+            draggingStatusChanged = field != value
             shouldImpulseMovement = field != value && value != null // only if it boarded different ship.
             changedShipLastTick = field != value && field != null && value != null
             field = value
@@ -24,6 +26,7 @@ class EntityDraggingInformation {
     var ticksSinceStoodOnShip: Int = 0
         set(value) {
             shouldImpulseMovement = false
+            draggingStatusChanged = TICKS_TO_DRAG_ENTITIES in field..<value
             field = value
         }
     var ticksSinceLastServerPacket: Int = 0
