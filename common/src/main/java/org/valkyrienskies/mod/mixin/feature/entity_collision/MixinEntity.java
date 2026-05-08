@@ -3,13 +3,13 @@ package org.valkyrienskies.mod.mixin.feature.entity_collision;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
+import java.util.Objects;
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MoverType;
-import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -26,7 +26,6 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.spongepowered.asm.mixin.injection.callback.LocalCapture;
-import org.valkyrienskies.core.api.ships.Ship;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.util.EntityDraggingInformation;
 import org.valkyrienskies.mod.common.util.EntityShipCollisionUtils;
@@ -93,11 +92,12 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider,
     )
     public Vec3 collideWithShips(final Entity entity, Vec3 movement, final Operation<Vec3> collide) {
         final AABB box = this.getBoundingBox();
+        Long draggingShipID = getDraggingInformation().getLastShipStoodOn();
         movement = EntityShipCollisionUtils.INSTANCE
             .adjustEntityMovementForShipCollisions(entity, movement, box, this.level);
         final Vec3 collisionResultWithWorld = collide.call(entity, movement);
 
-        if (collisionResultWithWorld.distanceToSqr(movement) > 1e-12 && entity.isControlledByLocalInstance()) {
+        if (collisionResultWithWorld.distanceToSqr(movement) > 1e-12) {
             // We collided with the world? Set the dragging ship to null.
             final EntityDraggingInformation entityDraggingInformation = getDraggingInformation();
             if (entityDraggingInformation.getIgnoreNextGroundStand()) {
@@ -113,6 +113,9 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider,
                 passengerDraggingInformation.setLastShipStoodOn(null);
                 passengerDraggingInformation.setAddedYawRotLastTick(0.0);
             }
+        }
+        if(!Objects.equals(getDraggingInformation().getLastShipStoodOn(), draggingShipID)) {
+            entity.hasImpulse = true;
         }
         return collisionResultWithWorld;
     }
@@ -281,51 +284,50 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider,
         }
     }
 
-    @Inject(
-        method = "baseTick",
-        at = @At("TAIL")
-    )
-    private void postBaseTick(final CallbackInfo ci) {
-        final EntityDraggingInformation entityDraggingInformation = getDraggingInformation();
-        final Entity self = Entity.class.cast(this);
-
-        if (level != null && level.isClientSide && tickCount > 1) { //baseTick sets the firstTick false, use tickCount instead.
-//            if (!(self.isControlledByLocalInstance() || (self instanceof final Player player && player.isLocalPlayer()))) {
-//                entityDraggingInformation.setMountedToEntity(self.getVehicle() != null);
-//                return;
-//            }
-            final BlockPos onPos = getOnPos();
-            final Ship ship = VSGameUtilsKt.getLoadedShipManagingPos(level, onPos);
-            if (ship != null) {
-//                if (entityDraggingInformation.getLastShipStoodOnServerWriteOnly() == null) {
-//                    return;
+//    @Inject(
+//        method = "baseTick",
+//        at = @At("TAIL")
+//    )
+//    private void postBaseTick(final CallbackInfo ci) {
+//        final EntityDraggingInformation entityDraggingInformation = getDraggingInformation();
+//        final Entity self = Entity.class.cast(this);
+//
+//        if (level != null && level.isClientSide && tickCount > 1) { //baseTick sets the firstTick false, use tickCount instead.
+////            if (!(self.isControlledByLocalInstance() || (self instanceof final Player player && player.isLocalPlayer()))) {
+////                entityDraggingInformation.setMountedToEntity(self.getVehicle() != null);
+////                return;
+////            }
+//            final BlockPos onPos = getOnPos();
+//            final Ship ship = VSGameUtilsKt.getLoadedShipManagingPos(level, onPos);
+//            if (ship != null) {
+////                if (entityDraggingInformation.getLastShipStoodOnServerWriteOnly() == null) {
+////                    return;
+////                }
+//                entityDraggingInformation.setLastShipStoodOn(ship.getId());
+//                getIndirectPassengers().forEach(entity -> {
+//                    final EntityDraggingInformation passengerDraggingInformation =
+//                        ((IEntityDraggingInformationProvider) entity).getDraggingInformation();
+//                    passengerDraggingInformation.setLastShipStoodOn(ship.getId());
+//                });
+//            } else {
+//                if (!level.getBlockState(onPos).isAir()) {
+//                    if (entityDraggingInformation.getIgnoreNextGroundStand()) {
+//                        entityDraggingInformation.setIgnoreNextGroundStand(false);
+//                    } else {
+////                        if (entityDraggingInformation.getLastShipStoodOnServerWriteOnly() != null) {
+////                            return;
+////                        }
+//                        entityDraggingInformation.setLastShipStoodOn(null);
+//                        getIndirectPassengers().forEach(entity -> {
+//                            final EntityDraggingInformation passengerDraggingInformation =
+//                                ((IEntityDraggingInformationProvider) entity).getDraggingInformation();
+//                            passengerDraggingInformation.setLastShipStoodOn(null);
+//                        });
+//                    }
 //                }
-                entityDraggingInformation.setLastShipStoodOn(ship.getId());
-                getIndirectPassengers().forEach(entity -> {
-                    final EntityDraggingInformation passengerDraggingInformation =
-                        ((IEntityDraggingInformationProvider) entity).getDraggingInformation();
-                    passengerDraggingInformation.setLastShipStoodOn(ship.getId());
-                });
-            } else {
-                if (!level.getBlockState(onPos).isAir()) {
-                    if (entityDraggingInformation.getIgnoreNextGroundStand()) {
-                        entityDraggingInformation.setIgnoreNextGroundStand(false);
-                    } else {
-//                        if (entityDraggingInformation.getLastShipStoodOnServerWriteOnly() != null) {
-//                            return;
-//                        }
-                        entityDraggingInformation.setLastShipStoodOn(null);
-                        getIndirectPassengers().forEach(entity -> {
-                            final EntityDraggingInformation passengerDraggingInformation =
-                                ((IEntityDraggingInformationProvider) entity).getDraggingInformation();
-                            passengerDraggingInformation.setLastShipStoodOn(null);
-                        });
-                    }
-
-                }
-            }
-        }
-    }
+//            }
+//        }
+//    }
 
     // endregion
 

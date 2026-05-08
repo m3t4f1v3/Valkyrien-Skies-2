@@ -90,14 +90,7 @@ public class MixinServerEntity {
 
                         return;
                     }
-                } else if (dragInfo.getDraggingStatusChanged()) {
-                    SimplePacket vsPacket = new PacketMobShipRotation(entity.getId(), -1L, 0.0, 0.0);
-                    List<ServerPlayer> players = level.getPlayers(player -> player.shouldRender(entity.getX(), entity.getY(), entity.getZ()));
-                    players.forEach(
-                        player -> ValkyrienSkiesMod.getVsCore().getSimplePacketNetworking().sendToClients(vsPacket, ((PlayerDuck)player).vs_getPlayer())
-                    );
                 }
-                dragInfo.setDraggingStatusChanged(false);
             }
         }
         original.call(instance, t);

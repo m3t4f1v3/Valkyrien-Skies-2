@@ -18,7 +18,6 @@ import org.valkyrienskies.core.internal.collision.VsiConvexPolygonc
 import org.valkyrienskies.core.util.extend
 import org.valkyrienskies.core.util.toAABBd
 import org.valkyrienskies.core.api.ships.properties.ShipId
-import org.valkyrienskies.mod.common.allShips
 import org.valkyrienskies.mod.common.dimensionId
 import org.valkyrienskies.mod.common.getLoadedShipManagingPos
 import org.valkyrienskies.mod.common.shipObjectWorld
@@ -240,7 +239,7 @@ object EntityShipCollisionUtils {
         )
         if (entity != null) {
             val standingOnShip = entity.level().getLoadedShipManagingPos(entity.onPos)
-            if (shipCollidingWith != null && standingOnShip != null && standingOnShip.id == shipCollidingWith && entity.isControlledByLocalInstance) {
+            if (shipCollidingWith != null && standingOnShip != null && standingOnShip.id == shipCollidingWith) {
                 // Update the [IEntity.lastShipStoodOn]
                 (entity as IEntityDraggingInformationProvider).draggingInformation.lastShipStoodOn = shipCollidingWith
                 for (entityRiding in entity.indirectPassengers) {
