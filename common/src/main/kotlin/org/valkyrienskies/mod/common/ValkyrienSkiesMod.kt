@@ -83,6 +83,10 @@ object ValkyrienSkiesMod {
     val ASSEMBLE_BLACKLIST: TagKey<Block> =
         TagKey.create(Registries.BLOCK, ResourceLocation(MOD_ID, "assemble_blacklist"))
 
+    @JvmField
+    val NO_NATURAL_SHIP_SPAWN: TagKey<EntityType<*>> =
+        TagKey.create(Registries.ENTITY_TYPE, ResourceLocation(MOD_ID, "no_natural_ship_spawn"))
+
     @JvmStatic
     var currentServer: MinecraftServer? = null
 

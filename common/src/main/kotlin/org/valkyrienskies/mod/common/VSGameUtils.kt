@@ -18,10 +18,14 @@ import net.minecraft.util.thread.BlockableEventLoop
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.entity.player.Player
+import net.minecraft.world.level.BlockAndTintGetter
 import net.minecraft.world.level.ChunkPos
 import net.minecraft.world.level.Level
+import net.minecraft.world.level.LevelAccessor
+import net.minecraft.world.level.LightLayer
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.chunk.LevelChunkSection
+import net.minecraft.world.level.levelgen.Heightmap
 import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
 import org.joml.Vector3d
@@ -492,6 +496,103 @@ fun Entity?.getShipBlockStoodOn(probeDepth: Double): ShipBlock? {
  * finalizeSpawn / mob-spawn time, before the dragger system has populated `lastShipStoodOn`.
  */
 fun Entity?.getShipStoodOn(): Ship? = getShipBlockStoodOn(0.2)?.ship
+
+/** Entity's `blockPosition()` projected into its enclosing ship, else world `blockPosition()`. */
+@JvmStatic
+fun shipMountedSpawnSeedPos(entity: Entity): BlockPos {
+    val ship = entity.getShipStoodOn() ?: return entity.blockPosition()
+    val local = ship.transform.worldToShip.transformPosition(entity.x, entity.y, entity.z, Vector3d())
+    return BlockPos.containing(local.x, local.y, local.z)
+}
+
+/** A shipyard `BlockPos`'s Y projected to its world-rendered Y, else `original`. */
+@JvmStatic
+fun shipProjectedWorldY(level: LevelAccessor, pos: BlockPos, original: Int): Int {
+    if (level !is ServerLevel) return original
+    val ship = level.getShipManagingPos(pos) ?: return original
+    val rendered = ship.transform.shipToWorld.transformPosition(
+        pos.x + 0.5, pos.y + 0.5, pos.z + 0.5, Vector3d()
+    )
+    return Math.floor(rendered.y).toInt()
+}
+
+/**
+ * Vanilla `max(blockLight, skyLight - skyDarken)` re-evaluated with the sky component as
+ * `min(shipSky, worldSky)` so a ship under a world ceiling reads dim. `original` returned
+ * when not on a ship.
+ */
+@JvmStatic
+fun shipAwareCombinedBrightness(getter: BlockAndTintGetter, pos: BlockPos, skyDarken: Int, original: Int): Int {
+    if (getter !is ServerLevel) return original
+    val ship = getter.getShipManagingPos(pos) ?: return original
+    val shipSky = getter.getBrightness(LightLayer.SKY, pos)
+    val rendered = ship.transform.shipToWorld.transformPosition(
+        pos.x + 0.5, pos.y + 0.5, pos.z + 0.5, Vector3d()
+    )
+    val worldSky = getter.getBrightness(LightLayer.SKY,
+        BlockPos.containing(rendered.x, rendered.y, rendered.z))
+    val adjustedSky = Math.max(0, Math.min(shipSky, worldSky) - skyDarken)
+    val shipBlock = getter.getBrightness(LightLayer.BLOCK, pos)
+    return Math.max(adjustedSky, shipBlock)
+}
+
+/** Sky-only counterpart to [shipAwareCombinedBrightness] — returns `min(original, worldSky)`. */
+@JvmStatic
+fun shipAwareSkyBrightness(getter: BlockAndTintGetter, pos: BlockPos, original: Int): Int {
+    if (getter !is ServerLevel) return original
+    val ship = getter.getShipManagingPos(pos) ?: return original
+    val rendered = ship.transform.shipToWorld.transformPosition(
+        pos.x + 0.5, pos.y + 0.5, pos.z + 0.5, Vector3d()
+    )
+    val worldSky = getter.getBrightness(LightLayer.SKY,
+        BlockPos.containing(rendered.x, rendered.y, rendered.z))
+    return Math.min(original, worldSky)
+}
+
+/** Vanilla `canSeeSky` projected to the ship's world pos, plus a heightmap-including-ships
+ *  check so other ships above also block the sky view. */
+@JvmStatic
+fun shipAwareCanSeeSky(level: Level, pos: BlockPos): Boolean {
+    val ship = level.getShipManagingPos(pos)
+    val worldPos = if (ship != null) {
+        val world = ship.transform.shipToWorld.transformPosition(
+            pos.x + 0.5, pos.y + 0.5, pos.z + 0.5, Vector3d()
+        )
+        BlockPos.containing(world.x, world.y, world.z)
+    } else pos
+    if (!level.canSeeSky(worldPos)) return false
+    val heightInclShips = CompatUtil.getWorldHeightmapPosIncludingShips(
+        level, Heightmap.Types.MOTION_BLOCKING, worldPos
+    )
+    return worldPos.y + 1 >= heightInclShips.y
+}
+
+/**
+ * `Entity.getLightLevelDependentMagicValue()` re-computed against `min(shipSky, worldSky)`
+ * and `max(shipBlock, worldBlock)` so AI gates that read it see the entity's actual local
+ * lighting on the ship. Null when not on a ship — caller falls back to vanilla.
+ */
+@JvmStatic
+fun shipAwareEntityLightLevelDependentMagicValue(entity: Entity): Float? {
+    val level = entity.level()
+    if (level !is ServerLevel) return null
+    val ship = entity.getEnclosingShip() ?: return null
+    val worldPos = BlockPos.containing(entity.x, entity.eyeY, entity.z)
+    val shipyard = ship.transform.worldToShip.transformPosition(
+        entity.x, entity.eyeY, entity.z, Vector3d()
+    )
+    val shipyardPos = BlockPos.containing(shipyard.x, shipyard.y, shipyard.z)
+    val shipSky = level.getBrightness(LightLayer.SKY, shipyardPos)
+    val worldSky = level.getBrightness(LightLayer.SKY, worldPos)
+    val effectiveSky = Math.max(0, Math.min(shipSky, worldSky) - level.skyDarken)
+    val shipBlock = level.getBrightness(LightLayer.BLOCK, shipyardPos)
+    val worldBlock = level.getBrightness(LightLayer.BLOCK, worldPos)
+    val rawBrightness = Math.max(effectiveSky, Math.max(shipBlock, worldBlock))
+    val brightness = rawBrightness / 15.0f
+    val scaled = brightness / (4.0f - 3.0f * brightness)
+    val ambient = level.dimensionType().ambientLight()
+    return scaled + ambient * (1.0f - scaled)
+}
 
 // Level
 fun Level?.getShipManagingPos(chunkX: Int, chunkZ: Int) =
