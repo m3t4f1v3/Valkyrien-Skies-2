@@ -224,7 +224,7 @@ object VSGameConfig {
         var allowMobSpawns = true
 
         @ConfigEntry(
-            description = "Allow rudimentary pathfinding on ships"
+            description = "Allow pathfinding on ships"
         )
         var aiOnShips = true
 

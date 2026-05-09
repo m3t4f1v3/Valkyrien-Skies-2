@@ -1,4 +1,4 @@
-package org.valkyrienskies.mod.mixin.feature.ai.spawning;
+package org.valkyrienskies.mod.mixin.feature.mob_spawning;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
