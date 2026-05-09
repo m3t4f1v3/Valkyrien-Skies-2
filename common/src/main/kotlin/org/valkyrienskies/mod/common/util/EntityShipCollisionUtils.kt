@@ -220,8 +220,10 @@ object EntityShipCollisionUtils {
         // This part was slightly changed to inflate the bounding box in y-axis and adjust the center point. - Bunting_chj
         val collidingShipPolygons =
             getShipPolygonsCollidingWithEntity(
-                entity, Vec3(movement.x(), movement.y() + stepHeight / 2, movement.z()),
-                entityBoundingBox.inflate(inflation, inflation + stepHeight / 2, inflation), world
+                entity, movement,
+                entityBoundingBox.inflate(inflation, inflation + stepHeight / 2, inflation)
+                    .move(0.0, stepHeight / 2, 0.0),
+                world
             )
 
         if (collidingShipPolygons.isEmpty()) {
