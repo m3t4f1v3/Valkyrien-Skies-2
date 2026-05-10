@@ -36,6 +36,7 @@ import org.valkyrienskies.core.api.ships.LoadedShip
 import org.valkyrienskies.core.api.ships.Ship
 import org.valkyrienskies.core.api.ships.properties.ShipTransform
 import org.valkyrienskies.core.api.world.properties.DimensionId
+import org.valkyrienskies.mod.common.ValkyrienSkiesMod
 import org.valkyrienskies.mod.common.config.VSGameConfig
 import org.valkyrienskies.mod.common.dimensionId
 import org.valkyrienskies.mod.common.getShipManagingPos
@@ -123,6 +124,16 @@ object ShipWaterPocketManager {
 
     private val tmpShipFluidSampleCache: ThreadLocal<ShipFluidSampleCache> =
         ThreadLocal.withInitial { ShipFluidSampleCache() }
+
+    private data class DisplacementAirPhysicsSnapshot(
+        val minX: Int,
+        val minY: Int,
+        val minZ: Int,
+        val sizeX: Int,
+        val sizeY: Int,
+        val sizeZ: Int,
+        val mask: BitSet,
+    )
 
     internal enum class ClientWaterSolveSkipReason {
         UNCHANGED_TRANSFORM,
@@ -1199,7 +1210,8 @@ object ShipWaterPocketManager {
         state: ShipPocketState,
         result: GeometryAsyncResult,
         preserveLiveFloodState: Boolean,
-    ) {
+    ): DisplacementAirPhysicsSnapshot {
+        val previousDisplacementAir = captureDisplacementAirPhysicsSnapshot(state)
         val wasRestored = state.restoredFromPersistence
         val previousSignature = state.geometrySignature
         val persistedMaterialized =
@@ -1414,9 +1426,11 @@ object ShipWaterPocketManager {
         state.restoredFromPersistence = false
         state.awaitingGeometryValidation = false
         state.persistDirty = true
+        return previousDisplacementAir
     }
 
     private fun tryApplyCompletedGeometryJob(
+        level: ServerLevel? = null,
         state: ShipPocketState,
         minX: Int,
         minY: Int,
@@ -1464,11 +1478,14 @@ object ShipWaterPocketManager {
             return false
         }
 
-        applyGeometryResult(
+        val previousDisplacementAir = applyGeometryResult(
             state = state,
             result = result,
             preserveLiveFloodState = preserveLiveFloodState,
         )
+        if (level != null) {
+            syncDisplacementAirPhysics(level, previousDisplacementAir, state)
+        }
         geometryComputeNanosTotal.addAndGet(result.computeNanos)
         val completed = geometryJobsCompleted.incrementAndGet()
         val avgMs = geometryComputeNanosTotal.get().toDouble() / completed.toDouble() / 1_000_000.0
@@ -2511,6 +2528,7 @@ object ShipWaterPocketManager {
             }
 
             val geometryApplied = tryApplyCompletedGeometryJob(
+                level = level,
                 state = state,
                 minX = minX,
                 minY = minY,
@@ -3053,6 +3071,8 @@ object ShipWaterPocketManager {
     private fun updateVsBuoyancyFromPockets(ship: LoadedShip, state: ShipPocketState) {
         val serverShip = ship as? LoadedServerShip ?: return
         val buoyancyHandler = serverShip.getAttachment(BuoyancyHandlerAttachment::class.java) ?: return
+
+        if (!VSGameConfig.SERVER.enablePocketBuoyancy) return
 
         val props = getBuoyancyFluidProps(state.floodFluid)
         buoyancyHandler?.setBuoyancyFluidDensity(props.density)
@@ -4161,6 +4181,49 @@ object ShipWaterPocketManager {
      * "world water should be treated as air here" based on the ship pocket simulation.
      */
     @JvmStatic
+    fun isShipyardBlockPosInShipAirPocket(level: Level, shipBlockPos: BlockPos): Boolean {
+        if (!VSGameConfig.COMMON.enableAirPockets) return false
+        if (!level.isBlockInShipyard(shipBlockPos)) return false
+
+        val ship = level.getShipManagingPos(shipBlockPos) ?: return false
+        val state = getState(level, ship.id) ?: return false
+        if (level.isClientSide) {
+            markClientStateDemanded(level, state)
+        }
+        return isAirPocket(state, shipBlockPos)
+    }
+
+    @JvmStatic
+    fun hasShipyardAirPocketCellsInSection(level: Level, chunkX: Int, sectionY: Int, chunkZ: Int): Boolean {
+        if (!VSGameConfig.COMMON.enableAirPockets) return false
+
+        val ship = level.getShipManagingPos(chunkX, chunkZ) ?: return false
+        val state = getState(level, ship.id) ?: return false
+
+        val minX = (chunkX shl 4).coerceAtLeast(state.minX)
+        val minY = (sectionY shl 4).coerceAtLeast(state.minY)
+        val minZ = (chunkZ shl 4).coerceAtLeast(state.minZ)
+        val maxX = ((chunkX shl 4) + 15).coerceAtMost(state.minX + state.sizeX - 1)
+        val maxY = ((sectionY shl 4) + 15).coerceAtMost(state.minY + state.sizeY - 1)
+        val maxZ = ((chunkZ shl 4) + 15).coerceAtMost(state.minZ + state.sizeZ - 1)
+        if (minX > maxX || minY > maxY || minZ > maxZ) return false
+
+        for (z in minZ..maxZ) {
+            val lz = z - state.minZ
+            for (y in minY..maxY) {
+                val ly = y - state.minY
+                for (x in minX..maxX) {
+                    val idx = indexOf(state, x - state.minX, ly, lz)
+                    if (state.interior.get(idx) && !state.materializedWater.get(idx)) {
+                        return true
+                    }
+                }
+            }
+        }
+        return false
+    }
+
+    @JvmStatic
     fun isWorldPosInShipAirPocket(level: Level, worldBlockPos: BlockPos): Boolean {
         return isWorldPosInAnyShipAirPocket(
             level = level,
@@ -4350,6 +4413,92 @@ object ShipWaterPocketManager {
 
     private fun indexOf(state: ShipPocketState, lx: Int, ly: Int, lz: Int): Int =
         lx + state.sizeX * (ly + state.sizeY * lz)
+
+    private fun captureDisplacementAirPhysicsSnapshot(state: ShipPocketState): DisplacementAirPhysicsSnapshot {
+        val mask = state.interior.clone() as BitSet
+        mask.andNot(state.materializedWater)
+        return DisplacementAirPhysicsSnapshot(
+            minX = state.minX,
+            minY = state.minY,
+            minZ = state.minZ,
+            sizeX = state.sizeX,
+            sizeY = state.sizeY,
+            sizeZ = state.sizeZ,
+            mask = mask,
+        )
+    }
+
+    private fun syncDisplacementAirPhysics(
+        level: ServerLevel,
+        previous: DisplacementAirPhysicsSnapshot,
+        state: ShipPocketState,
+    ) {
+        val next = captureDisplacementAirPhysicsSnapshot(state)
+        val pos = BlockPos.MutableBlockPos()
+        val airType = ValkyrienSkiesMod.vsCore.blockTypes.air
+        val displacementAirType = ValkyrienSkiesMod.vsCore.blockTypes.displacementAir
+
+        fun sendUpdate(oldIsDisplacementAir: Boolean, newIsDisplacementAir: Boolean) {
+            if (oldIsDisplacementAir == newIsDisplacementAir || !level.getBlockState(pos).isAir) return
+            level.shipObjectWorld.onSetBlock(
+                pos.x,
+                pos.y,
+                pos.z,
+                level.dimensionId,
+                if (oldIsDisplacementAir) displacementAirType else airType,
+                if (newIsDisplacementAir) displacementAirType else airType,
+                0.0,
+                0.0,
+            )
+        }
+
+        var idx = previous.mask.nextSetBit(0)
+        while (idx >= 0) {
+            posFromSnapshotIndex(previous, idx, pos)
+            sendUpdate(
+                oldIsDisplacementAir = true,
+                newIsDisplacementAir = snapshotContains(next, pos),
+            )
+            idx = previous.mask.nextSetBit(idx + 1)
+        }
+
+        idx = next.mask.nextSetBit(0)
+        while (idx >= 0) {
+            posFromSnapshotIndex(next, idx, pos)
+            if (!snapshotContains(previous, pos)) {
+                sendUpdate(
+                    oldIsDisplacementAir = false,
+                    newIsDisplacementAir = true,
+                )
+            }
+            idx = next.mask.nextSetBit(idx + 1)
+        }
+    }
+
+    private fun snapshotContains(snapshot: DisplacementAirPhysicsSnapshot, pos: BlockPos): Boolean {
+        val lx = pos.x - snapshot.minX
+        val ly = pos.y - snapshot.minY
+        val lz = pos.z - snapshot.minZ
+        if (lx !in 0 until snapshot.sizeX ||
+            ly !in 0 until snapshot.sizeY ||
+            lz !in 0 until snapshot.sizeZ
+        ) {
+            return false
+        }
+        return snapshot.mask.get(lx + snapshot.sizeX * (ly + snapshot.sizeY * lz))
+    }
+
+    private fun posFromSnapshotIndex(
+        snapshot: DisplacementAirPhysicsSnapshot,
+        idx: Int,
+        out: BlockPos.MutableBlockPos,
+    ): BlockPos.MutableBlockPos {
+        val lx = idx % snapshot.sizeX
+        val t = idx / snapshot.sizeX
+        val ly = t % snapshot.sizeY
+        val lz = t / snapshot.sizeY
+        return out.set(snapshot.minX + lx, snapshot.minY + ly, snapshot.minZ + lz)
+    }
 
     private fun posFromIndex(state: ShipPocketState, idx: Int, out: BlockPos.MutableBlockPos): BlockPos.MutableBlockPos {
         val sx = state.sizeX

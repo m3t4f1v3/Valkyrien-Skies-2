@@ -57,7 +57,7 @@ public class MixinServerEntity {
                 IEntityDraggingInformationProvider draggedEntity = (IEntityDraggingInformationProvider) entity;
                 EntityDraggingInformation dragInfo = draggedEntity.getDraggingInformation();
 
-                if (dragInfo != null && dragInfo.isEntityBeingDraggedByAShip() && dragInfo.getLastShipStoodOn() != null) {
+                if (dragInfo.isEntityBeingDraggedByAShip() && dragInfo.getLastShipStoodOn() != null) {
                     ServerShip ship = VSGameUtilsKt.getShipObjectWorld(level).getAllShips().getById(dragInfo.getLastShipStoodOn());
                     if (ship != null) {
 
@@ -90,8 +90,6 @@ public class MixinServerEntity {
 
                         return;
                     }
-
-
                 }
             }
         }

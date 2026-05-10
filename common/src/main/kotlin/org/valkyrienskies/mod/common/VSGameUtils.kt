@@ -6,6 +6,7 @@ import net.minecraft.client.multiplayer.ClientLevel
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Position
+import net.minecraft.core.SectionPos
 import net.minecraft.core.Vec3i
 import net.minecraft.resources.ResourceKey
 import net.minecraft.resources.ResourceLocation
@@ -39,11 +40,13 @@ import org.valkyrienskies.core.api.world.properties.DimensionId
 import org.valkyrienskies.core.internal.world.VsiPlayer
 import org.valkyrienskies.core.internal.world.VsiServerShipWorld
 import org.valkyrienskies.core.internal.world.VsiShipWorld
+import org.valkyrienskies.core.internal.world.chunks.VsiBlockType
 import org.valkyrienskies.core.internal.world.chunks.VsiTerrainUpdate
 import org.valkyrienskies.core.util.expand
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod.ASSEMBLE_BLACKLIST
 import org.valkyrienskies.mod.common.entity.ShipMountedToData
 import org.valkyrienskies.mod.common.entity.ShipMountedToDataProvider
+import org.valkyrienskies.mod.common.air_pockets.ShipWaterPocketManager
 import org.valkyrienskies.mod.common.util.DimensionIdProvider
 import org.valkyrienskies.mod.common.util.EntityDragger.serversidePosition
 import org.valkyrienskies.mod.common.util.EntityShipCollisionUtils
@@ -501,17 +504,44 @@ fun Level?.toWorldCoordinates(x: Double, y: Double, z: Double, dest: Vector3d = 
 fun Ship.toWorldCoordinates(x: Double, y: Double, z: Double, dest: Vector3d = Vector3d()): Vector3d =
     transform.shipToWorld.transformPosition(dest.set(x, y, z))
 
-fun LevelChunkSection.toDenseVoxelUpdate(chunkPos: Vector3ic): VsiTerrainUpdate {
+@JvmOverloads
+fun LevelChunkSection.toDenseVoxelUpdate(chunkPos: Vector3ic, level: Level? = null): VsiTerrainUpdate {
     val update = vsCore.newDenseTerrainUpdateBuilder(chunkPos.x(), chunkPos.y(), chunkPos.z())
     val info = BlockStateInfo.cache
+    val mutablePos = if (level == null) null else BlockPos.MutableBlockPos()
+    val baseX = SectionPos.sectionToBlockCoord(chunkPos.x())
+    val baseY = SectionPos.sectionToBlockCoord(chunkPos.y())
+    val baseZ = SectionPos.sectionToBlockCoord(chunkPos.z())
     for (x in 0..15) {
         for (y in 0..15) {
             for (z in 0..15) {
-                update.addBlock(x, y, z, info.get(getBlockState(x, y, z))?.second ?: vsCore.blockTypes.air)
+                val blockState = getBlockState(x, y, z)
+                val defaultBlockType = info.get(blockState)?.second ?: vsCore.blockTypes.air
+                update.addBlock(
+                    x, y, z,
+                    blockState.resolvePhysicsBlockTypeForAirPocket(
+                        level,
+                        mutablePos?.set(baseX + x, baseY + y, baseZ + z),
+                        defaultBlockType,
+                    )
+                )
             }
         }
     }
     return update.build()
+}
+
+private fun BlockState.resolvePhysicsBlockTypeForAirPocket(
+    level: Level?,
+    blockPos: BlockPos?,
+    defaultBlockType: VsiBlockType,
+): VsiBlockType {
+    if (level == null || blockPos == null || !isAir) return defaultBlockType
+    return if (ShipWaterPocketManager.isShipyardBlockPosInShipAirPocket(level, blockPos)) {
+        vsCore.blockTypes.displacementAir
+    } else {
+        defaultBlockType
+    }
 }
 
 /**

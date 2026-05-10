@@ -367,6 +367,7 @@ workflows:
             branches:
               only:
                 - /.*\/main/
+                - /.*\/playtest/
           context:
             - valkyrien_maven
             - github_maven

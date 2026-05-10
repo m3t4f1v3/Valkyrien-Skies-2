@@ -77,34 +77,18 @@ object VSGamePackets {
 
             if (entity.isControlledByLocalInstance || mc.player?.id == entity.id) return@registerClientHandler
 
+
+
             if (entity is IEntityDraggingInformationProvider) {
-                entity.draggingInformation.lastShipStoodOnServerWriteOnly = if (setMotion.shipID != -1L) {
+
+                entity.draggingInformation.lastShipStoodOn = if (setMotion.shipID != -1L) {
                     setMotion.shipID
                 } else {
                     null
                 }
-            }
-            val ship = level.shipObjectWorld.allShips.getById(setMotion.shipID)
-
-            if (ship == null) {
-                if (entity is IEntityDraggingInformationProvider) {
-                    entity.draggingInformation.lastShipStoodOn = null
-                }
-                return@registerClientHandler
-            }
-
-            if (entity is IEntityDraggingInformationProvider) {
-
-                if (entity.draggingInformation.lastShipStoodOn == null || entity.draggingInformation.lastShipStoodOn != setMotion.shipID) {
-                    entity.draggingInformation.lastShipStoodOn = if (setMotion.shipID != -1L) {
-                        setMotion.shipID
-                    } else {
-                        null
-                    }
-                    entity.draggingInformation.ignoreNextGroundStand = true
-                }
+                entity.draggingInformation.ignoreNextGroundStand = true
                 entity.draggingInformation.shouldImpulseMovement = false
-                entity.draggingInformation.ticksSinceLastServerPacket = 0
+                val ship = level.shipObjectWorld.allShips.getById(setMotion.shipID) ?: return@registerClientHandler
 
                 entity.draggingInformation.relativePositionOnShip = ship.worldToShip.transformPosition(
                     Vector3d(entity.x, entity.y, entity.z)
@@ -141,26 +125,15 @@ object VSGamePackets {
 
             if (entity.isControlledByLocalInstance || entity is LocalPlayer) return@registerClientHandler
 
+
             if (entity is IEntityDraggingInformationProvider) {
-                entity.draggingInformation.lastShipStoodOnServerWriteOnly = if (setRotation.shipID != -1L) {
+                entity.draggingInformation.lastShipStoodOn = if (setRotation.shipID != -1L) {
                     setRotation.shipID
                 } else {
                     null
                 }
-            }
-
-            val ship = level.shipObjectWorld.allShips.getById(setRotation.shipID)
-                ?: return@registerClientHandler
-
-            if (entity is IEntityDraggingInformationProvider) {
-                if (entity.draggingInformation.lastShipStoodOn == null || entity.draggingInformation.lastShipStoodOn != setRotation.shipID) {
-                    entity.draggingInformation.lastShipStoodOn = if (setRotation.shipID != -1L) {
-                        setRotation.shipID
-                    } else {
-                        null
-                    }
-                    entity.draggingInformation.ignoreNextGroundStand = true
-                }
+                val ship = level.shipObjectWorld.allShips.getById(setRotation.shipID) ?: return@registerClientHandler
+                entity.draggingInformation.ignoreNextGroundStand = true
                 entity.draggingInformation.relativeHeadYawOnShip = EntityLerper.yawToShip(ship, entity.yHeadRot.toDouble())
                 entity.draggingInformation.lerpHeadYawOnShip = setRotation.yaw
                 entity.draggingInformation.relativePitchOnShip = entity.xRot.toDouble()
@@ -207,12 +180,10 @@ object VSGamePackets {
                 ?: return@registerServerHandler
 
             if (player is IEntityDraggingInformationProvider) {
-                if (player.draggingInformation.lastShipStoodOn == null || player.draggingInformation.lastShipStoodOn != motion.shipID) {
-                    player.draggingInformation.lastShipStoodOn = if (motion.shipID != -1L) {
-                        motion.shipID
-                    } else {
-                        null
-                    }
+                player.draggingInformation.lastShipStoodOn = if (motion.shipID != -1L) {
+                    motion.shipID
+                } else {
+                    null
                 }
                 player.draggingInformation.serverRelativePlayerPosition = Vector3d(motion.x, motion.y, motion.z)
                 if (player.level() != null) {
@@ -237,14 +208,12 @@ object VSGamePackets {
             val entity = player.level().getEntity(motion.entityID) ?: return@registerServerHandler
 
             if (entity is IEntityDraggingInformationProvider) {
-                if (entity.draggingInformation.lastShipStoodOn == null || entity.draggingInformation.lastShipStoodOn != motion.shipID) {
-                    entity.draggingInformation.lastShipStoodOn = if (motion.shipID != -1L) {
-                        motion.shipID
-                    } else {
-                        null
-                    }
-                    entity.draggingInformation.ignoreNextGroundStand = true
+                entity.draggingInformation.lastShipStoodOn = if (motion.shipID != -1L) {
+                    motion.shipID
+                } else {
+                    null
                 }
+                entity.draggingInformation.ignoreNextGroundStand = true
 
                 entity.draggingInformation.relativePositionOnShip = Vector3d(motion.x, motion.y, motion.z)
                 entity.draggingInformation.relativeYawOnShip = motion.yRot
