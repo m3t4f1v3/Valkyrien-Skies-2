@@ -17,8 +17,6 @@ import org.valkyrienskies.mod.compat.VSRenderer;
  */
 public class ValkyrienCommonMixinConfigPlugin implements IMixinConfigPlugin {
 
-    private static final boolean PATH_FINDING_DEBUG =
-        "false".equals(System.getProperty("org.valkyrienskies.render_pathfinding"));
     private static VSRenderer vsRenderer = null;
 
     public static VSRenderer getVSRenderer() {
@@ -85,10 +83,6 @@ public class ValkyrienCommonMixinConfigPlugin implements IMixinConfigPlugin {
         if (mixinClassName.contains("org.valkyrienskies.mod.mixin.mod_compat.optifine")) {
             return renderer == VSRenderer.OPTIFINE;
         }
-        if (mixinClassName.contains("org.valkyrienskies.mod.mixin.feature.render_pathfinding")) {
-            return PATH_FINDING_DEBUG;
-        }
-
         if (mixinClassName.contains("org.valkyrienskies.mod.mixin.mod_compat.flywheel")) {
             // Only load this mixin if Flywheel v1 is present
             return LoadedMods.getFlywheel() == FlywheelVersion.V1;
