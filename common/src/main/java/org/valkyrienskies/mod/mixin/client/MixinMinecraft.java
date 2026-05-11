@@ -33,6 +33,7 @@ import org.valkyrienskies.mod.common.util.EntityDragger;
 import org.valkyrienskies.mod.compat.LoadedMods;
 import org.valkyrienskies.mod.compat.LoadedMods.FlywheelVersion;
 import org.valkyrienskies.mod.mixinducks.client.MinecraftDuck;
+import org.valkyrienskies.mod.mixinducks.feature.tickets.PlayerKnownShipsDuck;
 
 @Mixin(Minecraft.class)
 public abstract class MixinMinecraft
@@ -105,6 +106,10 @@ public abstract class MixinMinecraft
     @Shadow
     public abstract ClientPacketListener getConnection();
 
+    @Shadow
+    @Nullable
+    public LocalPlayer player;
+
     @Inject(
         method = "runTick",
         at = @At("HEAD")
@@ -133,6 +138,7 @@ public abstract class MixinMinecraft
             shipObjectWorld.tickNetworking(getConnection().getConnection().getRemoteAddress());
             shipObjectWorld.postTick();
             EntityDragger.INSTANCE.dragEntitiesWithShips(level.entitiesForRendering(), false);
+            if(player != null && level.isClientSide) ((PlayerKnownShipsDuck)player).vs_flushKnownShips();
         }
     }
 

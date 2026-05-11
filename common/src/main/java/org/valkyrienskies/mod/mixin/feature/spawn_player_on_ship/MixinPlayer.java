@@ -71,26 +71,12 @@ public abstract class MixinPlayer extends LivingEntity implements PlayerKnownShi
 
     @Unique
     private void vs_scheduleKnownShipsFlush() {
-        if (vs_flushScheduled) return;
         vs_flushScheduled = true;
-        // Flush at end of the current client tick by queuing on the client
-        // instance's executor. Reflection avoids loading net.minecraft.client.Minecraft
-        // from dedicated-server dists — vs_addKnownShip / vs_removeKnownShip
-        // already gate on level().isClientSide, so this path is only reached
-        // on the physical client.
-        try {
-            Class<?> mc = Class.forName("net.minecraft.client.Minecraft");
-            Object instance = mc.getMethod("getInstance").invoke(null);
-            mc.getMethod("execute", Runnable.class)
-                .invoke(instance, (Runnable) this::vs_flushKnownShips);
-        } catch (ReflectiveOperationException e) {
-            // Should never happen — this code only runs client-side.
-            throw new AssertionError("Client-only path hit without Minecraft class", e);
-        }
     }
 
     @Unique
-    private void vs_flushKnownShips() {
+    public void vs_flushKnownShips() {
+        if(!vs_flushScheduled) return;
         vs_flushScheduled = false;
         if (!vs_pendingAdds.isEmpty()) {
             long[] ids = vs_pendingAdds.toLongArray();
