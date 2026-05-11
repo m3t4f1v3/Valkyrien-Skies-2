@@ -32,7 +32,8 @@ public abstract class MixinLightningBolt {
     @ModifyReturnValue(method = "getStrikePosition", at = @At("RETURN"))
     private BlockPos vs2$strikePosInShipyard(BlockPos original) {
         final Ship ship = vs2$draggedShip();
-        return ship == null ? original : vs2$worldBlockToShipyard(original, ship);
+        if (ship == null) return original;
+        return vs2$worldBlockToShipyard(((LightningBolt) (Object) this).blockPosition().below(), ship);
     }
 
     @WrapOperation(method = "spawnFire", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/LightningBolt;blockPosition()Lnet/minecraft/core/BlockPos;"))
