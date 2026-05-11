@@ -2,6 +2,7 @@ package org.valkyrienskies.mod.mixin.feature.explosions;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import net.minecraft.core.BlockPos;
@@ -10,12 +11,12 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Explosion;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult.Type;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
+import org.joml.primitives.AABBd;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Mutable;
@@ -26,6 +27,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.valkyrienskies.core.api.ships.LoadedServerShip;
 import org.valkyrienskies.core.api.ships.ServerShip;
+import org.valkyrienskies.core.api.ships.Ship;
 import org.valkyrienskies.core.impl.config.VSCoreConfig;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod;
@@ -56,14 +58,69 @@ public abstract class MixinExplosion {
     @Final
     @Mutable
     private float radius;
+
     @Unique
-    private boolean isModifyingExplosion = false;
+    private List<Ship> vs2$intersectingShips = Collections.emptyList();
+    @Unique
+    private final Vector3d vs2$tmpShipPos = new Vector3d();
 
     @Shadow
     public abstract void explode();
 
+    @Inject(method = "explode", at = @At("HEAD"))
+    private void vs2$cacheIntersectingShips(final CallbackInfo ci) {
+        if (this.level == null || this.radius <= 0.0F) {
+            this.vs2$intersectingShips = Collections.emptyList();
+            return;
+        }
+        final AABBd aabb = new AABBd(
+            this.x - this.radius, this.y - this.radius, this.z - this.radius,
+            this.x + this.radius, this.y + this.radius, this.z + this.radius
+        );
+        final List<Ship> ships = new ArrayList<>();
+        for (final Ship ship : VSGameUtilsKt.getShipsIntersecting(this.level, aabb)) {
+            ships.add(ship);
+        }
+        this.vs2$intersectingShips = ships;
+    }
+
+    @WrapOperation(
+        method = "explode",
+        at = @At(
+            value = "INVOKE",
+            target = "Lnet/minecraft/core/BlockPos;containing(DDD)Lnet/minecraft/core/BlockPos;"
+        )
+    )
+    private BlockPos vs2$frameAwareBlockPos(final double wx, final double wy, final double wz,
+                                            final Operation<BlockPos> operation) {
+        for (int i = 0, n = this.vs2$intersectingShips.size(); i < n; i++) {
+            final Ship ship = this.vs2$intersectingShips.get(i);
+            if (!ship.getWorldAABB().containsPoint(wx, wy, wz)) {
+                continue;
+            }
+            this.vs2$tmpShipPos.set(wx, wy, wz);
+            ship.getWorldToShip().transformPosition(this.vs2$tmpShipPos);
+            final BlockPos shipBlockPos = BlockPos.containing(
+                this.vs2$tmpShipPos.x, this.vs2$tmpShipPos.y, this.vs2$tmpShipPos.z
+            );
+            if (!this.level.getBlockState(shipBlockPos).isAir()) {
+                return shipBlockPos;
+            }
+        }
+        return operation.call(wx, wy, wz);
+    }
+
+    @Inject(method = "explode", at = @At("TAIL"))
+    private void vs2$afterExplode(final CallbackInfo ci) {
+        try {
+            vs2$doExplodeForce();
+        } finally {
+            this.vs2$intersectingShips = Collections.emptyList();
+        }
+    }
+
     @Unique
-    private void doExplodeForce() {
+    private void vs2$doExplodeForce() {
         if (this.level.isClientSide) {
             return;
         }
@@ -119,33 +176,6 @@ public abstract class MixinExplosion {
         }
     }
 
-    @Inject(at = @At("TAIL"), method = "explode")
-    private void afterExplode(final CallbackInfo ci) {
-        if (isModifyingExplosion) {
-            doExplodeForce();
-            return;
-        }
-
-        isModifyingExplosion = true;
-
-        final double origX = this.x;
-        final double origY = this.y;
-        final double origZ = this.z;
-
-        VSGameUtilsKt.transformToNearbyShipsAndWorld(this.level, this.x, this.y, this.z, this.radius, (x, y, z) -> {
-            this.x = x;
-            this.y = y;
-            this.z = z;
-            this.explode();
-        });
-
-        this.x = origX;
-        this.y = origY;
-        this.z = origZ;
-
-        isModifyingExplosion = false;
-    }
-
     @WrapOperation(
         method = "getSeenPercent",
         at = @At(
@@ -168,23 +198,4 @@ public abstract class MixinExplosion {
         }
         return operation.call(from, to, blockClip, fluidClip, source);
     }
-
-    // Don't raytrace the shipyard
-    // getEntities already gives shipyard entities
-    @WrapOperation(
-        method = "explode",
-        at = @At(
-            value = "INVOKE",
-            target = "Lnet/minecraft/world/level/Level;getEntities(Lnet/minecraft/world/entity/Entity;Lnet/minecraft/world/phys/AABB;)Ljava/util/List;"
-        )
-    )
-    private List<Entity> noRayTrace(final Level instance, final Entity entity, final AABB aabb,
-        final Operation<List<Entity>> getEntities) {
-        if (isModifyingExplosion) {
-            return Collections.emptyList();
-        } else {
-            return getEntities.call(instance, entity, aabb);
-        }
-    }
-
 }
