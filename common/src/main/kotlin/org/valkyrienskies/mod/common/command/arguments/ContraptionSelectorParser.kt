@@ -18,11 +18,13 @@ import org.valkyrienskies.core.api.ships.ServerShip
 import org.valkyrienskies.core.api.ships.Ship
 import org.valkyrienskies.mod.api.toJOML
 import org.valkyrienskies.mod.common.command.arguments.ContraptionSelectorOptions.suggestOptionValue
+import org.valkyrienskies.mod.common.command.shipWorld
 import java.util.concurrent.CompletableFuture
 import java.util.function.BiFunction
 import java.util.function.Consumer
 import java.util.function.Function
 import java.util.function.Predicate
+import kotlin.text.startsWith
 
 class ContraptionSelectorParser(
     private val source: SharedSuggestionProvider?,
@@ -236,12 +238,26 @@ class ContraptionSelectorParser(
     }
 
     @Throws(CommandSyntaxException::class)
-    fun parse(pBuilder: SuggestionsBuilder?): ContraptionSelector {
+    fun parse(pBuilder: SuggestionsBuilder?, selectorOnly: Boolean): ContraptionSelector {
         this.startingCursorIndex = this.reader.cursor
-        suggest { builder, provider -> builder.suggest("@v") }
+        suggest { builder, provider ->
+            builder.suggest("@v")
+            if (!selectorOnly) {
+                source?.let { s ->
+                    s.shipWorld.allShips
+                    .mapNotNull { it.slug }
+                    .filter { it.startsWith(builder.remaining) }
+                    .forEach { builder.suggest(it) }
+                }
+            }
+        }
         if (this.reader.canRead() && this.reader.peek() == '@') {
             this.reader.skip()
             this.parseSelector()
+        }  else if (!selectorOnly) {
+            // Reset cursor
+            reader.cursor = startingCursorIndex
+            slug = reader.readUnquotedString()
         }
 
         this.finalizePredicates()

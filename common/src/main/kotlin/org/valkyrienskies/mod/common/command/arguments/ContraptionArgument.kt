@@ -19,7 +19,7 @@ class ContraptionArgument private constructor(val selectorOnly: Boolean) : Argum
     @Throws(CommandSyntaxException::class)
     override fun parse(pReader: StringReader): ContraptionSelector {
         val entityselectorparser = ContraptionSelectorParser(null, pReader)
-        return entityselectorparser.parse(null)
+        return entityselectorparser.parse(null, selectorOnly)
     }
 
     /**
@@ -40,7 +40,7 @@ class ContraptionArgument private constructor(val selectorOnly: Boolean) : Argum
         val parser = ContraptionSelectorParser(pContext.source as? SharedSuggestionProvider, reader)
 
         try {
-            parser.parse(pBuilder)
+            parser.parse(pBuilder, selectorOnly)
         } catch (_: CommandSyntaxException) {
 
         }
