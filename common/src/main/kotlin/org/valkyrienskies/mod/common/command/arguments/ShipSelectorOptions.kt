@@ -13,8 +13,9 @@ import net.minecraft.util.Mth
 import net.minecraft.world.phys.Vec3
 import org.valkyrienskies.core.api.ships.Ship
 import org.valkyrienskies.mod.common.command.shipWorld
-import java.util.function.Consumer
 import java.util.function.Predicate
+
+typealias Modifier = (ShipSelectorParser) -> Unit
 
 object ContraptionSelectorOptions {
     private val OPTIONS: MutableMap<String?, Option?> = Maps.newHashMap<String?, Option?>()
@@ -31,8 +32,6 @@ object ContraptionSelectorOptions {
     val ERROR_RANGE_NEGATIVE: SimpleCommandExceptionType = SimpleCommandExceptionType(
         Component.translatable("industriacore.argument.contraption.options.distance.negative")
     )
-    val ERROR_SIZE_NEGATIVE: SimpleCommandExceptionType =
-        SimpleCommandExceptionType(Component.translatable("industriacore.argument.contraption.options.size.negative"))
     val ERROR_LIMIT_TOO_SMALL: SimpleCommandExceptionType =
         SimpleCommandExceptionType(Component.translatable("industriacore.argument.contraption.options.limit.toosmall"))
     val ERROR_SORT_UNKNOWN: DynamicCommandExceptionType = DynamicCommandExceptionType { obj: Any? ->
@@ -42,7 +41,7 @@ object ContraptionSelectorOptions {
     }
 
     fun register(
-        pId: String?, pHandler: Modifier, pPredicate: Predicate<ContraptionSelectorParser>, pTooltip: Component? = null, autocomplete: ((SharedSuggestionProvider, SuggestionsBuilder) -> Unit)? = null
+        pId: String?, pHandler: Modifier, pPredicate: Predicate<ShipSelectorParser>, pTooltip: Component? = null, autocomplete: ((SharedSuggestionProvider?, SuggestionsBuilder) -> Unit)? = null
     ) {
         OPTIONS[pId] = Option(pHandler, pPredicate, description =  pTooltip, autocomplete = autocomplete)
     }
@@ -50,7 +49,7 @@ object ContraptionSelectorOptions {
     fun bootStrap() {
         if (OPTIONS.isEmpty()) {
             register(
-                "slug", { parser: ContraptionSelectorParser ->
+                "slug", { parser: ShipSelectorParser ->
                     val i = parser.reader.cursor
                     val flag = parser.shouldInvertValue()
                     val s = parser.reader.readString()
@@ -65,132 +64,135 @@ object ContraptionSelectorOptions {
                             parser.slug = s
                         }
                     }
-                }, { parser: ContraptionSelectorParser -> (parser.slug == null) || (parser.notSlug == null) },
+                }, { parser: ShipSelectorParser -> (parser.slug == null) || (parser.notSlug == null) },
                 Component.translatable("industriacore.argument.contraption.options.name.description"),
                 { parser, builder ->
-                    (parser as SharedSuggestionProvider).shipWorld.allShips
-                        .mapNotNull { it.slug }
-                        .filter { it.startsWith(builder.remaining) }
-                        .forEach { builder.suggest(it) }
+                    parser?.let { p ->
+                        p.shipWorld.allShips
+                            .mapNotNull { it.slug }
+                            .filter { it.startsWith(builder.remaining) }
+                            .forEach { builder.suggest(it) }
+                    }
                 }
             )
             register(
-                "id", { parser: ContraptionSelectorParser ->
+                "id", { parser: ShipSelectorParser ->
                     parser.id = parser.reader.readLong()
-                }, { parser: ContraptionSelectorParser -> parser.id == null },
+                }, { parser: ShipSelectorParser -> parser.id == null },
                 Component.translatable("industriacore.argument.contraption.options.name.description"),
                 { parser, builder ->
-                    (parser as SharedSuggestionProvider).shipWorld.allShips
+                    parser?.let { p ->
+                        p.shipWorld.allShips
                         .mapNotNull { it.id.toString() }
                         .filter { it.startsWith(builder.remaining) }
-                        .forEach { builder.suggest(it) }
+                        .forEach { builder.suggest(it) } }
                 }
             )
             register(
-                "distance", { parser: ContraptionSelectorParser ->
+                "distance", { parser: ShipSelectorParser ->
                     val i = parser.reader.cursor
                     val `minmaxbounds$doubles` = MinMaxBounds.Doubles.fromReader(parser.reader)
                     if ((`minmaxbounds$doubles`.getMin() == null || !(`minmaxbounds$doubles`.getMin()!! < 0.0)) && (`minmaxbounds$doubles`.getMax() == null || !(`minmaxbounds$doubles`.getMax()!! < 0.0))) {
                         parser.distance = `minmaxbounds$doubles`
-                        parser.setWorldLimited()
+                        parser.needsSpecificLevel = true
                     } else {
                         parser.reader.cursor = i
                         throw ERROR_RANGE_NEGATIVE.createWithContext(parser.reader)
                     }
-                }, { parser: ContraptionSelectorParser -> parser.distance.isAny },
+                }, { parser: ShipSelectorParser -> parser.distance.isAny },
                 Component.translatable("industriacore.argument.contraption.options.distance.description")
             )
             register(
-                "x", { parser: ContraptionSelectorParser ->
-                    parser.setWorldLimited()
+                "x", { parser: ShipSelectorParser ->
+                    parser.needsSpecificLevel = true
                     parser.x = parser.reader.readDouble()
-                }, { parser: ContraptionSelectorParser -> parser.x == null },
+                }, { parser: ShipSelectorParser -> parser.x == null },
                 Component.translatable("industriacore.argument.contraption.options.x.description")
             )
             register(
-                "y", { parser: ContraptionSelectorParser ->
-                    parser.setWorldLimited()
+                "y", { parser: ShipSelectorParser ->
+                    parser.needsSpecificLevel = true
                     parser.y = parser.reader.readDouble()
-                }, { parser: ContraptionSelectorParser -> parser.y == null },
+                }, { parser: ShipSelectorParser -> parser.y == null },
                 Component.translatable("industriacore.argument.contraption.options.y.description")
             )
             register(
-                "z", { parser: ContraptionSelectorParser ->
-                    parser.setWorldLimited()
+                "z", { parser: ShipSelectorParser ->
+                    parser.needsSpecificLevel = true
                     parser.z = parser.reader.readDouble()
-                }, { parser: ContraptionSelectorParser -> parser.z == null },
+                }, { parser: ShipSelectorParser -> parser.z == null },
                 Component.translatable("industriacore.argument.contraption.options.z.description")
             )
             register(
-                "dx", { parser: ContraptionSelectorParser ->
-                    parser.setWorldLimited()
+                "dx", { parser: ShipSelectorParser ->
+                    parser.needsSpecificLevel = true
                     parser.deltaX = parser.reader.readDouble()
-                }, { parser: ContraptionSelectorParser -> parser.deltaX == null },
+                }, { parser: ShipSelectorParser -> parser.deltaX == null },
                 Component.translatable("industriacore.argument.contraption.options.dx.description")
             )
             register(
-                "dy", { parser: ContraptionSelectorParser ->
-                    parser.setWorldLimited()
+                "dy", { parser: ShipSelectorParser ->
+                    parser.needsSpecificLevel = true
                     parser.deltaY = parser.reader.readDouble()
-                }, { parser: ContraptionSelectorParser -> parser.deltaY == null },
+                }, { parser: ShipSelectorParser -> parser.deltaY == null },
                 Component.translatable("industriacore.argument.contraption.options.dy.description")
             )
             register(
-                "dz", { parser: ContraptionSelectorParser ->
-                    parser.setWorldLimited()
+                "dz", { parser: ShipSelectorParser ->
+                    parser.needsSpecificLevel = true
                     parser.deltaZ = parser.reader.readDouble()
-                }, { parser: ContraptionSelectorParser -> parser.deltaZ == null },
+                }, { parser: ShipSelectorParser -> parser.deltaZ == null },
                 Component.translatable("industriacore.argument.contraption.options.dz.description")
             )
             register(
-                "x_rotation", { parser: ContraptionSelectorParser ->
+                "x_rotation", { parser: ShipSelectorParser ->
                     parser.rotX = WrappedMinMaxBounds.fromReader(
                         parser.reader, true
                     ) { f: Float -> Mth.wrapDegrees(f) }
-                }, { parser: ContraptionSelectorParser -> parser.rotX === WrappedMinMaxBounds.ANY },
+                }, { parser: ShipSelectorParser -> parser.rotX === WrappedMinMaxBounds.ANY },
                 Component.translatable("industriacore.argument.contraption.options.x_rotation.description")
             )
             register(
-                "y_rotation", { parser: ContraptionSelectorParser ->
+                "y_rotation", { parser: ShipSelectorParser ->
                     parser.rotY = WrappedMinMaxBounds.fromReader(
                         parser.reader, true
                     ) { f: Float -> Mth.wrapDegrees(f) }
-                }, { parser: ContraptionSelectorParser -> parser.rotY === WrappedMinMaxBounds.ANY },
+                }, { parser: ShipSelectorParser -> parser.rotY === WrappedMinMaxBounds.ANY },
                 Component.translatable("industriacore.argument.contraption.options.y_rotation.description")
             )
             register(
-                "z_rotation", { parser: ContraptionSelectorParser ->
+                "z_rotation", { parser: ShipSelectorParser ->
                     parser.rotZ = WrappedMinMaxBounds.fromReader(
                         parser.reader, true
                     ) { f: Float -> Mth.wrapDegrees(f) }
-                }, { parser: ContraptionSelectorParser -> parser.rotZ === WrappedMinMaxBounds.ANY },
+                }, { parser: ShipSelectorParser -> parser.rotZ === WrappedMinMaxBounds.ANY },
                 Component.translatable("industriacore.argument.contraption.options.z_rotation.description")
             )
 
             register(
-                "x_velocity", { parser: ContraptionSelectorParser ->
+                "x_velocity", { parser: ShipSelectorParser ->
                     val `minmaxbounds$doubles` = MinMaxBounds.Doubles.fromReader(parser.reader)
                     parser.velocityX = `minmaxbounds$doubles`
-                }, { parser: ContraptionSelectorParser -> parser.velocityX === MinMaxBounds.Doubles.ANY },
+                }, { parser: ShipSelectorParser -> parser.velocityX === MinMaxBounds.Doubles.ANY },
                 Component.translatable("industriacore.argument.contraption.options.x_velocity.description")
             )
             register(
-                "y_velocity", { parser: ContraptionSelectorParser ->
+                "y_velocity", { parser: ShipSelectorParser ->
                     val `minmaxbounds$doubles` = MinMaxBounds.Doubles.fromReader(parser.reader)
                     parser.velocityY = `minmaxbounds$doubles`
-                }, { parser: ContraptionSelectorParser -> parser.velocityY === MinMaxBounds.Doubles.ANY },
+                }, { parser: ShipSelectorParser -> parser.velocityY === MinMaxBounds.Doubles.ANY },
                 Component.translatable("industriacore.argument.contraption.options.y_velocity.description")
             )
             register(
-                "z_velocity", { parser: ContraptionSelectorParser ->
+                "z_velocity", { parser: ShipSelectorParser ->
                     val `minmaxbounds$doubles` = MinMaxBounds.Doubles.fromReader(parser.reader)
                     parser.velocityZ = `minmaxbounds$doubles`
-                }, { parser: ContraptionSelectorParser -> parser.velocityZ === MinMaxBounds.Doubles.ANY },
+                }, { parser: ShipSelectorParser -> parser.velocityZ === MinMaxBounds.Doubles.ANY },
                 Component.translatable("industriacore.argument.contraption.options.z_velocity.description")
             )
 
             register(
-                "velocity", { parser: ContraptionSelectorParser ->
+                "velocity", { parser: ShipSelectorParser ->
                     val i = parser.reader.cursor
                     val `minmaxbounds$doubles` = MinMaxBounds.Doubles.fromReader(parser.reader)
                     if ((`minmaxbounds$doubles`.getMin() == null || (`minmaxbounds$doubles`.getMin()!! >= 0.0)) && (`minmaxbounds$doubles`.getMax() == null || (`minmaxbounds$doubles`.getMax()!! >= 0.0))) {
@@ -199,34 +201,34 @@ object ContraptionSelectorOptions {
                         parser.reader.cursor = i
                         throw ERROR_RANGE_NEGATIVE.createWithContext(parser.reader)
                     }
-                }, { parser: ContraptionSelectorParser -> parser.velocity === MinMaxBounds.Doubles.ANY },
+                }, { parser: ShipSelectorParser -> parser.velocity === MinMaxBounds.Doubles.ANY },
                 Component.translatable("industriacore.argument.contraption.options.velocity.description")
             )
 
             register(
-                "x_omega", { parser: ContraptionSelectorParser ->
+                "x_omega", { parser: ShipSelectorParser ->
                     val `minmaxbounds$doubles` = MinMaxBounds.Doubles.fromReader(parser.reader)
                     parser.omegaX = `minmaxbounds$doubles`
-                }, { parser: ContraptionSelectorParser -> parser.omegaX === MinMaxBounds.Doubles.ANY },
+                }, { parser: ShipSelectorParser -> parser.omegaX === MinMaxBounds.Doubles.ANY },
                 Component.translatable("industriacore.argument.contraption.options.x_omega.description")
             )
             register(
-                "y_omega", { parser: ContraptionSelectorParser ->
+                "y_omega", { parser: ShipSelectorParser ->
                     val `minmaxbounds$doubles` = MinMaxBounds.Doubles.fromReader(parser.reader)
                     parser.omegaY = `minmaxbounds$doubles`
-                }, { parser: ContraptionSelectorParser -> parser.omegaY === MinMaxBounds.Doubles.ANY },
+                }, { parser: ShipSelectorParser -> parser.omegaY === MinMaxBounds.Doubles.ANY },
                 Component.translatable("industriacore.argument.contraption.options.y_omega.description")
             )
             register(
-                "z_omega", { parser: ContraptionSelectorParser ->
+                "z_omega", { parser: ShipSelectorParser ->
                     val `minmaxbounds$doubles` = MinMaxBounds.Doubles.fromReader(parser.reader)
                     parser.omegaZ = `minmaxbounds$doubles`
-                }, { parser: ContraptionSelectorParser -> parser.omegaZ === MinMaxBounds.Doubles.ANY },
+                }, { parser: ShipSelectorParser -> parser.omegaZ === MinMaxBounds.Doubles.ANY },
                 Component.translatable("industriacore.argument.contraption.options.z_omega.description")
             )
 
             register(
-                "omega", { parser: ContraptionSelectorParser ->
+                "omega", { parser: ShipSelectorParser ->
                     val i = parser.reader.cursor
                     val `minmaxbounds$doubles` = MinMaxBounds.Doubles.fromReader(parser.reader)
                     if ((`minmaxbounds$doubles`.getMin() == null || (`minmaxbounds$doubles`.getMin()!! >= 0.0)) && (`minmaxbounds$doubles`.getMax() == null || (`minmaxbounds$doubles`.getMax()!! >= 0.0))) {
@@ -235,12 +237,12 @@ object ContraptionSelectorOptions {
                         parser.reader.cursor = i
                         throw ERROR_RANGE_NEGATIVE.createWithContext(parser.reader)
                     }
-                }, { parser: ContraptionSelectorParser -> parser.omega === MinMaxBounds.Doubles.ANY },
+                }, { parser: ShipSelectorParser -> parser.omega === MinMaxBounds.Doubles.ANY },
                 Component.translatable("industriacore.argument.contraption.options.omega.description")
             )
 
             register(
-                "size", { parser: ContraptionSelectorParser ->
+                "size", { parser: ShipSelectorParser ->
                     val i = parser.reader.cursor
                     val `minmaxbounds$ints` = MinMaxBounds.Doubles.fromReader(parser.reader)
                     if ((`minmaxbounds$ints`.getMin() == null || (`minmaxbounds$ints`.getMin()!! >= 0)) && (`minmaxbounds$ints`.getMax() == null || (`minmaxbounds$ints`.getMax()!! >= 0))) {
@@ -249,53 +251,52 @@ object ContraptionSelectorOptions {
                         parser.reader.cursor = i
                         throw ERROR_RANGE_NEGATIVE.createWithContext(parser.reader)
                     }
-                }, { parser: ContraptionSelectorParser -> parser.size === MinMaxBounds.Doubles.ANY },
+                }, { parser: ShipSelectorParser -> parser.size === MinMaxBounds.Doubles.ANY },
                 Component.translatable("industriacore.argument.contraption.options.size.description")
             )
 
             register(
-                "static", { parser: ContraptionSelectorParser ->
+                "static", { parser: ShipSelectorParser ->
                     val isStatic = parser.reader.readBoolean()
 
                     parser.isStatic = isStatic
-                }, { parser: ContraptionSelectorParser -> parser.isStatic != null },
+                }, { parser: ShipSelectorParser -> parser.isStatic == null },
                 Component.translatable("industriacore.argument.contraption.options.static.description")
             )
 
             register(
-                "mass", { parser: ContraptionSelectorParser ->
+                "mass", { parser: ShipSelectorParser ->
                     val `minmaxbounds$doubles` = MinMaxBounds.Doubles.fromReader(parser.reader)
                     parser.mass = `minmaxbounds$doubles`
-                }, { parser: ContraptionSelectorParser -> parser.mass === MinMaxBounds.Doubles.ANY },
+                }, { parser: ShipSelectorParser -> parser.mass === MinMaxBounds.Doubles.ANY },
                 Component.translatable("industriacore.argument.contraption.options.mass.description")
             )
 
 
             register(
-                "limit", { parser: ContraptionSelectorParser ->
+                "limit", { parser: ShipSelectorParser ->
                     val i = parser.reader.cursor
                     val j = parser.reader.readInt()
                     if (j < 1) {
                         parser.reader.cursor = i
                         throw ERROR_LIMIT_TOO_SMALL.createWithContext(parser.reader)
                     } else {
-                        parser.setMaxResults(j)
-                        parser.hasAmountLimit = true
+                        parser.amountLimit = j
                     }
                 },
-                { parser: ContraptionSelectorParser -> !parser.hasAmountLimit },
+                { parser: ShipSelectorParser -> parser.amountLimit == 0 },
                 Component.translatable("industriacore.argument.contraption.options.limit.description")
             )
             register(
-                "sort", { parser: ContraptionSelectorParser ->
+                "sort", { parser: ShipSelectorParser ->
                     val i = parser.reader.cursor
                     val s = parser.reader.readUnquotedString()
 
                     val biconsumer: (Vec3, Sequence<Ship>) -> Sequence<Ship>
                     when (s) {
-                        "nearest" -> biconsumer = ContraptionSelectorParser.ORDER_NEAREST
-                        "furthest" -> biconsumer = ContraptionSelectorParser.ORDER_FURTHEST
-                        "random" -> biconsumer = ContraptionSelectorParser.ORDER_RANDOM
+                        "nearest" -> biconsumer = ShipSelectorParser.ORDER_NEAREST
+                        "furthest" -> biconsumer = ShipSelectorParser.ORDER_FURTHEST
+                        "random" -> biconsumer = ShipSelectorParser.ORDER_RANDOM
                         else -> {
                             parser.reader.cursor = i
                             throw ERROR_SORT_UNKNOWN.createWithContext(parser.reader, s)
@@ -304,19 +305,19 @@ object ContraptionSelectorOptions {
 
                     parser.customSort = biconsumer
                 },
-                { parser: ContraptionSelectorParser -> parser.customSort == ContraptionSelector.ORDER_ARBITRARY },
+                { parser: ShipSelectorParser -> parser.customSort == ShipSelector.ORDER_ARBITRARY },
                 Component.translatable("industriacore.argument.contraption.options.sort.description"),
                 { provider, builder ->
-                    SharedSuggestionProvider.suggest(
-                        mutableListOf("nearest", "furthest", "random"), builder
-                    )
+                    builder.suggest("nearest")
+                    builder.suggest("furthest")
+                    builder.suggest("random")
                 }
             )
         }
     }
 
     @Throws(CommandSyntaxException::class)
-    fun get(pParser: ContraptionSelectorParser, pId: String?, pCursor: Int): Modifier {
+    fun get(pParser: ShipSelectorParser, pId: String?, pCursor: Int): Modifier {
         val `entityselectoroptions$option` = OPTIONS[pId]
         if (`entityselectoroptions$option` != null) {
             if (`entityselectoroptions$option`.canUse.test(pParser)) {
@@ -333,7 +334,7 @@ object ContraptionSelectorOptions {
     /**
      * Suggests the names for selector options, e.g. slug=, id=, etc
      */
-    fun suggestNames(pParser: ContraptionSelectorParser, pBuilder: SuggestionsBuilder) {
+    fun suggestNames(pParser: ShipSelectorParser, pBuilder: SuggestionsBuilder) {
         val s = pBuilder.remaining.lowercase()
 
         for (entry in OPTIONS.entries) {
@@ -347,7 +348,7 @@ object ContraptionSelectorOptions {
      * Suggests a value for an option if that option registered with an autocomplete provider.
      * For example, if the user has typed slug=, this function will suggest the actual slugs.
      */
-    fun suggestOptionValue(provider: SharedSuggestionProvider, pBuilder: SuggestionsBuilder): SuggestionsBuilder? {
+    fun suggestOptionValue(provider: SharedSuggestionProvider?, pBuilder: SuggestionsBuilder): SuggestionsBuilder? {
         for (entry in OPTIONS.entries) {
             val valueAutocomplete = entry.value!!.autocomplete ?: continue
             val split = pBuilder.input.lowercase().split("=")
@@ -364,13 +365,20 @@ object ContraptionSelectorOptions {
         return null
     }
 
-    fun interface Modifier {
+    /*fun interface Modifier {
         @Throws(CommandSyntaxException::class)
         fun handle(pParser: ContraptionSelectorParser)
-    }
+    }*/
 
+    /**
+     * Represents a ship selector argument
+     * @param modifier A lambda for reading/parsing the current command state and changing the selector values for this option
+     * @param canUse A predicate to run to see if this option is available to be used. Usually used to prevent the user from specifying the same option twice.
+     * @param description An optional component to show as a tooltip/description when hovering over the autocomplete option
+     * @param autocomplete An optional lambda to have autocomplete for this options value, aka for suggesting nearby ship slugs.
+     */
     @JvmRecord
     internal data class Option(
-        val modifier: Modifier, val canUse: Predicate<ContraptionSelectorParser>, val description: Component? = null, val autocomplete: ((SharedSuggestionProvider, SuggestionsBuilder) -> Unit)? = null
+        val modifier: Modifier, val canUse: Predicate<ShipSelectorParser>, val description: Component? = null, val autocomplete: ((SharedSuggestionProvider?, SuggestionsBuilder) -> Unit)? = null
     )
 }

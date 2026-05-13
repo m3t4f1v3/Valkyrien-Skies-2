@@ -7,7 +7,6 @@ import net.minecraft.commands.Commands.argument
 import net.minecraft.commands.Commands.literal
 import net.minecraft.network.chat.Component.translatable
 import org.valkyrienskies.core.api.ships.ServerShip
-import org.valkyrienskies.mod.common.command.arguments.ContraptionArgument
 import org.valkyrienskies.mod.common.command.arguments.ShipArgument
 import org.valkyrienskies.mod.common.config.VSGameConfig
 import kotlin.collections.forEach
@@ -20,9 +19,9 @@ object StaticCommand {
         vs.then(
             literal("set-static")
                 .requires{ it.hasPermission(VSGameConfig.SERVER.Commands.setStaticShipCommandPerms)}.then(
-                    argument("ships", ContraptionArgument.contraptions()).then(
+                    argument("ships", ShipArgument.ships()).then(
                         argument("is-static", BoolArgumentType.bool()).executes {
-                            val r = ContraptionArgument.getContraptions(it, "ships").toList() as List<ServerShip>
+                            val r = ShipArgument.getShips(it, "ships").toList() as List<ServerShip>
                             val isStatic = BoolArgumentType.getBool(it, "is-static")
                             r.forEach { ship ->
                                 ship.isStatic = isStatic
@@ -37,7 +36,7 @@ object StaticCommand {
                             r.size
                         })
                         .executes {
-                            val r = ContraptionArgument.getContraptions(it, "ships").toList() as List<ServerShip>
+                            val r = ShipArgument.getShips(it, "ships").toList() as List<ServerShip>
                             r.forEach { ship ->
                                 ship.isStatic = !ship.isStatic
                             }

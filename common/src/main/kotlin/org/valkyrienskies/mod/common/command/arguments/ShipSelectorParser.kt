@@ -20,20 +20,17 @@ import org.valkyrienskies.mod.api.toJOML
 import org.valkyrienskies.mod.common.command.arguments.ContraptionSelectorOptions.suggestOptionValue
 import org.valkyrienskies.mod.common.command.shipWorld
 import java.util.concurrent.CompletableFuture
-import java.util.function.BiFunction
-import java.util.function.Consumer
 import java.util.function.Function
 import java.util.function.Predicate
 import kotlin.text.startsWith
 
-class ContraptionSelectorParser(
+class ShipSelectorParser(
     private val source: SharedSuggestionProvider?,
     val reader: StringReader
 ) {
     var suggestionProvider: (SuggestionsBuilder) -> CompletableFuture<Suggestions> = { it.buildFuture() }
 
     var amountLimit = 0
-    var hasAmountLimit: Boolean = false
 
     var needsSpecificLevel = false
 
@@ -63,7 +60,7 @@ class ContraptionSelectorParser(
     var rotZ: WrappedMinMaxBounds = WrappedMinMaxBounds.ANY
     private var predicate = Predicate { _: ServerShip -> true }
 
-    var customSort: (Vec3, Sequence<Ship>) -> Sequence<Ship> = ContraptionSelector.ORDER_ARBITRARY
+    var customSort: (Vec3, Sequence<Ship>) -> Sequence<Ship> = ShipSelector.ORDER_ARBITRARY
 
     var slug: String? = null
     var notSlug: String? = null
@@ -82,21 +79,11 @@ class ContraptionSelectorParser(
         }
     }
 
-    fun setWorldLimited() {
-        this.needsSpecificLevel = true
-    }
-
-
-    fun setMaxResults(pMaxResults: Int) {
-        this.amountLimit = pMaxResults
-    }
-
-
     private fun suggest(block: (SuggestionsBuilder, SharedSuggestionProvider) -> Unit) {
         if (source != null) suggestionProvider = { block(it, source); it.buildFuture() }
     }
 
-    val selector: ContraptionSelector
+    val selector: ShipSelector
         get() {
             val aabb: AABB?
             if (this.deltaX == null && this.deltaY == null && this.deltaZ == null) {
@@ -125,7 +112,7 @@ class ContraptionSelectorParser(
                 }
             }
 
-            return ContraptionSelector(
+            return ShipSelector(
                 this.amountLimit,
                 this.needsSpecificLevel,
                 this.predicate,
@@ -152,6 +139,20 @@ class ContraptionSelectorParser(
         return AABB(d0, d1, d2, d3, d4, d5)
     }
 
+    /**
+     * Add all the required predicates to [predicate] for our selector values (if present):
+     * - [slug]
+     * - [notSlug]
+     * - [id]
+     * - [rotX], [rotY], [rotZ]
+     * - [velocity], [velocityX], [velocityY], [velocityZ]
+     * - [omega], [omegaX], [omegaY], [omegaZ]
+     *
+     * The predicates which require a position ([customSort], [distance], [x], [y], [z], [deltaX], [deltaY], and [deltaZ])
+     * are all handled in [ShipSelector.addPositionalPredicates]
+     *
+     * And the predicates which require a level ([needsSpecificLevel]) are handled in [ShipSelector.select]
+     */
     fun finalizePredicates() {
         if (this.slug != null) {
             this.predicate = this.predicate.and { ship ->
@@ -190,34 +191,34 @@ class ContraptionSelectorParser(
         }
 
         if (this.velocity !== MinMaxBounds.Doubles.ANY) {
-            this.predicate = this.predicate.and(Predicate { contraption: Ship ->
+            this.predicate = this.predicate.and(Predicate { ship: Ship ->
                 this.velocity.matches(
-                    contraption.velocity.length()
+                    ship.velocity.length()
                 )
             })
         }
 
         if (this.velocityX !== MinMaxBounds.Doubles.ANY || this.velocityY !== MinMaxBounds.Doubles.ANY || this.velocityZ !== MinMaxBounds.Doubles.ANY) {
-            this.predicate = this.predicate.and(Predicate { contraption: Ship ->
-                velocityX.matches(contraption.velocity.x()) &&
-                    velocityY.matches(contraption.velocity.y()) &&
-                    velocityZ.matches(contraption.velocity.z())
+            this.predicate = this.predicate.and(Predicate { ship: Ship ->
+                velocityX.matches(ship.velocity.x()) &&
+                    velocityY.matches(ship.velocity.y()) &&
+                    velocityZ.matches(ship.velocity.z())
             })
         }
 
         if (this.omega !== MinMaxBounds.Doubles.ANY) {
-            this.predicate = this.predicate.and(Predicate { contraption: Ship ->
+            this.predicate = this.predicate.and(Predicate { ship: Ship ->
                 this.omega.matches(
-                    Math.toDegrees(contraption.angularVelocity.length())
+                    Math.toDegrees(ship.angularVelocity.length())
                 )
             })
         }
 
         if (this.omegaX !== MinMaxBounds.Doubles.ANY || this.omegaY !== MinMaxBounds.Doubles.ANY || this.omegaZ !== MinMaxBounds.Doubles.ANY) {
-            this.predicate = this.predicate.and(Predicate { contraption: Ship ->
-                omegaX.matches(contraption.angularVelocity.x() / (2.0 * Math.PI)) &&
-                    omegaY.matches(contraption.angularVelocity.y() / (2.0 * Math.PI)) &&
-                    omegaZ.matches(contraption.angularVelocity.z() / (2.0 * Math.PI))
+            this.predicate = this.predicate.and(Predicate { ship: Ship ->
+                omegaX.matches(ship.angularVelocity.x() / (2.0 * Math.PI)) &&
+                    omegaY.matches(ship.angularVelocity.y() / (2.0 * Math.PI)) &&
+                    omegaZ.matches(ship.angularVelocity.z() / (2.0 * Math.PI))
             })
         }
     }
@@ -227,8 +228,8 @@ class ContraptionSelectorParser(
     ): Predicate<Ship> {
         val d0 = Mth.wrapDegrees((pAngleBounds.min ?: 0.0f)).toDouble()
         val d1 = Mth.wrapDegrees((pAngleBounds.max ?: 359.0f)).toDouble()
-        return Predicate { contraption: Ship ->
-            val d2 = Mth.wrapDegrees(pAngleFunction(contraption))
+        return Predicate { ship: Ship ->
+            val d2 = Mth.wrapDegrees(pAngleFunction(ship))
             if (d0 > d1) {
                 return@Predicate d2 >= d0 || d2 <= d1
             } else {
@@ -237,8 +238,11 @@ class ContraptionSelectorParser(
         }
     }
 
+    /**
+     * Suggests the `@v` or nearby slugs. Calls [parseSelector] if `@` is already typed
+     */
     @Throws(CommandSyntaxException::class)
-    fun parse(pBuilder: SuggestionsBuilder?, selectorOnly: Boolean): ContraptionSelector {
+    fun parse(selectorOnly: Boolean): ShipSelector {
         this.startingCursorIndex = this.reader.cursor
         suggest { builder, provider ->
             builder.suggest("@v")
@@ -264,8 +268,11 @@ class ContraptionSelectorParser(
         return this.selector
     }
 
+    /**
+     * Suggests the `@v[]` and calls [parseOptions] for between the square brackets
+     */
     @Throws(CommandSyntaxException::class)
-    fun parseSelector() {
+    private fun parseSelector() {
         suggest { builder, provider -> builder.suggest("@v") }
         if (!this.reader.canRead()) {
             throw ERROR_MISSING_SELECTOR_TYPE.createWithContext(this.reader)
@@ -285,8 +292,11 @@ class ContraptionSelectorParser(
         }
     }
 
+    /**
+     * Parses the options between the square brackets `[]`
+     */
     @Throws(CommandSyntaxException::class)
-    fun parseOptions() {
+    private fun parseOptions() {
         this.reader.skipWhitespace()
 
         while (true) {
@@ -294,7 +304,7 @@ class ContraptionSelectorParser(
                 this.reader.skipWhitespace()
                 val i = this.reader.getCursor()
                 val s = this.reader.readString()
-                val `entityselectoroptions$modifier`: ContraptionSelectorOptions.Modifier =
+                val `entityselectoroptions$modifier` =
                     ContraptionSelectorOptions.get(this, s, i)
                 this.reader.skipWhitespace()
                 if (!this.reader.canRead() || this.reader.peek() != '=') {
@@ -307,21 +317,19 @@ class ContraptionSelectorParser(
 
                 suggest { _, _ ->  }
 
-                `entityselectoroptions$modifier`.handle(this)
                 this.reader.skipWhitespace()
 
-
-                if (source != null) {
-                    suggestionProvider = { builder ->
-                        val valueFuture = suggestOptionValue(source, builder)?.buildFuture()
-                        if (valueFuture != null) valueFuture
-                        else {
-                            builder.suggest(','.toString())
-                            builder.suggest(']'.toString())
-                            builder.buildFuture()
-                        }
+                suggestionProvider = { builder ->
+                    val valueFuture = suggestOptionValue(source, builder)?.buildFuture()
+                    if (valueFuture != null) valueFuture
+                    else {
+                        builder.suggest(','.toString())
+                        builder.suggest(']'.toString())
+                        builder.buildFuture()
                     }
                 }
+
+                `entityselectoroptions$modifier`(this)
 
                 if (!this.reader.canRead()) {
                     continue
@@ -352,49 +360,17 @@ class ContraptionSelectorParser(
         }
     }
 
-    private fun suggestOptionsKeyOrClose(
-        builder: SuggestionsBuilder, consumer: Consumer<SuggestionsBuilder>
-    ): CompletableFuture<Suggestions> {
-        builder.suggest(']'.toString())
-        ContraptionSelectorOptions.suggestNames(this, builder)
-        return builder.buildFuture()
-    }
-
-    private fun suggestOptionsKey(
-        builder: SuggestionsBuilder, consumer: Consumer<SuggestionsBuilder>
-    ): CompletableFuture<Suggestions> {
-        ContraptionSelectorOptions.suggestNames(this, builder)
-        return builder.buildFuture()
-    }
-
-    private fun suggestOptionsNextOrClose(
-        builder: SuggestionsBuilder, consumer: Consumer<SuggestionsBuilder>
-    ): CompletableFuture<Suggestions> {
-
-        if (source != null) {
-            suggestOptionValue(source, builder)?.let { return it.buildFuture() }
-        }
-
-        builder.suggest(','.toString())
-        builder.suggest(']'.toString())
-        return builder.buildFuture()
-    }
-
     companion object {
         private val ERROR_MISSING_SELECTOR_TYPE =
             SimpleCommandExceptionType(Component.translatable("industriacore.argument.contraption.selector.missing"))
         private val ERROR_EXPECTED_END_OF_OPTIONS = SimpleCommandExceptionType(
             Component.translatable("industriacore.argument.contraption.options.unterminated")
         )
-        private val ERROR_EXPECTED_OPTION_VALUE = DynamicCommandExceptionType(
-            Function { obj: Any? ->
-                Component.translatable(
-                    "industriacore.argument.contraption.options.valueless", obj
-                )
-            })
-
-        val SUGGEST_NOTHING: BiFunction<SuggestionsBuilder, Consumer<SuggestionsBuilder>, CompletableFuture<Suggestions>> =
-            BiFunction { builder: SuggestionsBuilder, _: Consumer<SuggestionsBuilder> -> builder.buildFuture() }
+        private val ERROR_EXPECTED_OPTION_VALUE = DynamicCommandExceptionType { obj: Any? ->
+            Component.translatable(
+                "industriacore.argument.contraption.options.valueless", obj
+            )
+        }
 
         val ORDER_NEAREST: (Vec3, Sequence<Ship>) -> Sequence<Ship> =
             { pos: Vec3, sort: Sequence<Ship> ->

@@ -10,11 +10,9 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
-import org.valkyrienskies.mod.common.command.arguments.ContraptionArgument;
-import org.valkyrienskies.mod.common.command.arguments.ContraptionArgumentInfo;
-import org.valkyrienskies.mod.common.command.arguments.RelativeVector3Argument;
 import org.valkyrienskies.mod.common.command.arguments.ShipArgument;
 import org.valkyrienskies.mod.common.command.arguments.ShipArgumentInfo;
+import org.valkyrienskies.mod.common.command.arguments.RelativeVector3Argument;
 
 @Mixin(ArgumentTypeInfos.class)
 public class MixinArgumentTypeInfos {
@@ -28,7 +26,6 @@ public class MixinArgumentTypeInfos {
     private static void postBootstrap(final Registry<ArgumentTypeInfo<?, ?>> registry,
         final CallbackInfoReturnable<ArgumentTypeInfo<?, ?>> ci) {
         register(registry, "valkyrienskies:ship_argument", ShipArgument.class, new ShipArgumentInfo());
-        register(registry, "valkyrienskies:contraption_argument", ContraptionArgument.class, new ContraptionArgumentInfo());
         register(registry, "valkyrienskies:relative_vector3_argument", RelativeVector3Argument.class,
             SingletonArgumentInfo.contextFree(RelativeVector3Argument::new));
     }

@@ -14,7 +14,7 @@ import java.util.function.Function
 import java.util.function.Predicate
 import kotlin.math.min
 
-class ContraptionSelector(
+class ShipSelector(
     val limit: Int,
     val needsSpecificLevel: Boolean,
     val predicate: Predicate<ServerShip>,
@@ -32,15 +32,15 @@ class ContraptionSelector(
         if (this.aabb != null) {
             val aabb = this.aabb.move(position)
             predicate =
-                predicate.and(Predicate { contraption: ServerShip -> aabb.intersects(contraption.worldAABB.toMinecraft()) })
+                predicate.and(Predicate { ship: ServerShip -> aabb.intersects(ship.worldAABB.toMinecraft()) })
         }
 
         if (!this.range.isAny) {
             predicate = predicate.and(
-                Predicate { contraption: ServerShip ->
+                Predicate { ship: ServerShip ->
                     this.range.matchesSqr(
                         position.distanceToSqr(
-                            contraption.transform.positionInWorld.toMinecraft()
+                            ship.transform.positionInWorld.toMinecraft()
                         )
                     )
                 })
@@ -48,24 +48,24 @@ class ContraptionSelector(
 
         if (!this.mass.isAny) {
             predicate =
-                predicate.and(Predicate { contraption: ServerShip -> this.mass.matches(contraption.inertiaData.mass) })
+                predicate.and(Predicate { ship: ServerShip -> this.mass.matches(ship.inertiaData.mass) })
         }
 
         if (!this.size.isAny()) {
             predicate =
-                predicate.and(Predicate { contraption: ServerShip -> this.size.matches(contraption.worldAABB.toMinecraft().size) })
+                predicate.and(Predicate { ship: ServerShip -> this.size.matches(ship.worldAABB.toMinecraft().size) })
         }
 
         if (this.isStatic != null) {
             predicate = predicate.and(
-                Predicate { contraption: ServerShip -> this.isStatic == contraption.isStatic })
+                Predicate { ship: ServerShip -> this.isStatic == ship.isStatic })
         }
 
         return predicate
     }
 
     @Throws(CommandSyntaxException::class)
-    fun findContraptions(source: CommandSourceStack, queryableShipData: QueryableShipData<Ship>): Sequence<Ship> {
+    fun select(source: CommandSourceStack, queryableShipData: QueryableShipData<Ship>): Sequence<Ship> {
         var found = queryableShipData.asSequence()
 
         // If we're doing distance checks, we only want to check the ships in the same dimension
