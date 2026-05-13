@@ -4,6 +4,7 @@ import com.mojang.brigadier.StringReader
 import com.mojang.brigadier.exceptions.DynamicCommandExceptionType
 import com.mojang.brigadier.exceptions.SimpleCommandExceptionType
 import com.mojang.brigadier.suggestion.SuggestionsBuilder
+import net.minecraft.advancements.critereon.MinMaxBounds
 import net.minecraft.commands.SharedSuggestionProvider
 import net.minecraft.network.chat.Component
 import org.valkyrienskies.core.api.ships.properties.ShipId
@@ -13,11 +14,11 @@ open class ShipArgumentParser(private val source: SharedSuggestionProvider?, pri
     var suggestionProvider: (SuggestionsBuilder) -> Unit = {}
     var slug: String? = null
     var limit: Int? = null
+    var distance: MinMaxBounds.Doubles? = null
     var id: ShipId? = null
 
     fun parse(reader: StringReader, isForSuggestion: Boolean): ShipSelector {
         val start = reader.cursor
-
         suggestSelectorOrSlug()
 
         if (!reader.canRead())
@@ -35,7 +36,8 @@ open class ShipArgumentParser(private val source: SharedSuggestionProvider?, pri
 
                 if (!reader.canRead()) {
                     suggestOpenOptions()
-                } else if (reader.read() == '[') {
+                } else if (reader.peek() == '[') {
+                    reader.read()
                     if (!reader.canRead()) {
                         suggestOptions()
                     } else {
@@ -54,7 +56,7 @@ open class ShipArgumentParser(private val source: SharedSuggestionProvider?, pri
                                 }
                                 // If not for suggestion then we cannot throw an exception
                                 // otherwise MC won't generate suggestions for this argument
-                                return ShipSelector(null, null, 0)
+                                return ShipSelector(null, null, null,0)
                             }
 
                             reader.skipWhitespace()
@@ -87,7 +89,7 @@ open class ShipArgumentParser(private val source: SharedSuggestionProvider?, pri
                         }else {
                             // If not for suggestion then we cannot throw an exception
                             // otherwise MC won't generate suggestions for this argument
-                            return ShipSelector(null, null, 0)
+                            return ShipSelector(null, null, null, 0)
                         }
 
                     suggest { _, _ -> }
@@ -100,11 +102,11 @@ open class ShipArgumentParser(private val source: SharedSuggestionProvider?, pri
             slug = reader.readUnquotedString()
         }
 
-        return ShipSelector(slug, id, limit ?: Int.MAX_VALUE)
+        return ShipSelector(slug, id, distance, limit ?: Int.MAX_VALUE)
     }
 
     private fun isOption(s: String): Boolean = when (s) {
-        "slug", "limit", "id" -> true
+        "slug", "limit", "id", "distance" -> true
         else -> false
     }
 
@@ -114,10 +116,12 @@ open class ShipArgumentParser(private val source: SharedSuggestionProvider?, pri
             builder.suggest("slug=")
             builder.suggest("limit=")
             builder.suggest("id=")
+            builder.suggest("distance=")
         } else {
             if ("slug=".startsWith(textSoFar)) builder.suggest("slug=")
             if ("limit=".startsWith(textSoFar)) builder.suggest("limit=")
             if ("id=".startsWith(textSoFar)) builder.suggest("id=")
+            if ("distance=".startsWith(textSoFar)) builder.suggest("distance=")
         }
     }
 
@@ -147,6 +151,7 @@ open class ShipArgumentParser(private val source: SharedSuggestionProvider?, pri
                     .filter { it.startsWith(builder.remaining) }
                     .forEach { builder.suggest(it) }
             }
+        "distance" -> {}
         else -> throw ERROR_UNKNOWN_OPTION.create(option)
     }
 
@@ -164,6 +169,7 @@ open class ShipArgumentParser(private val source: SharedSuggestionProvider?, pri
         }
         "id" -> id = reader.readLong()
         "limit" -> limit = reader.readInt()
+        "distance" -> distance = MinMaxBounds.Doubles.fromReader(reader)
         else -> throw ERROR_UNKNOWN_OPTION.create(option)
     }
 

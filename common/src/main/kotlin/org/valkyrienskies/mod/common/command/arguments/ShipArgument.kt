@@ -70,10 +70,10 @@ open class ShipArgument private constructor(val selectorOnly: Boolean) : Argumen
 
             val shipWorld = context.source.shipWorld
 
-            val fromLoadedShips = selector.select(shipWorld.loadedShips)
+            val fromLoadedShips = selector.select(shipWorld.loadedShips, context)
             val fromLoadedShipIds = fromLoadedShips.map { it.id }.toSet()
 
-            val fromUnloadedShips = selector.select(shipWorld.allShips)
+            val fromUnloadedShips = selector.select(shipWorld.allShips, context)
 
             // Return loaded ships and unloaded ships, do not return a loaded ship twice
             return fromLoadedShips + (fromUnloadedShips.filter { !fromLoadedShipIds.contains(it.id) })
@@ -88,11 +88,11 @@ open class ShipArgument private constructor(val selectorOnly: Boolean) : Argumen
 
 
             // First attempt to return a loaded ship
-            val loadedShips = selector.select(context.source.shipWorld.loadedShips)
+            val loadedShips = selector.select(context.source.shipWorld.loadedShips, context)
             if (loadedShips.size == 1) return loadedShips.first()
 
             // Then try to return an unloaded ship
-            val r = selector.select(context.source.shipWorld.allShips)
+            val r = selector.select(context.source.shipWorld.allShips, context)
             if (r.isEmpty()) throw ERROR_NO_SHIP_FOUND
             if (r.size == 1) return r.first() else throw ERROR_MANY_SHIP_FOUND
         }
