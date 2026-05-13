@@ -43,6 +43,7 @@ include("common")
 include("fabric")
 include("forge")
 
+/*
 try {
     def core = file("./vs-core")
     println "VS-CORE DEBUG: Looking at path: ${core.absolutePath}"
@@ -59,5 +60,6 @@ try {
         }
     }
 } catch (SecurityException ignore) {}
+*/
 
 rootProject.name = "valkyrienskies"

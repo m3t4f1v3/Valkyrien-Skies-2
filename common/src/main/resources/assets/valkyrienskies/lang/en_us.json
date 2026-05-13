@@ -25,6 +25,15 @@
 
   "argument.valkyrienskies.ship.no_found": "Ship not found",
   "argument.valkyrienskies.ship.multiple_found": "Multiple ships found",
+  "argument.valkyrienskies.ship.unknown_option": "Unknown option '%s'",
+  "argument.valkyrienskies.ship.options.inapplicable": "Option '%s' is not applicable here",
+  "argument.valkyrienskies.ship.options.unterminated": "Expected end of options",
+  "argument.valkyrienskies.ship.options.valueless": "Expected value for option '%s'",
+  "argument.valkyrienskies.ship.options.value_negative": "Value cannot be negative",
+  "argument.valkyrienskies.ship.options.omega": "Rotational velocity (length)",
+  "argument.valkyrienskies.ship.options.velocity": "Velocity (length)",
+  "argument.valkyrienskies.ship.options.slug": "Ship name",
+
   "command.valkyrienskies.delete.success_one": "Deleted %s!",
   "command.valkyrienskies.delete.success": "Deleted %d ships!",
   "command.valkyrienskies.remass.success_one": "Recalculated mass for %s!",
@@ -34,6 +43,7 @@
   "command.valkyrienskies.shipify.success": "Shipified to %d ships!",
   "command.valkyrienskies.set_static.success_one": "Set %s to be is-static=%s!",
   "command.valkyrienskies.set_static.success": "Set %d ships to be is-static=%s!",
+  "command.valkyrienskies.set_static.toggle_success": "Toggled is-static on %d ships!",
   "command.valkyrienskies.teleport.success_one": "Teleported %s ships to %s!",
   "command.valkyrienskies.teleport.success": "Teleported %d ships to %s!",
   "command.valkyrienskies.teleport.teleport_data": "%s %s, rotation %s, velocity %s",

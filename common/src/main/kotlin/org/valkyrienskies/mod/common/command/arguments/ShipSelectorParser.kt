@@ -79,6 +79,13 @@ class ShipSelectorParser(
         }
     }
 
+    /**
+     * Overwrites the [suggestionProvider] with a new lambda.
+     * That lambda will be called after all parsing has finished,
+     * so the last remaining [suggestionProvider] will take priority.
+     *
+     * Use the [SharedSuggestionProvider] from the lambda to add suggestions.
+     */
     private fun suggest(block: (SuggestionsBuilder, SharedSuggestionProvider) -> Unit) {
         if (source != null) suggestionProvider = { block(it, source); it.buildFuture() }
     }
@@ -273,7 +280,7 @@ class ShipSelectorParser(
      */
     @Throws(CommandSyntaxException::class)
     private fun parseSelector() {
-        suggest { builder, provider -> builder.suggest("@v") }
+        suggest { builder, provider -> builder.suggest("v") }
         if (!this.reader.canRead()) {
             throw ERROR_MISSING_SELECTOR_TYPE.createWithContext(this.reader)
         } else {
@@ -362,13 +369,13 @@ class ShipSelectorParser(
 
     companion object {
         private val ERROR_MISSING_SELECTOR_TYPE =
-            SimpleCommandExceptionType(Component.translatable("industriacore.argument.contraption.selector.missing"))
+            SimpleCommandExceptionType(Component.translatable("argument.valkyrienskies.ship.selector.missing"))
         private val ERROR_EXPECTED_END_OF_OPTIONS = SimpleCommandExceptionType(
-            Component.translatable("industriacore.argument.contraption.options.unterminated")
+            Component.translatable("argument.valkyrienskies.ship.options.unterminated")
         )
         private val ERROR_EXPECTED_OPTION_VALUE = DynamicCommandExceptionType { obj: Any? ->
             Component.translatable(
-                "industriacore.argument.contraption.options.valueless", obj
+                "argument.valkyrienskies.ship.options.valueless", obj
             )
         }
 

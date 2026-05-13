@@ -13,6 +13,7 @@ import kotlin.collections.forEach
 
 object StaticCommand {
     private const val SET_SHIP_STATIC_SUCCESS_MESSAGE = "command.valkyrienskies.set_static.success"
+    private const val TOGGLE_SHIP_STATIC_SUCCESS_MESSAGE = "command.valkyrienskies.set_static.toggle_success"
     private const val SET_ONE_SHIP_STATIC_SUCCESS_MESSAGE = "command.valkyrienskies.set_static.success_one"
 
     fun register(vs: LiteralArgumentBuilder<CommandSourceStack>) {
@@ -43,7 +44,7 @@ object StaticCommand {
                             it.source.sendSuccess(
                                 {
                                     translatable(
-                                        SET_SHIP_STATIC_SUCCESS_MESSAGE, r.size, " !is-static"
+                                        TOGGLE_SHIP_STATIC_SUCCESS_MESSAGE, r.size
                                     )
                                 }, true
                             )
