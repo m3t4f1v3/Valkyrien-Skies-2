@@ -51,6 +51,7 @@
   "command.valkyrienskies.scale.success": "Scaled %d ships!",
   "command.valkyrienskies.backend.current": "Backend is currently %s",
   "command.valkyrienskies.backend.set": "Backend set to %s",
+  "command.valkyrienskies.backend.eol": "Sorry! The %s backend is no longer supported. Please use a different backend.",
   "command.valkyrienskies.lod.current": "Level of detail is currently %s",
   "command.valkyrienskies.lod.set": "Level of detail set to %s",
   "command.valkyrienskies.lod.disabled": "disabled",
