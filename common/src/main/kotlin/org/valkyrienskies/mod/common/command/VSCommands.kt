@@ -13,6 +13,7 @@ import org.joml.Vector3dc
 import org.valkyrienskies.core.api.world.ShipWorld
 import org.valkyrienskies.core.api.world.properties.DimensionId
 import org.valkyrienskies.core.internal.ShipTeleportData
+import org.valkyrienskies.mod.common.command.arguments.ContraptionSelectorOptions
 import org.valkyrienskies.mod.common.command.commands.BackendCommand
 import org.valkyrienskies.mod.common.command.commands.DeleteCommand
 import org.valkyrienskies.mod.common.command.commands.DryCommand
@@ -54,6 +55,8 @@ object VSCommands {
         PerfTestCommand.register(vs)
         StaticCommand.register(vs)
         TeleportCommand.register(vs)
+
+        ContraptionSelectorOptions.bootStrap()
 
         dispatcher.register(vs)
     }
