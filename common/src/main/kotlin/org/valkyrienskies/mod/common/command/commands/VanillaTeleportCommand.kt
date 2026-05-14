@@ -2,6 +2,7 @@ package org.valkyrienskies.mod.common.command.commands
 
 import com.mojang.brigadier.CommandDispatcher
 import com.mojang.brigadier.builder.LiteralArgumentBuilder
+import com.mojang.brigadier.builder.RequiredArgumentBuilder
 import com.mojang.brigadier.context.CommandContext
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands.argument
@@ -11,9 +12,13 @@ import net.minecraft.commands.arguments.EntityArgument
 import net.minecraft.commands.arguments.coordinates.RotationArgument
 import net.minecraft.commands.arguments.coordinates.Vec3Argument
 import net.minecraft.network.chat.Component
+import net.minecraft.server.level.ServerPlayer
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.entity.Entity
+import net.minecraft.world.entity.LivingEntity
+import net.minecraft.world.entity.PathfinderMob
 import net.minecraft.world.entity.RelativeMovement
+import net.minecraft.world.level.Level
 import net.minecraft.world.phys.Vec3
 import org.joml.Quaterniond
 import org.valkyrienskies.core.api.ships.LoadedShip
@@ -66,6 +71,7 @@ object VanillaTeleportCommand {
                         argument("shipDestination", ShipArgument.selectorOnly())
                             .executes { teleportEntitiesToShip(it) }
                     )
+                    .then(entityPositionArgument())
             )
 
     private fun shipPositionArgument() =
@@ -101,6 +107,19 @@ object VanillaTeleportCommand {
                     )
             )
 
+    private fun entityPositionArgument(): RequiredArgumentBuilder<CommandSourceStack, *> =
+        argument("position", Vec3Argument.vec3())
+            .then(
+                literal("facing")
+                    .then(
+                        literal("ship")
+                            .then(
+                                argument("facingShip", ShipArgument.selectorOnly())
+                                    .executes { teleportEntitiesToPositionFacingShip(it) }
+                            )
+                    )
+            )
+
     private fun teleportSourceToShip(context: CommandContext<CommandSourceStack>): Int =
         teleportEntitiesToShip(context, listOf(context.source.entityOrException), "shipTargets")
 
@@ -127,6 +146,83 @@ object VanillaTeleportCommand {
         )
         return targets.size
     }
+
+    private fun teleportEntitiesToPositionFacingShip(context: CommandContext<CommandSourceStack>): Int {
+        val source = context.source
+        val targets = EntityArgument.getEntities(context, "targets")
+        val position = Vec3Argument.getVec3(context, "position")
+        val facingShip = getSingleShip(context, "facingShip")
+        val facingPosition = facingShip.transform.positionInWorld.toMinecraft()
+
+        targets.forEach { entity ->
+            performEntityTeleport(source, entity, source.level, position, facingPosition)
+        }
+
+        source.sendSuccess(
+            {
+                if (targets.size == 1) {
+                    Component.translatable(
+                        "commands.teleport.success.location.single",
+                        targets.single().displayName,
+                        formatDouble(position.x),
+                        formatDouble(position.y),
+                        formatDouble(position.z)
+                    )
+                } else {
+                    Component.translatable(
+                        "commands.teleport.success.location.multiple",
+                        targets.size,
+                        formatDouble(position.x),
+                        formatDouble(position.y),
+                        formatDouble(position.z)
+                    )
+                }
+            },
+            true
+        )
+        return targets.size
+    }
+
+    private fun performEntityTeleport(
+        source: CommandSourceStack,
+        entity: Entity,
+        level: ServerLevel,
+        position: Vec3,
+        facingPosition: Vec3
+    ) {
+        if (!Level.isInSpawnableBounds(net.minecraft.core.BlockPos.containing(position))) {
+            return
+        }
+
+        val teleported = entity.teleportTo(
+            level,
+            position.x,
+            position.y,
+            position.z,
+            setOf(RelativeMovement.X_ROT, RelativeMovement.Y_ROT),
+            entity.yRot,
+            entity.xRot
+        )
+        if (!teleported) {
+            return
+        }
+
+        if (entity is ServerPlayer) {
+            entity.lookAt(source.anchor, facingPosition)
+        } else {
+            entity.lookAt(source.anchor, facingPosition)
+        }
+
+        if (entity !is LivingEntity || !entity.isFallFlying) {
+            entity.deltaMovement = entity.deltaMovement.multiply(1.0, 0.0, 1.0)
+            entity.setOnGround(true)
+        }
+
+        if (entity is PathfinderMob) {
+            entity.navigation.stop()
+        }
+    }
+
 
     private fun teleportShipsToPosition(context: CommandContext<CommandSourceStack>): Int {
         val source = context.source
@@ -306,4 +402,6 @@ object VanillaTeleportCommand {
 
     private fun rotationToShipYaw(yaw: Double): Quaterniond =
         Quaterniond().rotateY(Math.toRadians(-yaw))
+
+    private fun formatDouble(value: Double): String = String.format(java.util.Locale.ROOT, "%f", value)
 }
