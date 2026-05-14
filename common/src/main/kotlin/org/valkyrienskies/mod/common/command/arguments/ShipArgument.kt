@@ -30,7 +30,7 @@ class ShipArgument private constructor(val selectorOnly: Boolean) : ArgumentType
     ): CompletableFuture<Suggestions> {
 
         val reader = StringReader(pBuilder.input)
-        reader.cursor = pBuilder.start
+        reader.cursor = getSuggestionParseStart(pBuilder)
 
         val startsWithAt = reader.canRead() && reader.peek() == '@'
 
@@ -51,6 +51,23 @@ class ShipArgument private constructor(val selectorOnly: Boolean) : ArgumentType
 
         val nBuilder = pBuilder.createOffset(reader.cursor)
         return parser.suggestionProvider(nBuilder)
+    }
+
+    private fun getSuggestionParseStart(builder: SuggestionsBuilder): Int {
+        val selectorStart = builder.input.lastIndexOf("@v")
+        if (selectorStart == -1) {
+            return builder.start
+        }
+
+        val previousWhitespace = builder.input
+            .substring(0, builder.start.coerceAtMost(builder.input.length))
+            .indexOfLast { it.isWhitespace() }
+
+        return if (selectorStart > previousWhitespace) {
+            selectorStart
+        } else {
+            builder.start
+        }
     }
 
     override fun getExamples(): List<String> {
