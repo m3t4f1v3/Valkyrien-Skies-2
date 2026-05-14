@@ -33,6 +33,8 @@ out vec4 normal;
 uniform mat4 u_LocalToCameraRel;
 uniform vec3 u_VsRenderOrigin;
 
+uniform int u_isInWorld;
+
 uniform usamplerBuffer u_VsLightSections;
 uniform usamplerBuffer u_VsLightLut;
 
@@ -103,11 +105,11 @@ void main() {
 
     vertexDistance = fog_distance(ModelViewMat, IViewRotMat * Position, FogShape);
 
-    vertexColor = Color * vanillaShadeFromNormal(normalize(IViewRotMat * mat3(ModelViewMat) * Normal));
+    vertexColor = minecraft_mix_light(Light0_Direction, Light1_Direction, Normal, Color);
 #if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_SHADE)
     vec3 worldPosVertex = (u_LocalToCameraRel * vec4(Position, 1.0)).xyz + u_VsRenderOrigin;
     ivec2 light = ivec2(0);
-    if(vs_lightColorAt(worldPosVertex, light)) {
+    if(u_isInWorld != 0 && vs_lightColorAt(worldPosVertex, light)) {
         lightMapColor = texelFetch(Sampler2, ivec2(max(light.x, UV2.x / 16), min(light.y, UV2.y / 16)), 0);
     } else {
         lightMapColor = texelFetch(Sampler2, UV2 / 16, 0);

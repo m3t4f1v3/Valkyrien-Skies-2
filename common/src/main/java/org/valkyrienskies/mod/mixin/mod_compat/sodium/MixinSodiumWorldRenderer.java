@@ -1,10 +1,8 @@
 package org.valkyrienskies.mod.mixin.mod_compat.sodium;
 
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
-import com.mojang.blaze3d.shaders.Uniform;
 import com.mojang.blaze3d.vertex.PoseStack;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
-import java.util.Map;
 import java.util.SortedSet;
 
 import net.minecraft.client.Minecraft;
@@ -16,14 +14,12 @@ import net.minecraft.client.Camera;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderBuffers;
-import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderDispatcher;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.BlockDestructionProgress;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.entity.BlockEntity;
 
-import org.joml.Matrix4f;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -38,9 +34,6 @@ import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.assembly.SeamlessChunksManager;
 import org.valkyrienskies.mod.compat.LoadedMods;
 import org.valkyrienskies.mod.compat.LoadedMods.FlywheelVersion;
-import org.valkyrienskies.mod.compat.sodium.SodiumCompat;
-import org.valkyrienskies.mod.compat.sodium.light.VsShipLightStorage;
-import org.valkyrienskies.mod.mixin.accessors.client.render.GameRendererAccessor;
 import org.valkyrienskies.mod.mixinducks.mod_compat.sodium.RenderSectionManagerDuck;
 import org.valkyrienskies.mod.mixinducks.mod_compat.sodium.SodiumWorldRendererDuck;
 
@@ -112,18 +105,6 @@ public abstract class MixinSodiumWorldRenderer implements SodiumWorldRendererDuc
         final Long2ObjectMap<SortedSet<BlockDestructionProgress>> blockBreakingProgressions, final float tickDelta,
         final MultiBufferSource.BufferSource immediate, final double x, final double y, final double z,
         final BlockEntityRenderDispatcher blockEntityRenderer) {
-
-        Map<String, ShaderInstance> shaders = ((GameRendererAccessor)Minecraft.getInstance().gameRenderer).vs$getShaders();
-        for(String shaderName : shaders.keySet()) {
-            if(!shaderName.contains("entity")) continue;
-            ShaderInstance entityShader = shaders.get(shaderName);
-            Uniform uniform = entityShader.getUniform("u_VsLightSections");
-            if(uniform == null) continue;
-            uniform.set(SodiumCompat.LIGHT_SECTIONS_TEXTURE_UNIT);
-            entityShader.getUniform("u_VsLightLut").set(SodiumCompat.LIGHT_LUT_TEXTURE_UNIT);
-            entityShader.getUniform("u_LocalToCameraRel").set(new Matrix4f(matrices.last().pose()).invert());
-            entityShader.getUniform("u_VsRenderOrigin").set((float)x, (float)y, (float)z);
-        }
 
         renderBlockEntities(matrices, bufferBuilders, blockBreakingProgressions, tickDelta, immediate, x, y, z, blockEntityRenderer);
 
