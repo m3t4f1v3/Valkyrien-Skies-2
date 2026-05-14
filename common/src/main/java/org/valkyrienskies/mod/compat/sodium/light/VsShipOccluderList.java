@@ -11,6 +11,7 @@ import com.mojang.blaze3d.platform.GlStateManager;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.LevelAccessor;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 
 import org.joml.Matrix4dc;
@@ -110,7 +111,7 @@ public class VsShipOccluderList {
                     BlockState state = level.getBlockState(scratchBlockPos);
                     if (state.isAir()) continue;
                     boolean isSolid = state.canOcclude()
-                            && state.isCollisionShapeFullBlock(level, scratchBlockPos);
+                            && Block.isShapeFullBlock(state.getOcclusionShape(level, scratchBlockPos));
                     if (!isSolid) continue;
 
                     // Voxel center → world coords. Float precision preserved

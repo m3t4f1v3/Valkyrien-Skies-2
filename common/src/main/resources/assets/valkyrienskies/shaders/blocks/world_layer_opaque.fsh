@@ -244,14 +244,13 @@ float ws_shipAo(vec3 worldPosWorld, vec3 nf) {
         if (d_n <= 0.0 || d_n >= 1.5) continue;
         float fn = 1.0 - smoothstep(0.5, 1.5, d_n);
 
-        // Build face-local 2D axes (u, v) from the SHIP-frame face
-        // normal. For a Y-axis-rotated ship, an upward world face stays
-        // upward in ship frame too, so this picks ship-X / ship-Z;
-        // arbitrary rotations land on whatever pair of ship axes spans
-        // the face plane.
-        vec3 absNf = abs(nf_ship);
-        vec3 uAxis = absNf.x > 0.5 ? vec3(0, 1, 0) : vec3(1, 0, 0);
-        vec3 vAxis = absNf.z > 0.5 ? vec3(0, 1, 0) : vec3(0, 0, 1);
+        // Build a stable orthonormal face basis from the SHIP-frame normal.
+        // The old threshold picker could choose the same axis for U and V
+        // when nf_ship was diagonal in X/Z, collapsing the footprint into a
+        // one-dimensional strip and producing very long shadows.
+        vec3 helper = abs(nf_ship.y) < 0.9 ? vec3(0, 1, 0) : vec3(1, 0, 0);
+        vec3 uAxis = normalize(cross(helper, nf_ship));
+        vec3 vAxis = cross(nf_ship, uAxis);
         float du = dot(d_ship, uAxis);
         float dv = dot(d_ship, vAxis);
 
