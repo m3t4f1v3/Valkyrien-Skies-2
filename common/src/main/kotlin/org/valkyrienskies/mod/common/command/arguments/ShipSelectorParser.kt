@@ -284,7 +284,11 @@ class ShipSelectorParser(
         if (!this.reader.canRead()) {
             throw ERROR_MISSING_SELECTOR_TYPE.createWithContext(this.reader)
         } else {
-            this.reader.read()
+            val selectorType = this.reader.read()
+            if (selectorType != 'v') {
+                this.reader.cursor = this.reader.cursor - 1
+                throw ERROR_UNKNOWN_SELECTOR_TYPE.createWithContext(this.reader, selectorType)
+            }
 
             suggest { builder, provider -> builder.suggest("[") }
 
@@ -370,6 +374,9 @@ class ShipSelectorParser(
     companion object {
         private val ERROR_MISSING_SELECTOR_TYPE =
             SimpleCommandExceptionType(Component.translatable("argument.valkyrienskies.ship.selector.missing"))
+        private val ERROR_UNKNOWN_SELECTOR_TYPE = DynamicCommandExceptionType { obj: Any? ->
+            Component.translatable("argument.valkyrienskies.ship.selector.unknown", obj)
+        }
         private val ERROR_EXPECTED_END_OF_OPTIONS = SimpleCommandExceptionType(
             Component.translatable("argument.valkyrienskies.ship.options.unterminated")
         )
