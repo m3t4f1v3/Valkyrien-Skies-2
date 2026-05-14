@@ -329,13 +329,22 @@ object ContraptionSelectorOptions {
      * For example, if the user has typed slug=, this function will suggest the actual slugs.
      */
     fun suggestOptionValue(provider: SharedSuggestionProvider?, pBuilder: SuggestionsBuilder): SuggestionsBuilder? {
+        val equalsIndex = pBuilder.input.lastIndexOf('=', (pBuilder.start - 1).coerceAtLeast(0))
+        if (equalsIndex == -1) {
+            return null
+        }
+
+        val optionStart = maxOf(
+            pBuilder.input.lastIndexOf('[', equalsIndex),
+            pBuilder.input.lastIndexOf(',', equalsIndex)
+        ) + 1
+        val optionName = pBuilder.input.substring(optionStart, equalsIndex).trim().lowercase()
+
         for (entry in OPTIONS.entries) {
             val valueAutocomplete = entry.value!!.autocomplete ?: continue
-            val split = pBuilder.input.lowercase().split("=")
-            if (split.size < 2) continue
 
-            if (split[split.size - 2].endsWith(entry.key!!)) {
-                val offset = pBuilder.input.lastIndexOf('=') + 1
+            if (optionName == entry.key) {
+                val offset = equalsIndex + 1
                 val builder = pBuilder.createOffset(offset)
 
                 valueAutocomplete(provider, builder)

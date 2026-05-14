@@ -22,7 +22,6 @@ import org.valkyrienskies.mod.common.command.shipWorld
 import java.util.concurrent.CompletableFuture
 import java.util.function.Function
 import java.util.function.Predicate
-import kotlin.text.startsWith
 
 class ShipSelectorParser(
     private val source: SharedSuggestionProvider?,
@@ -252,7 +251,9 @@ class ShipSelectorParser(
     fun parse(selectorOnly: Boolean): ShipSelector {
         this.startingCursorIndex = this.reader.cursor
         suggest { builder, provider ->
-            builder.suggest("@v")
+            if ("@v".startsWith(builder.remaining)) {
+                builder.suggest("@v")
+            }
             if (!selectorOnly) {
                 source?.let { s ->
                     s.shipWorld.allShips
