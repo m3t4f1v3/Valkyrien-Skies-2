@@ -106,7 +106,6 @@ public abstract class MixinSodiumWorldRenderer implements SodiumWorldRendererDuc
         final MultiBufferSource.BufferSource immediate, final double x, final double y, final double z,
         final BlockEntityRenderDispatcher blockEntityRenderer) {
 
-
         renderBlockEntities(matrices, bufferBuilders, blockBreakingProgressions, tickDelta, immediate, x, y, z, blockEntityRenderer);
 
         for (final SortedRenderLists renderLists : ((RenderSectionManagerDuck) this.renderSectionManager).vs_getShipRenderLists().values()) {
