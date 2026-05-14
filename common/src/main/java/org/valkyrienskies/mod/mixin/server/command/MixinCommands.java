@@ -11,6 +11,7 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.valkyrienskies.mod.common.command.commands.VanillaExecuteCommand;
 import org.valkyrienskies.mod.common.command.commands.VanillaTeleportCommand;
 
 @Mixin(Commands.class)
@@ -25,5 +26,6 @@ public class MixinCommands {
     )
     public void onInit(CommandSelection commandSelection, CommandBuildContext commandBuildContext, CallbackInfo ci) {
         VanillaTeleportCommand.register(this.dispatcher);
+        VanillaExecuteCommand.register(this.dispatcher);
     }
 }
