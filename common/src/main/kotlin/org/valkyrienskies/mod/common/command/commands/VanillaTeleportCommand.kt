@@ -48,11 +48,8 @@ object VanillaTeleportCommand {
         literal(name)
             .requires { it.hasPermission(PERMISSION_LEVEL) }
             .then(
-                argument("shipDestination", ShipArgument.selectorOnly())
-                    .executes { teleportSourceToShip(it) }
-            )
-            .then(
                 argument("shipTargets", ShipArgument.selectorOnly())
+                    .executes { teleportSourceToShip(it) }
                     .then(shipPositionArgument())
                     .then(
                         argument("entityDestination", EntityArgument.entity())
@@ -94,6 +91,9 @@ object VanillaTeleportCommand {
                                             .executes { teleportShipsToPositionFacingEntity(it) }
                                     )
                             )
+                    )
+                    .then(
+                        literal("ship")
                             .then(
                                 argument("facingShip", ShipArgument.selectorOnly())
                                     .executes { teleportShipsToPositionFacingShip(it) }
@@ -102,17 +102,18 @@ object VanillaTeleportCommand {
             )
 
     private fun teleportSourceToShip(context: CommandContext<CommandSourceStack>): Int =
-        teleportEntitiesToShip(context, listOf(context.source.entityOrException))
+        teleportEntitiesToShip(context, listOf(context.source.entityOrException), "shipTargets")
 
     private fun teleportEntitiesToShip(context: CommandContext<CommandSourceStack>): Int =
-        teleportEntitiesToShip(context, EntityArgument.getEntities(context, "targets"))
+        teleportEntitiesToShip(context, EntityArgument.getEntities(context, "targets"), "shipDestination")
 
     private fun teleportEntitiesToShip(
         context: CommandContext<CommandSourceStack>,
-        targets: Collection<Entity>
+        targets: Collection<Entity>,
+        destinationArgument: String
     ): Int {
         val source = context.source
-        val destination = getSingleShip(context, "shipDestination")
+        val destination = getSingleShip(context, destinationArgument)
         val level = getShipLevel(source, destination)
         val pos = destination.transform.positionInWorld.toMinecraft()
 
@@ -222,7 +223,7 @@ object VanillaTeleportCommand {
         val destination = EntityArgument.getEntity(context, "entityDestination")
         val level = destination.level() as ServerLevel
         val position = level.toWorldCoordinates(destination.position())
-        val rotation = rotationToShipRotation(destination.xRot.toDouble(), destination.yRot.toDouble())
+        val rotation = rotationToShipYaw(destination.yRot.toDouble())
 
         teleportShips(source, targets, level, position, rotation)
 
@@ -302,4 +303,7 @@ object VanillaTeleportCommand {
 
     private fun rotationToShipRotation(pitch: Double, yaw: Double): Quaterniond =
         Quaterniond().rotateZYX(0.0, Math.toRadians(-yaw), Math.toRadians(pitch))
+
+    private fun rotationToShipYaw(yaw: Double): Quaterniond =
+        Quaterniond().rotateY(Math.toRadians(-yaw))
 }
