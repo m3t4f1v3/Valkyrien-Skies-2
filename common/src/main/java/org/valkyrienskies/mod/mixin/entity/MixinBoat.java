@@ -51,7 +51,7 @@ public class MixinBoat {
 
     @Unique
     private static BlockState valkyrienskies$getBlockStateIncludeShips(Level level, BlockPos pos) {
-        AABB aabb = AABB.ofSize(Vec3.atLowerCornerOf(pos), 1, 1, 1);
+        AABB aabb = AABB.ofSize(Vec3.atCenterOf(pos), 1, 1, 1);
         AtomicReference<BlockState> state = new AtomicReference<>();
         state.set(level.getBlockState(pos));
 
