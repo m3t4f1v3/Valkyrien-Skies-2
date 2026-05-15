@@ -188,9 +188,13 @@ public abstract class MixinEntity {
 
             VSGameUtilsKt.transformToNearbyShipsAndWorld(this.level, origX, origY, origZ, this.bb.getSize(),
                 (x, y, z) -> {
-                    fluidState[0] = getFluidState.call(level, BlockPos.containing(x, y, z));
+                    final BlockPos shipPos = BlockPos.containing(x, y, z);
+                    final FluidState fs = getFluidState.call(level, shipPos);
+                    if (!fs.isEmpty() && y < shipPos.getY() + fs.getHeight(level, shipPos)) {
+                        fluidState[0] = fs;
+                    }
                 });
-            isShipWater = true;
+            isShipWater = !fluidState[0].isEmpty();
         }
         return fluidState[0];
     }
