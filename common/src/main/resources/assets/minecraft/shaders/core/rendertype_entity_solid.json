@@ -34,6 +34,8 @@
         { "name": "u_VsRenderOrigin", "type": "float", "count": 3, "values": [ 0.0, 0.0, 0.0 ] },
         { "name": "u_VsLightSections", "type":  "int", "count": 1, "values": [ 0 ]},
         { "name": "u_VsLightLut", "type":  "int", "count": 1, "values": [ 0 ]},
-        { "name": "u_isInWorld", "type": "int", "count": 1, "values": [ 0 ]}
+        { "name": "u_isInWorld", "type": "int", "count": 1, "values": [ 0 ]},
+        { "name": "u_VsShipEmitterCount", "type": "int", "count": 1, "values": [ 0 ]},
+        { "name": "u_VsShipEmitters", "type": "int", "count": 1, "values": [ 0 ]}
   ]
 }

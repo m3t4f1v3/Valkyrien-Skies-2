@@ -11,7 +11,6 @@ in ivec2 UV1;
 in ivec2 UV2;
 in vec3 Normal;
 
-uniform sampler2D Sampler1;
 uniform sampler2D Sampler2;
 
 uniform mat4 ModelViewMat;
@@ -24,8 +23,6 @@ uniform vec3 Light1_Direction;
 
 out float vertexDistance;
 out vec4 vertexColor;
-out vec4 overlayColor;
-out vec4 lightMapColor;
 out vec2 texCoord0;
 out vec4 normal;
 
@@ -140,7 +137,7 @@ void main() {
     vertexDistance = fog_distance(ModelViewMat, IViewRotMat * Position, FogShape);
 
     vertexColor = minecraft_mix_light(Light0_Direction, Light1_Direction, Normal, Color);
-#if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_SHADE)
+    #if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_SHADE)
     vec3 worldPosVertex = (u_LocalToCameraRel * vec4(Position, 1.0)).xyz + u_VsRenderOrigin;
     if(u_isInWorld != 0) {
         ivec2 light = UV2 / 16;
@@ -148,16 +145,14 @@ void main() {
         ivec2 lightShip = vs_lightColorAt(worldPosVertex);
         light.x = max(light.x, lightShip.x);
         light.y = min(light.y, lightShip.y);
-        lightMapColor = texelFetch(Sampler2, light, 0);
+        vertexColor *= texelFetch(Sampler2, light, 0);
     } else {
-        lightMapColor = texelFetch(Sampler2, UV2 / 16, 0);
+        vertexColor *= texelFetch(Sampler2, UV2 / 16, 0);
     }
-#else
-    lightMapColor = texelFetch(Sampler2, UV2 / 16, 0);
-#endif
-    overlayColor = texelFetch(Sampler1, UV1, 0);
+    #else
+    vertexColor *= texelFetch(Sampler2, UV2 / 16, 0);
+    #endif
     texCoord0 = UV0;
-
     normal = ProjMat * ModelViewMat * vec4(Normal, 0.0);
 }
 

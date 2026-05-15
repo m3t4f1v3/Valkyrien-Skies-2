@@ -26,7 +26,7 @@ public class MixinShaderInstance {
     private static InputStream streamWithConstants(Resource resource, Operation<InputStream> original, @Local(argsOnly = true) String name)
         throws IOException {
         InputStream inputstream = original.call(resource);
-        if(!name.contains("entity")) return inputstream;
+        if(!name.contains("entity") && !name.contains("armor")) return inputstream;
         String shader = IOUtils.toString(inputstream, StandardCharsets.UTF_8);
         ArrayList<String> shaderLines = new ArrayList<>(shader.lines().toList());
         if (VSGameConfig.CLIENT.getDynamicShipBiomeTinting()) shaderLines.add(1, "#define VS_DYNAMIC_BIOME");
