@@ -43,6 +43,7 @@ import org.valkyrienskies.core.api.ships.Ship;
 import org.valkyrienskies.mod.common.BlockStateInfo;
 import org.valkyrienskies.mod.common.VS2ChunkAllocator;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
+import org.valkyrienskies.mod.common.fluid.VanillaFluidFlowWindProvider;
 import org.valkyrienskies.mod.common.util.VSLevelChunk;
 import org.valkyrienskies.mod.mixinducks.feature.air_pockets.ship_water_pockets.LevelChunkDuck;
 import org.valkyrienskies.mod.util.FluidStateManager;
@@ -153,7 +154,10 @@ public abstract class MixinLevelChunk extends ChunkAccess implements VSLevelChun
         // This function is getting invoked by non-game threads for some reason. So use executeOrSchedule() to schedule
         // onSetBlock() to be run on the next tick when this function is invoked by a non-game thread.
         // See https://github.com/ValkyrienSkies/Valkyrien-Skies-2/issues/913 for more info.
-        VSGameUtilsKt.executeOrSchedule(level, () -> BlockStateInfo.INSTANCE.onSetBlock(level, pos, prevState, state));
+        VSGameUtilsKt.executeOrSchedule(level, () -> {
+            BlockStateInfo.INSTANCE.onSetBlock(level, pos, prevState, state);
+            VanillaFluidFlowWindProvider.INSTANCE.markDirty(level, pos, prevState, state);
+        });
         this.fluidData.setFluidState(pos, state.getFluidState());
     }
 

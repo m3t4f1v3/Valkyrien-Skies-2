@@ -60,6 +60,7 @@ import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod;
 import org.valkyrienskies.mod.common.config.DimensionParametersResolver;
 import org.valkyrienskies.mod.common.config.MassDatapackResolver;
+import org.valkyrienskies.mod.common.fluid.VanillaFluidFlowWindProvider;
 import org.valkyrienskies.mod.common.hooks.VSGameEvents;
 import org.valkyrienskies.mod.common.util.EntityDragger;
 import org.valkyrienskies.mod.common.util.ShipSettingsKt;
@@ -251,6 +252,7 @@ public abstract class MixinMinecraftServer implements IShipObjectWorldServerProv
         // Only drag entities after we have updated the ship positions
         for (final ServerLevel level : getAllLevels()) {
             EntityDragger.INSTANCE.dragEntitiesWithShips(level.getAllEntities(), false);
+            VanillaFluidFlowWindProvider.INSTANCE.tick(level);
             if (LoadedMods.getWeather2())
                 Weather2Compat.INSTANCE.tick(level);
         }

@@ -273,10 +273,13 @@ object VSGameConfig {
         var enableInteractDistanceChecks = true
 
         @ConfigEntry(description = "If true, enables buoyancy from serverside air pockets.")
-        var enablePocketBuoyancy = true
+        var enablePocketBuoyancy = false
 
         @ConfigEntry(description = "Buoyancy factor added per cubic meter of air pocket inside a ship")
         var buoyancyFactorPerPocketVolume = 0.05 // per cubic meter
+
+        @ConfigEntry(description = "Force multiplier for flowing fluids pushing ships")
+        var fluidWindSpeedScale = 10.0
 
         @ConfigEntry(
             description = "If true, teleportation into the shipyard is redirected to " +
