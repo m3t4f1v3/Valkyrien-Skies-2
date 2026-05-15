@@ -32,7 +32,7 @@ object PistonShipPush {
     // in front aren't pushed; loose enough to absorb worldAABB rounding when a ship rests on the face.
     private const val CONTACT_SKIN = 0.05
 
-    // Slime blocks hit harder than a regular pushed block — biasing their share of the per-target
+    // Slime blocks hit harder than a regular pushed block; biasing their share of the per-target
     // Δv budget upward lets a slime-tipped piston exceed pistonPushSpeed slightly.
     private const val SLIME_PUNCH_MULT = 2.0
 
@@ -63,7 +63,7 @@ object PistonShipPush {
         // always represent a pull contact along the slime chain and should be processed.
         if (!be.isExtending && be.isSourcePiston && !isStickyRetraction(be)) return
         // Taper extension force as the piston extends (the rod loses "punch" near full reach). Pull stays
-        // full strength on every tick — sticky adhesion doesn't weaken with the head's retraction.
+        // full strength on every tick; sticky adhesion doesn't weaken with the head's retraction.
         val cycleScale = if (be.isExtending) (1.0 - progress).toDouble() else 1.0
         val punchMult = if (be.movedState.`is`(Blocks.SLIME_BLOCK)) SLIME_PUNCH_MULT else 1.0
 
