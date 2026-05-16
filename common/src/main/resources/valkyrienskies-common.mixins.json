@@ -21,6 +21,7 @@
     "accessors.world.level.pathfinder.PathAccessor",
     "accessors.world.level.pathfinder.WalkNodeEvaluatorInvoker",
     "commands.argument.selector.MixinEntitySelectorParser",
+    "entity.MixinBoat",
     "entity.MixinEntity",
     "feature.ai.bell.MixinBellBlockEntity",
     "feature.mob_spawning.MixinServerLevelCatVillage",

@@ -23,6 +23,7 @@
     "compat.modular_routers.MixinRouterMenu",
     "compat.thermalexpansion.MixinTileCoFH",
     "compat.twilightforest.ChunkGeneratorTwilightMixin",
+    "entity.MixinBoat",
     "entity.MixinContainerEntity",
     "feature.air_pockets.MixinEntityFluidPushing",
     "feature.fix_tp_ships_cross_dimension.MixinLevelChunk",

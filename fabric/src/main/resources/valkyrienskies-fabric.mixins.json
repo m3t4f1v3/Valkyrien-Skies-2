@@ -8,6 +8,7 @@
     "compat.connectiblechains.MixinChainCollisionEntity",
     "compat.create.MixinBlockBreakingKineticTileEntity",
     "compat.create.MixinControlledContraptionEntity",
+    "entity.MixinBoat",
     "entity.MixinContainerEntity",
     "feature.air_pockets.MixinEntityFluidPushing",
     "feature.explosions.ClipContextMixin",
