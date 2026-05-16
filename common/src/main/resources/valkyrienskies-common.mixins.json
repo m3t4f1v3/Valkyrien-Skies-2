@@ -17,7 +17,6 @@
     "accessors.world.level.block.StairBlockAccessor",
     "accessors.world.level.pathfinder.PathAccessor",
     "commands.argument.selector.MixinEntitySelectorParser",
-    "entity.MixinBoat",
     "entity.MixinEntity",
     "feature.ai.goal.JitteredLinearRetryAccessor",
     "feature.ai.goal.MixinGoalUtil",
