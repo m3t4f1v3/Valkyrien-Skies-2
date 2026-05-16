@@ -1,4 +1,4 @@
-package org.valkyrienskies.mod.mixin.feature.mob_spawning;
+package org.valkyrienskies.mod.fabric.mixin.feature.mob_spawning;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
