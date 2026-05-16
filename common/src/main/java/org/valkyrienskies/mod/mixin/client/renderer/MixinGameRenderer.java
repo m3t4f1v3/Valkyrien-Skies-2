@@ -10,6 +10,7 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
@@ -273,7 +274,7 @@ public abstract class MixinGameRenderer {
         }
 
         final Entity playerVehicle = player.getVehicle();
-        if (playerVehicle == null) {
+        if (playerVehicle == null && !(player instanceof LivingEntity living && living.isSleeping())) {
             prepareCullFrustum.call(instance, matrixStack, vec3, matrix4f);
             return;
         }

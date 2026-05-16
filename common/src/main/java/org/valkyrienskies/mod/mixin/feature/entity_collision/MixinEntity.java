@@ -95,6 +95,8 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider,
         Long draggingShipID = getDraggingInformation().getLastShipStoodOn();
         movement = EntityShipCollisionUtils.INSTANCE
             .adjustEntityMovementForShipCollisions(entity, movement, box, this.level);
+        movement = EntityShipCollisionUtils.adjustEntityMovementForShipyardEntityCollisions(
+            entity, movement, box, this.level);
         final Vec3 collisionResultWithWorld = collide.call(entity, movement);
 
         if (collisionResultWithWorld.distanceToSqr(movement) > 1e-12) {

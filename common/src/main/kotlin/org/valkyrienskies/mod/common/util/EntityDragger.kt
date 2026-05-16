@@ -1,6 +1,7 @@
 package org.valkyrienskies.mod.common.util
 
 import net.minecraft.client.player.LocalPlayer
+import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
@@ -166,6 +167,23 @@ object EntityDragger {
                     }
 
                     entityDraggingInformation.addedYawRotLastTick = addedYRot
+                }
+                if (!entity.level().isClientSide && !entity.onGround() && entity.deltaMovement.y <= 0.0) {
+                    val ship = shipDraggingEntity?.let { entity.level().shipObjectWorld.allShips.getById(it) }
+                    if (ship != null) {
+                        val level = entity.level()
+                        val shipLocal = ship.transform.worldToShip.transformPosition(
+                            Vector3d(entity.x, entity.y - 0.2, entity.z), Vector3d()
+                        )
+                        val footProbe = BlockPos.containing(shipLocal.x, shipLocal.y, shipLocal.z)
+                        // Fallback to the cell below catches fences/walls whose collision extends
+                        // above the cell they occupy.
+                        val onShipBlock = !level.getBlockState(footProbe)
+                                .getCollisionShape(level, footProbe).isEmpty
+                            || !level.getBlockState(footProbe.below())
+                                .getCollisionShape(level, footProbe.below()).isEmpty
+                        if (onShipBlock) entity.setOnGround(true)
+                    }
                 }
             } else if (entity.isControlledByLocalInstance && entityDraggingInformation.addedMovementLastTick.lengthSquared() > 1e-6) {
                 entity.push(entityDraggingInformation.addedMovementLastTick.x(),
