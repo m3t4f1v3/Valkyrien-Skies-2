@@ -15,6 +15,7 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
+import org.valkyrienskies.core.api.ships.Ship;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 
 @Mixin(BlockBreakingKineticBlockEntity.class)
@@ -34,6 +35,11 @@ public abstract class MixinBlockBreakingKineticTileEntity extends BlockEntity {
 
         AABB searchAABB = new AABB(originalBP);
 
+        // If we have an actual block in front of us, use that before anything else.
+        if (!level.getBlockState(originalBP).isAir()) {
+            return originalBP;
+        }
+
         // region This offset stuff is a hack to prevent drills being able to drill 2 blocks in front.
         // We hardcode the offset that both the saw and the drill have, and hope there's no other BlockBreakingKineticBlockEntitys
 
@@ -52,9 +58,14 @@ public abstract class MixinBlockBreakingKineticTileEntity extends BlockEntity {
 
         searchAABB = VSGameUtilsKt.transformAabbToWorld(level, searchAABB);
 
+        Ship originalShip = VSGameUtilsKt.getShipManagingPos(level, originalBP);
+
         List<BlockPos> foundSolids = new ArrayList<>();
+
         VSGameUtilsKt.transformFromWorldToNearbyShipsAndWorld(level, searchAABB.deflate(1.0E-6), (newAABB) -> {
             BlockPos.betweenClosedStream(newAABB).forEach((potentialFoundPos -> {
+                // Don't use the special AABB check if on the same ship, originalBP will take care of that
+                if (VSGameUtilsKt.getShipManagingPos(level, potentialFoundPos) == originalShip) return;
                 if (!level.getBlockState(potentialFoundPos).isAir() && (!potentialFoundPos.equals(getBlockPos()))) {
                     foundSolids.add(potentialFoundPos.immutable());
                 }
@@ -70,8 +81,10 @@ public abstract class MixinBlockBreakingKineticTileEntity extends BlockEntity {
         // 1.5 is based on vibes
         foundSolids.removeIf(pos -> VSGameUtilsKt.toWorldCoordinates(level, pos.getCenter()).distanceTo(center) > 1.5);
 
-        // Only air was found, so we return the originalBP (which is also air)
-        if (foundSolids.isEmpty()) return originalBP;
+        // if originalBP was air, AND all other locations were air, we still have to return something
+        if (foundSolids.isEmpty()) {
+            return originalBP;
+        }
 
         return foundSolids.get(0);
     }
