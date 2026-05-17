@@ -7,7 +7,6 @@
     "compat.connectiblechains.MixinChainCollisionEntity",
     "compat.connectiblechains.MixinChainKnotEntity",
     "compat.connectiblechains.MixinChainLink",
-    "compat.create.MixinBlockBreakingKineticTileEntity",
     "compat.create.MixinControlledContraptionEntity",
     "compat.create.client.MixinBlockEntityRenderHelper66",
     "compat.create.client.MixinBlockEntityRenderHelper67",
