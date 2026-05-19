@@ -11,7 +11,6 @@ import net.minecraft.world.level.material.Fluids;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Group;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.valkyrienskies.mod.common.air_pockets.ShipWaterPocketManager;
@@ -38,32 +37,14 @@ public abstract class MixinEntityFluidPushing {
             ((ShipWaterPocketEntityDuck) (Object) this).vs$isInShipAirPocketForWorldWater();
     }
 
-    @Group(name = "valkyrienair$fluidStateForWaterPockets", min = 1, max = 1)
     @WrapOperation(
         method = "updateFluidHeightAndDoFluidPushing(Ljava/util/function/Predicate;)V",
-        remap = false,
-        require = 0,
         at = @At(
             value = "INVOKE",
             target = "Lnet/minecraft/world/level/Level;getFluidState(Lnet/minecraft/core/BlockPos;)Lnet/minecraft/world/level/material/FluidState;"
         )
     )
     private FluidState valkyrienair$overrideFluidStateForWaterPockets_named(final Level level, final BlockPos blockPos,
-        final Operation<FluidState> getFluidState) {
-        return valkyrienair$overrideFluidStateForWaterPockets(level, blockPos, getFluidState);
-    }
-
-    @Group(name = "valkyrienair$fluidStateForWaterPockets", min = 1, max = 1)
-    @WrapOperation(
-        method = "updateFluidHeightAndDoFluidPushing(Ljava/util/function/Predicate;)V",
-        remap = false,
-        require = 0,
-        at = @At(
-            value = "INVOKE",
-            target = "Lnet/minecraft/world/level/Level;m_6425_(Lnet/minecraft/core/BlockPos;)Lnet/minecraft/world/level/material/FluidState;"
-        )
-    )
-    private FluidState valkyrienair$overrideFluidStateForWaterPockets_srg(final Level level, final BlockPos blockPos,
         final Operation<FluidState> getFluidState) {
         return valkyrienair$overrideFluidStateForWaterPockets(level, blockPos, getFluidState);
     }
