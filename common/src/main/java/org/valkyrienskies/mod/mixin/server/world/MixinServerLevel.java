@@ -448,8 +448,7 @@ public abstract class MixinServerLevel implements IShipObjectWorldServerProvider
 
     @Override
     public void removeChunk(final int chunkX, final int chunkZ) {
-        final ChunkPos chunkPos = new ChunkPos(chunkX, chunkZ);
-        vs$knownChunks.remove(chunkPos);
+        vs$knownChunks.remove(ChunkPos.asLong(chunkX, chunkZ));
     }
 
     @Unique
