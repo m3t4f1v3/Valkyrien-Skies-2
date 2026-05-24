@@ -6,7 +6,6 @@
   "mixins": [
     "compat.connectiblechains.MixinChainable",
     "compat.connectiblechains.MixinChainCollisionEntity",
-    "compat.create.MixinBlockBreakingKineticTileEntity",
     "compat.create.MixinControlledContraptionEntity",
     "entity.MixinBoat",
     "entity.MixinContainerEntity",
