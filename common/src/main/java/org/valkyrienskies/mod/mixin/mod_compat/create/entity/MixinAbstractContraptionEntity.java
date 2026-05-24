@@ -27,6 +27,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.joml.Quaterniond;
+import org.joml.Quaterniondc;
 import org.joml.Matrix3d;
 import org.joml.Matrix4d;
 import org.joml.Matrix4dc;
@@ -110,6 +112,20 @@ public abstract class MixinAbstractContraptionEntity extends Entity implements M
     @Unique
     private int vs$segmentId = -1;
 
+    @Unique
+    private long vs$segmentBodyId = -1L;
+
+    @Unique
+    private boolean vs$isWorldSegment = true;
+
+    @Unique
+    @Nullable
+    private Vector3d vs$lastSegmentPosition;
+
+    @Unique
+    @Nullable
+    private Quaterniond vs$lastSegmentRotation;
+
     @Override
     public int vs$getSegmentId() {
         return vs$segmentId;
@@ -118,6 +134,40 @@ public abstract class MixinAbstractContraptionEntity extends Entity implements M
     @Override
     public void vs$setSegmentId(int segmentId) {
         vs$segmentId = segmentId;
+    }
+
+    @Override
+    public void vs$setSegmentOwner(long bodyId, boolean isWorld) {
+        vs$segmentBodyId = bodyId;
+        vs$isWorldSegment = isWorld;
+    }
+
+    @Override
+    public long vs$getSegmentBodyId() {
+        return vs$segmentBodyId;
+    }
+
+    @Override
+    public boolean vs$isWorldSegment() {
+        return vs$isWorldSegment;
+    }
+
+    @Override
+    public void vs$setLastSegmentPose(Vector3dc position, Quaterniondc rotation) {
+        vs$lastSegmentPosition = new Vector3d(position);
+        vs$lastSegmentRotation = new Quaterniond(rotation);
+    }
+
+    @Override
+    @Nullable
+    public Vector3dc vs$getLastSegmentPosition() {
+        return vs$lastSegmentPosition;
+    }
+
+    @Override
+    @Nullable
+    public Quaterniondc vs$getLastSegmentRotation() {
+        return vs$lastSegmentRotation;
     }
 
     //Region start - fix being sent to the  ̶s̶h̶a̶d̶o̶w̶r̶e̶a̶l̶m̶ shipyard on ship contraption disassembly
@@ -333,6 +383,27 @@ public abstract class MixinAbstractContraptionEntity extends Entity implements M
         }
     }
 
+    @Inject(method = "tick", at = @At("RETURN"))
+    private void updateCollisionSegmentTransform(final CallbackInfo ci) {
+        final int segmentId = this.vs$getSegmentId();
+        if (segmentId == -1 || this.level().isClientSide) {
+            return;
+        }
+        ContraptionSegmentHelper.updateContraptionSegmentTransform(
+            (ServerLevel) this.level(),
+            AbstractContraptionEntity.class.cast(this),
+            segmentId,
+            this.vs$getSegmentBodyId(),
+            this.vs$isWorldSegment(),
+            this.vs$getLastSegmentPosition(),
+            this.vs$getLastSegmentRotation()
+        );
+        this.vs$setLastSegmentPose(
+            ContraptionSegmentHelper.getContraptionSegmentPosition(AbstractContraptionEntity.class.cast(this)),
+            ContraptionSegmentHelper.getContraptionSegmentRotation(AbstractContraptionEntity.class.cast(this))
+        );
+    }
+
     @NotNull
     @Override
     public Matrix4dc computeContraptionWingTransform() {
@@ -356,18 +427,11 @@ public abstract class MixinAbstractContraptionEntity extends Entity implements M
             return;
         }
         ServerLevel serverLevel = (ServerLevel) level;
-        ServerShipWorld serverShipWorld = ValkyrienSkies.getShipWorld(serverLevel.getServer());
-        VsiServerShipWorld vsServerShipWorld = (VsiServerShipWorld) serverShipWorld;
-
-        long bodyId = vsServerShipWorld.getDimensionToGroundBodyIdImmutable().get(ValkyrienSkies.getDimensionId(serverLevel));
-
-        ServerShip ship = VSGameUtilsKt.getShipManagingPos(serverLevel, BlockPos.containing(this.getAnchorVec()));
-
-        if (ship != null && ship.getBodyId() != null && ship.getBodyId() != bodyId) {
-            bodyId = ship.getBodyId();
-        }
-
-        boolean isWorld = bodyId == vsServerShipWorld.getDimensionToGroundBodyIdImmutable().get(ValkyrienSkies.getDimensionId(serverLevel));
-        ContraptionSegmentHelper.removeContraptionSegment(serverLevel, segmentId, bodyId, isWorld);
+        ContraptionSegmentHelper.removeContraptionSegment(
+            serverLevel,
+            segmentId,
+            this.vs$getSegmentBodyId(),
+            this.vs$isWorldSegment()
+        );
     }
 }

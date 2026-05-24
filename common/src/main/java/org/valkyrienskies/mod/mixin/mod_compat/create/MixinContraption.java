@@ -66,6 +66,10 @@ public class MixinContraption {
             return;
         }
         int segmentId = ContraptionSegmentHelper.addContraptionSegment(serverLevel, data, entity, bodyId, isWorld);
-        ((MixinAbstractContraptionEntityDuck) entity).vs$setSegmentId(segmentId);
+        MixinAbstractContraptionEntityDuck duck = (MixinAbstractContraptionEntityDuck) entity;
+        duck.vs$setSegmentId(segmentId);
+        if (segmentId != -1) {
+            duck.vs$setSegmentOwner(bodyId, isWorld);
+        }
     }
 }
