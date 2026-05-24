@@ -11,9 +11,12 @@ import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import java.util.Optional;
+import net.minecraft.world.phys.shapes.BooleanOp;
+import net.minecraft.world.phys.shapes.Shapes;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
 import org.spongepowered.asm.mixin.Final;
@@ -81,6 +84,44 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider,
     }
 
     /**
+     * Will execute suffocation check for ship blocks too.
+     */
+    @Inject(
+        method = "isInWall",
+        at = @At(value = "TAIL"),
+        cancellable = true
+    )
+    private void isInShipWall(CallbackInfoReturnable<Boolean> cir, @Local AABB aabb){
+        if(cir.getReturnValue()) return;
+        VSGameUtilsKt.transformFromWorldToNearbyShipsAndWorld(level, aabb, arg -> {
+            BlockPos.betweenClosedStream(arg).forEach(
+                blockPos -> {
+                    BlockState blockState = level.getBlockState(blockPos);
+                    if(!blockState.isAir()
+                        && blockState.isSuffocating(level, blockPos)
+                        && Shapes.joinIsNotEmpty(blockState.getCollisionShape(level, blockPos).move(blockPos.getX(), blockPos.getY(), blockPos.getZ()), Shapes.create(arg), BooleanOp.AND)
+                    ) {
+                        cir.setReturnValue(true);
+                    }
+                }
+            );
+        });
+    }
+
+    /**
+     * Allows Entities to use collision with ship to get into pose, e.g. crawling of players.
+     */
+    @WrapOperation(
+        method = "canEnterPose",
+        at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/world/level/Level;noCollision(Lnet/minecraft/world/entity/Entity;Lnet/minecraft/world/phys/AABB;)Z")
+    )
+    private boolean noCollisionWithShip(Level level, Entity entity, AABB aabb, Operation<Boolean> original){
+        if(!original.call(level, entity, aabb)) return false;
+        return EntityShipCollisionUtils.INSTANCE.getShipPolygonsCollidingWithEntity(null, Vec3.ZERO, aabb.deflate(0.2), level).isEmpty();
+    }
+
+    /**
      * Allows entities to collide with ships by modifying the movement vector.
      */
     @WrapOperation(
@@ -93,10 +134,21 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider,
     public Vec3 collideWithShips(final Entity entity, Vec3 movement, final Operation<Vec3> collide) {
         final AABB box = this.getBoundingBox();
         Long draggingShipID = getDraggingInformation().getLastShipStoodOn();
-        movement = EntityShipCollisionUtils.INSTANCE
-            .adjustEntityMovementForShipCollisions(entity, movement, box, this.level);
-        movement = EntityShipCollisionUtils.adjustEntityMovementForShipyardEntityCollisions(
-            entity, movement, box, this.level);
+      
+        //Subdivide the movement if the speed is too high, to avoid clipping through.
+        int subdivision = (int) (movement.length() / 0.5) + 1;
+        Vec3 substep = movement.scale(1.0 / subdivision);
+        for (int i = 0; i < subdivision; i++) {
+            Vec3 partialResult = EntityShipCollisionUtils.INSTANCE
+                .adjustEntityMovementForShipCollisions(entity, substep, box.move(substep.scale(i)), this.level);
+            partialResult = EntityShipCollisionUtils
+              .adjustEntityMovementForShipyardEntityCollisions(entity, partialResult, box.move(substep.scale(i)), this.level);
+          if (partialResult.distanceToSqr(substep) > 1e-12) {
+                //Collision happened on this step.
+                movement = substep.scale(i).add(partialResult);
+                break;
+            }
+        }
         final Vec3 collisionResultWithWorld = collide.call(entity, movement);
 
         if (collisionResultWithWorld.distanceToSqr(movement) > 1e-12) {

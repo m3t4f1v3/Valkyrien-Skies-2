@@ -27,6 +27,7 @@
   ],
   "client": [
     "client.render.MixinLevelRenderer",
+    "client.render.MixinScreenEffectRenderer",
     "compat.connectiblechains.client.MixinChainKnotEntityRenderer",
     "compat.create.client.MixinBlockEntityRenderHelper",
     "compat.create.client.MixinChainConveyorBlockEntity",
