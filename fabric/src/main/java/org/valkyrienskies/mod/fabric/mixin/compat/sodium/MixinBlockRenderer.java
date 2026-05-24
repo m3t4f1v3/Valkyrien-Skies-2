@@ -11,6 +11,7 @@ import me.jellysquid.mods.sodium.client.render.chunk.compile.pipeline.BlockRende
 import me.jellysquid.mods.sodium.client.render.chunk.terrain.material.Material;
 
 import net.minecraft.client.renderer.block.model.BakedQuad;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.phys.Vec3;
 
 import org.spongepowered.asm.mixin.Mixin;
@@ -64,11 +65,13 @@ public class MixinBlockRenderer {
                 ? VsVertexFlagPacker.resolverTypeFor(ctx.state())
                 : 0;
         boolean isShaded = quad.hasShade();
+        boolean fullAoReceiver = Block.isShapeFullBlock(ctx.state().getOcclusionShape(ctx.world(), ctx.pos()));
+        boolean useProjectedAo = isShaded && fullAoReceiver;
         boolean emissive = VsVertexFlagPacker.isEmissiveQuad((BakedQuad) quad);
         vs$faceSlot = emissive
                 ? VsVertexFlagPacker.FACE_FULLBRIGHT
-                : VsVertexFlagPacker.faceSlot(quad.getLightFace(), isShaded);
-        vs$shadeFactor = VsVertexFlagPacker.standardShade(quad.getLightFace(), isShaded);
+                : VsVertexFlagPacker.faceSlot(quad.getLightFace(), useProjectedAo);
+        vs$shadeFactor = VsVertexFlagPacker.standardShade(quad.getLightFace(), useProjectedAo);
     }
 
     @WrapOperation(method = "writeGeometry",

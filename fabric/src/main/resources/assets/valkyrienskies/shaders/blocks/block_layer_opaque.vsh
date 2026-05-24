@@ -6,18 +6,18 @@
 #import <sodium:include/chunk_material.glsl>
 
 // u_TransformMatrix: ship-to-world matrix, used to lift the per-quad face
-// normal into world space. Needed when shade is on (vanillaShadeFromNormal)
-// or when the world-light pipeline runs (vs_lightSmooth uses the normal for
-// per-axis interp). ShipThing.bindUniform must agree with this gate.
-#if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_SHADE)
+// normal into world space. Needed when shade is on, when the world-light
+// pipeline runs, or when ship-on-ship AO projects occluders onto this face.
+// ShipThing.bindUniform must agree with this gate.
+#if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_SHADE) || defined(VS_SHIP_ON_SHIP)
 uniform mat4 u_TransformMatrix;
 #endif
 // u_LocalToCameraRel: maps sodium's chunk-local pos into camera-relative
-// world space. The VSH uses it both to emit v_CameraRelWorldPos (consumed by
-// the FSH light pipeline) and to compute the per-vertex worldPos for the
-// biome lookup. ShipThing binds the matching uniform only when one of the
-// two consumers is on.
-#if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_BIOME)
+// world space. The VSH uses it to emit v_CameraRelWorldPos (consumed by the
+// FSH light/AO paths) and to compute the per-vertex worldPos for the biome
+// lookup. ShipThing binds the matching uniform only when one of those
+// consumers is on.
+#if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_BIOME) || defined(VS_SHIP_ON_SHIP)
 uniform mat4 u_LocalToCameraRel;
 uniform ivec3 u_VsRenderOrigin;
 #endif
@@ -31,13 +31,13 @@ out vec2 v_TexCoord;
 out vec2 v_BakedLightCoord;
 // Camera-relative WORLD pos; FSH reads it (+ u_VsRenderOrigin) to recover
 // absolute world block coords for the world-light lookup.
-#ifdef VS_DYNAMIC_LIGHT
+#if defined(VS_DYNAMIC_LIGHT) || defined(VS_SHIP_ON_SHIP)
 out vec3 v_CameraRelWorldPos;
 #endif
 // World-space surface normal recovered from the per-quad face slot via
-// u_TransformMatrix. Used by both the world-light per-axis interp and the
-// directional-shade pass — declared if either is on.
-#if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_SHADE)
+// u_TransformMatrix. Used by world-light per-axis interp, directional shade,
+// and ship-on-ship AO — declared if any of those are on.
+#if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_SHADE) || defined(VS_SHIP_ON_SHIP)
 flat out vec3 v_WorldNormal;
 #endif
 // Decoded VS vertex flags packed by the BlockRenderer mixin into the high
@@ -148,7 +148,7 @@ void main() {
     vec3 translation = u_RegionOffset + _get_draw_translation(_draw_id);
     vec3 position = _vert_position + translation;
 
-#ifdef VS_DYNAMIC_LIGHT
+#if defined(VS_DYNAMIC_LIGHT) || defined(VS_SHIP_ON_SHIP)
     // Camera-relative world position. The fragment adds u_VsRenderOrigin to
     // recover the absolute world block position; per-fragment interpolation
     // means each fragment lands inside a block (not at a corner), avoiding the
@@ -176,7 +176,7 @@ void main() {
     float aoFloat = float(aoLevel) * 0.2;
     v_Color = vec4(_vert_color.rgb, aoFloat);
 
-#if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_SHADE)
+#if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_SHADE) || defined(VS_SHIP_ON_SHIP)
     // World-space surface normal: shipyard-space face direction transformed by
     // the ship-to-world matrix. All four vertices of a quad share the same face
     // slot, so flat-interpolating this through the rasterizer is exact.

@@ -6,4 +6,7 @@ public interface MixinAbstractContraptionEntityDuck {
     void vs$setForceStall(boolean forceStall);
 
     StructureTransform getStructureTransform();
+
+    void vs$setSegmentId(int segmentId);
+    int vs$getSegmentId();
 }

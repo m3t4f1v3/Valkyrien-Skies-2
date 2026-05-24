@@ -15,7 +15,7 @@ in vec3 v_VertexBiomeTint;   // rasterizer-blended world biome RGB, vec3(1.0) on
 #if defined(VS_DYNAMIC_LIGHT) || defined(VS_SHIP_ON_SHIP)
 in vec3 v_CameraRelWorldPos; // camera-relative WORLD pos; +u_VsRenderOrigin == absolute world pos
 #endif
-#if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_SHADE)
+#if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_SHADE) || defined(VS_SHIP_ON_SHIP)
 flat in vec3 v_WorldNormal;  // world-space surface normal recovered from face slot in the VSH
 #endif
 
@@ -362,9 +362,9 @@ float vs_sosShipAo(vec3 worldPosWorld, vec3 nf) {
         if (d_n <= 0.0 || d_n >= 1.5) continue;
         float fn = 1.0 - smoothstep(0.5, 1.5, d_n);
 
-        vec3 absNf = abs(nf_ship);
-        vec3 uAxis = absNf.x > 0.5 ? vec3(0, 1, 0) : vec3(1, 0, 0);
-        vec3 vAxis = absNf.z > 0.5 ? vec3(0, 1, 0) : vec3(0, 0, 1);
+        vec3 helper = abs(nf_ship.y) < 0.9 ? vec3(0, 1, 0) : vec3(1, 0, 0);
+        vec3 uAxis = normalize(cross(helper, nf_ship));
+        vec3 vAxis = cross(nf_ship, uAxis);
         float du = dot(d_ship, uAxis);
         float dv = dot(d_ship, vAxis);
 
@@ -406,7 +406,7 @@ void main() {
 #ifdef USE_VANILLA_COLOR_FORMAT
     diffuseColor *= v_Color;
 #else
-#if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_SHADE)
+#if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_SHADE) || defined(VS_SHIP_ON_SHIP)
     // World-space normal: the VSH packs the per-quad face direction into the
     // alpha byte, decodes it to a shipyard-space normal, and transforms by
     // u_TransformMatrix. v_WorldNormal is `flat`-interpolated so all 4 quad
@@ -490,7 +490,7 @@ void main() {
     // projected into world coords (and dilated emitter values). Reading it at
     // this fragment's world block lets nearby ships shadow / illuminate this
     // ship's surface. Skipped for fullbright quads (already at max lightmap)
-    // and reuses v_CameraRelWorldPos / u_VsRenderOrigin from VS_DYNAMIC_LIGHT.
+    // and reuses the same world-position varyings as VS_DYNAMIC_LIGHT.
     float sosShipAo = 1.0;
     if (!isFullbright) {
         // Ship emitters anywhere (own ship + other ships). The emitter list

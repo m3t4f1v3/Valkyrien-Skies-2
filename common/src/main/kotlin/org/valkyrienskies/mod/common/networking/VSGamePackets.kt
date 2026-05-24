@@ -99,6 +99,7 @@ object VSGamePackets {
                 entity.draggingInformation.lerpPositionOnShip = Vector3d(setMotion.x, setMotion.y, setMotion.z)
                 entity.draggingInformation.relativeVelocityOnShip = Vector3d(setMotion.xVel, setMotion.yVel, setMotion.zVel)
                 entity.draggingInformation.lerpYawOnShip = setMotion.yRot
+                entity.setOnGround(setMotion.onGround)
 
                 val previousWorldPosition = if (entity.draggingInformation.relativePositionOnShip != null) {
                     ship.renderTransform.shipToWorld.transformPosition(Vector3d(entity.draggingInformation.relativePositionOnShip))

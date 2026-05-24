@@ -22,8 +22,8 @@ public class ShipThing extends ChunkShaderInterface {
     // Ship-to-world matrix; only needed when the shader transforms the per-quad
     // face normal to world space (i.e. when shading or world-light lookup is on).
     private final GlUniformMatrix4f uniformTransformMatrix;
-    // Local-to-camera-relative matrix; only needed when the VSH samples world
-    // light (uses v_CameraRelWorldPos) or world biome (uses worldPosVertex).
+    // Local-to-camera-relative matrix; only needed when the VSH emits world
+    // position for lighting/AO or samples world biome (uses worldPosVertex).
     private final GlUniformMatrix4f uniformLocalToCameraRel;
     // Integer camera origin; same conditions as u_LocalToCameraRel.
     private final GlUniformInt3v uniformRenderOrigin;
@@ -50,7 +50,7 @@ public class ShipThing extends ChunkShaderInterface {
         boolean biome = (features & SodiumCompat.FEATURE_BIOME) != 0;
         boolean shade = (features & SodiumCompat.FEATURE_SHADE) != 0;
         boolean shipOnShip = (features & SodiumCompat.FEATURE_SHIP_ON_SHIP) != 0;
-        boolean wantTransform = light || shade;
+        boolean wantTransform = light || shade || shipOnShip;
         boolean wantLocalToCamera = light || biome || shipOnShip;
 
         this.uniformTransformMatrix = wantTransform

@@ -25,6 +25,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.LightLayer;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.lighting.LayerLightEventListener;
 
@@ -428,7 +429,7 @@ public class VsShipLightStorage {
                 for (int x = -1; x < 17; x++) {
                     pos.set(xMin + x, yMin + y, zMin + z);
                     BlockState state = level.getBlockState(pos);
-                    if (state.canOcclude() && state.isCollisionShapeFullBlock(level, pos)) {
+                    if (state.canOcclude() && Block.isShapeFullBlock(state.getOcclusionShape(level, pos))) {
                         acc |= 1 << (bitIdx & 31);
                     }
                     int b = block.getLightValue(pos);

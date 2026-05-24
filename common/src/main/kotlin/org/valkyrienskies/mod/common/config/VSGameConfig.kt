@@ -273,10 +273,13 @@ object VSGameConfig {
         var enableInteractDistanceChecks = true
 
         @ConfigEntry(description = "If true, enables buoyancy from serverside air pockets.")
-        var enablePocketBuoyancy = true
+        var enablePocketBuoyancy = false
 
         @ConfigEntry(description = "Buoyancy factor added per cubic meter of air pocket inside a ship")
         var buoyancyFactorPerPocketVolume = 0.05 // per cubic meter
+
+        @ConfigEntry(description = "Force multiplier for flowing fluids pushing ships")
+        var fluidWindSpeedScale = 10.0
 
         @ConfigEntry(
             description = "If true, teleportation into the shipyard is redirected to " +
@@ -327,7 +330,7 @@ object VSGameConfig {
         var allowMobSpawns = true
 
         @ConfigEntry(
-            description = "Allow rudimentary pathfinding on ships"
+            description = "Allow pathfinding on ships"
         )
         var aiOnShips = true
 
@@ -360,6 +363,11 @@ object VSGameConfig {
             description = "Default block hardness (unused value, placeholder for later)"
         )
         var defaultBlockHardness = 1.0
+
+        @ConfigEntry(
+            description = "Target velocity (m/s) a piston push/pull applies to a ship's contact point"
+        )
+        var pistonPushSpeed = 10.2
 
         @ConfigEntry(
             description = "Enable splitting in worldspace. (Experimental!)"
@@ -428,7 +436,6 @@ object VSGameConfig {
     }
 
     class Common {
-
         @ConfigEntry(
             description = "Multiplier for ship pocket flooding speed. `1.0` = current baseline, `0.3333` = ~3x slower flooding."
         )
@@ -443,17 +450,5 @@ object VSGameConfig {
             description = "Enables ship air pockets. Must be enabled on both client and server."
         )
         var enableAirPockets = true
-
-        @JvmField
-        @ConfigCategory(title = "Advanced")
-        val ADVANCED = Advanced()
-
-        class Advanced { // Debug configs that may be either side
-            @ConfigEntry(
-                description = "Renders mob pathfinding nodes. Must be set on client and server to work. " +
-                    "Requires the system property -Dorg.valkyrienskies.render_pathfinding=true"
-            )
-            var renderPathfinding = false // Requires ValkyrienCommonMixinConfigPlugin.PATH_FINDING_DEBUG to be true
-        }
     }
 }

@@ -44,8 +44,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.valkyrienskies.core.api.ships.ContraptionWingProvider;
 import org.valkyrienskies.core.api.ships.LoadedServerShip;
 import org.valkyrienskies.core.api.ships.LoadedShip;
+import org.valkyrienskies.core.api.ships.ServerShip;
 import org.valkyrienskies.core.api.ships.Ship;
-import org.valkyrienskies.core.api.ships.WingManager;
+import org.valkyrienskies.core.api.world.ServerShipWorld;
+import org.valkyrienskies.core.internal.world.VsiServerShipWorld;
+import org.valkyrienskies.mod.api.ValkyrienSkies;
 import org.valkyrienskies.mod.common.CompatUtil;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.entity.ShipMountedToData;
@@ -53,6 +56,7 @@ import org.valkyrienskies.mod.common.entity.ShipMountedToDataProvider;
 import org.valkyrienskies.mod.common.util.IEntityDraggingInformationProvider;
 import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
 import org.valkyrienskies.mod.compat.CreateConversionsKt;
+import org.valkyrienskies.mod.compat.create.ContraptionSegmentHelper;
 import org.valkyrienskies.mod.mixinducks.mod_compat.create.MixinAbstractContraptionEntityDuck;
 
 @Mixin(AbstractContraptionEntity.class)
@@ -101,6 +105,19 @@ public abstract class MixinAbstractContraptionEntity extends Entity implements M
         if (transformedPos == null) transformedPos = this.getPosition(partialTicks == null ? 0.0f : partialTicks);
 
         return new ShipMountedToData(shipObjectEntityMountedTo, toJOML(transformedPos));
+    }
+
+    @Unique
+    private int vs$segmentId = -1;
+
+    @Override
+    public int vs$getSegmentId() {
+        return vs$segmentId;
+    }
+
+    @Override
+    public void vs$setSegmentId(int segmentId) {
+        vs$segmentId = segmentId;
     }
 
     //Region start - fix being sent to the  ̶s̶h̶a̶d̶o̶w̶r̶e̶a̶l̶m̶ shipyard on ship contraption disassembly
@@ -328,5 +345,29 @@ public abstract class MixinAbstractContraptionEntity extends Entity implements M
     @Override
     public boolean vs$shouldDrag() {
         return false;
+    }
+
+    @Inject(method = "remove", at = @At("HEAD"))
+    private void onRemove(RemovalReason p_146834_, CallbackInfo ci) {
+        int segmentId = this.vs$getSegmentId();
+        if (segmentId == -1) return;
+        Level level = this.level();
+        if (level.isClientSide) {
+            return;
+        }
+        ServerLevel serverLevel = (ServerLevel) level;
+        ServerShipWorld serverShipWorld = ValkyrienSkies.getShipWorld(serverLevel.getServer());
+        VsiServerShipWorld vsServerShipWorld = (VsiServerShipWorld) serverShipWorld;
+
+        long bodyId = vsServerShipWorld.getDimensionToGroundBodyIdImmutable().get(ValkyrienSkies.getDimensionId(serverLevel));
+
+        ServerShip ship = VSGameUtilsKt.getShipManagingPos(serverLevel, BlockPos.containing(this.getAnchorVec()));
+
+        if (ship != null && ship.getBodyId() != null && ship.getBodyId() != bodyId) {
+            bodyId = ship.getBodyId();
+        }
+
+        boolean isWorld = bodyId == vsServerShipWorld.getDimensionToGroundBodyIdImmutable().get(ValkyrienSkies.getDimensionId(serverLevel));
+        ContraptionSegmentHelper.removeContraptionSegment(serverLevel, segmentId, bodyId, isWorld);
     }
 }

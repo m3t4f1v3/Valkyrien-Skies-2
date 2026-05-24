@@ -6,14 +6,15 @@
 #import <sodium:include/chunk_material.glsl>
 
 // u_TransformMatrix: ship-to-world matrix, used to lift the per-quad face
-// normal into world space. Needed when shade is on or when world-light runs.
-#if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_SHADE)
+// normal into world space. Needed when shade is on, when world-light runs, or
+// when ship-on-ship AO projects occluders onto this face.
+#if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_SHADE) || defined(VS_SHIP_ON_SHIP)
 uniform mat4 u_TransformMatrix;
 #endif
 // u_LocalToCameraRel: maps sodium's chunk-local pos into camera-relative
 // world space. Needed by FSH light pipeline (via v_CameraRelWorldPos) or by
-// the biome lookup (worldPosVertex).
-#if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_BIOME)
+// the biome lookup (worldPosVertex), or ship-on-ship AO.
+#if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_BIOME) || defined(VS_SHIP_ON_SHIP)
 uniform mat4 u_LocalToCameraRel;
 uniform ivec3 u_VsRenderOrigin;
 #endif
@@ -25,10 +26,10 @@ uniform usamplerBuffer u_VsBiomeLut;
 out vec4 v_Color;
 out vec2 v_TexCoord;
 out vec2 v_BakedLightCoord;
-#ifdef VS_DYNAMIC_LIGHT
+#if defined(VS_DYNAMIC_LIGHT) || defined(VS_SHIP_ON_SHIP)
 out vec3 v_CameraRelWorldPos;
 #endif
-#if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_SHADE)
+#if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_SHADE) || defined(VS_SHIP_ON_SHIP)
 flat out vec3 v_WorldNormal;
 #endif
 // Decoded VS vertex flags. See VsVertexFlagPacker:
@@ -129,7 +130,7 @@ void main() {
     vec3 translation = u_RegionOffset + _get_draw_translation(_draw_id);
     vec3 position = _vert_position + translation;
 
-#ifdef VS_DYNAMIC_LIGHT
+#if defined(VS_DYNAMIC_LIGHT) || defined(VS_SHIP_ON_SHIP)
     // Camera-relative world position. The fragment adds u_VsRenderOrigin to
     // recover the absolute world block position; per-fragment interpolation
     // means each fragment lands inside a block (not at a corner), avoiding the
@@ -159,7 +160,7 @@ void main() {
     float aoFloat = float(aoLevel) * 0.2;
     v_Color = vec4(_vert_color.rgb, aoFloat);
 
-#if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_SHADE)
+#if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_SHADE) || defined(VS_SHIP_ON_SHIP)
     // World-space surface normal: shipyard-space face direction transformed by
     // the ship-to-world matrix. All four vertices of a quad share the same face
     // slot, so flat-interpolating this through the rasterizer is exact.

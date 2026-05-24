@@ -78,6 +78,9 @@ public final class ShipPathfindingUtils {
     }
 
     public static BlockPos findSupportingShipBlock(final Level level, final Entity entity, final AABB aabb) {
+        if (!hasShipSupport(level, entity, aabb)) {
+            return null;
+        }
         return findSupportingShipBlock(level, aabb);
     }
 

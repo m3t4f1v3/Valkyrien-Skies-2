@@ -3072,7 +3072,7 @@ object ShipWaterPocketManager {
         val serverShip = ship as? LoadedServerShip ?: return
         val buoyancyHandler = serverShip.getAttachment(BuoyancyHandlerAttachment::class.java) ?: return
 
-        if (!VSGameConfig.SERVER.enablePocketBuoyancy) return
+        if (true || !VSGameConfig.SERVER.enablePocketBuoyancy) return
 
         val props = getBuoyancyFluidProps(state.floodFluid)
         buoyancyHandler?.setBuoyancyFluidDensity(props.density)

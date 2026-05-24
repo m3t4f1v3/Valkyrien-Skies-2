@@ -23,6 +23,7 @@ import com.mojang.blaze3d.platform.GlStateManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.world.level.LevelAccessor;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.LevelChunkSection;
@@ -209,7 +210,8 @@ public class VsWorldFromShipLightStorage {
                     if (state.isAir()) continue;
 
                     scratchBlockPos.set(sx, sy, sz);
-                    boolean isSolid = state.canOcclude() && state.isCollisionShapeFullBlock(level, scratchBlockPos);
+                    boolean isSolid = state.canOcclude()
+                            && Block.isShapeFullBlock(state.getOcclusionShape(level, scratchBlockPos));
                     int blockLight = state.getLightEmission();
                     if (!isSolid && blockLight == 0) continue;
 

@@ -1,6 +1,7 @@
 package org.valkyrienskies.mod.common
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation
+import org.valkyrienskies.mod.common.util.IEntityDraggingInformationProvider
 import net.minecraft.client.Minecraft
 import net.minecraft.client.multiplayer.ClientLevel
 import net.minecraft.world.level.block.Blocks
@@ -15,11 +16,16 @@ import net.minecraft.server.level.ServerChunkCache
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.util.thread.BlockableEventLoop
 import net.minecraft.world.entity.Entity
+import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.entity.player.Player
+import net.minecraft.world.level.BlockAndTintGetter
 import net.minecraft.world.level.ChunkPos
 import net.minecraft.world.level.Level
+import net.minecraft.world.level.LevelAccessor
+import net.minecraft.world.level.LightLayer
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.chunk.LevelChunkSection
+import net.minecraft.world.level.levelgen.Heightmap
 import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
 import org.joml.Vector3d
@@ -28,6 +34,7 @@ import org.joml.Vector3ic
 import org.joml.primitives.AABBd
 import org.joml.primitives.AABBdc
 import org.joml.primitives.AABBic
+import org.joml.primitives.Intersectiond
 import org.valkyrienskies.core.api.ships.ClientShip
 import org.valkyrienskies.core.api.ships.LoadedServerShip
 import org.valkyrienskies.core.api.ships.LoadedShip
@@ -433,6 +440,160 @@ fun ClientLevel?.transformRenderAABBToWorld(pos: Position, aabb: AABB): AABB {
 
 fun Entity?.getShipManaging(): Ship? = this?.let { this.level().getShipManagingPos(this.position()) }
 
+/**
+ * Returns the ship the entity is currently being dragged by (per [EntityDraggingInformation]),
+ * i.e. the ship the entity is physically standing on or has stood on within the last
+ * [EntityDraggingInformation.TICKS_TO_DRAG_ENTITIES] ticks. Differs from [getShipManaging]
+ * (chunk-claim ownership) — this answers "which ship is this mob actually on?" using the
+ * dragger attribution rather than worldAABB containment, so a mob in midair below a flying
+ * ship correctly returns null instead of being misattributed to the ship overhead.
+ */
+fun Entity?.getEnclosingShip(): Ship? {
+    if (this !is IEntityDraggingInformationProvider) return null
+    val info = this.draggingInformation
+    if (!info.isEntityBeingDraggedByAShip()) return null
+    val shipId = info.lastShipStoodOn ?: return null
+    return level().shipObjectWorld?.loadedShips?.getById(shipId)
+}
+
+/** Result of [getShipBlockStoodOn]: the ship the entity is standing on plus the shipyard cell of the supporting block. */
+data class ShipBlock(@JvmField val ship: Ship, @JvmField val shipLocalBlockPos: BlockPos)
+
+/**
+ * Geometric "is the entity standing on a ship, and on which shipyard cell?" check. For each ship whose
+ * AABB intersects a 1-cube around the entity's foot, project the foot through `worldToShip` and check
+ * whether the resulting shipyard cell has an actual non-air block (or, for fence/slab edge cases, the
+ * cell one below). Returns the first matching ship + cell.
+ *
+ * [probeDepth] controls how far below the entity's foot to probe. Use a tight value (e.g. 0.2) for
+ * spawn-time attribution where the entity is firmly on the surface; use a permissive value (e.g. 0.5)
+ * for pathfinding start anchoring where physics jitter / mid-jump should still resolve to the ship.
+ *
+ * Strictly tighter than worldAABB containment because it confirms an actual ship block at the foot
+ * rather than just AABB overlap (a sparse ship's worldAABB encloses huge empty volume). Mirrors the
+ * algorithm used by `MixinEntity.getPosStandingOnFromShips` for the dragger's per-tick detection.
+ */
+fun Entity?.getShipBlockStoodOn(probeDepth: Double): ShipBlock? {
+    if (this == null) return null
+    val level = level()
+    val foot = Vector3d(this.x, this.boundingBox.minY - probeDepth, this.z)
+    val probe = AABBd(foot.x - 0.5, foot.y - 0.5, foot.z - 0.5, foot.x + 0.5, foot.y + 0.5, foot.z + 0.5)
+    for (ship in level.getShipsIntersecting(probe)) {
+        val w2s = ship.transform.worldToShip
+        val local = w2s.transformPosition(foot, Vector3d())
+        val cellPos = BlockPos.containing(local.x, local.y, local.z)
+        if (!level.getBlockState(cellPos).isAir) return ShipBlock(ship, cellPos)
+        // Try one below for fence/slab edge cases.
+        val belowLocal = w2s.transformPosition(Vector3d(foot.x, foot.y - 1.0, foot.z))
+        val belowPos = BlockPos.containing(belowLocal.x, belowLocal.y, belowLocal.z)
+        if (!level.getBlockState(belowPos).isAir) return ShipBlock(ship, belowPos)
+    }
+    return null
+}
+
+/**
+ * [getShipBlockStoodOn] with a tight 0.2-block probe depth, returning just the ship. Use at
+ * finalizeSpawn / mob-spawn time, before the dragger system has populated `lastShipStoodOn`.
+ */
+fun Entity?.getShipStoodOn(): Ship? = getShipBlockStoodOn(0.2)?.ship
+
+/** Entity's `blockPosition()` projected into its enclosing ship, else world `blockPosition()`. */
+@JvmStatic
+fun shipMountedSpawnSeedPos(entity: Entity): BlockPos {
+    val ship = entity.getShipStoodOn() ?: return entity.blockPosition()
+    val local = ship.transform.worldToShip.transformPosition(entity.x, entity.y, entity.z, Vector3d())
+    return BlockPos.containing(local.x, local.y, local.z)
+}
+
+/** A shipyard `BlockPos`'s Y projected to its world-rendered Y, else `original`. */
+@JvmStatic
+fun shipProjectedWorldY(level: LevelAccessor, pos: BlockPos, original: Int): Int {
+    if (level !is ServerLevel) return original
+    val ship = level.getShipManagingPos(pos) ?: return original
+    val rendered = ship.transform.shipToWorld.transformPosition(
+        pos.x + 0.5, pos.y + 0.5, pos.z + 0.5, Vector3d()
+    )
+    return Math.floor(rendered.y).toInt()
+}
+
+/**
+ * Vanilla `max(blockLight, skyLight - skyDarken)` re-evaluated with the sky component as
+ * `min(shipSky, worldSky)` so a ship under a world ceiling reads dim. `original` returned
+ * when not on a ship.
+ */
+@JvmStatic
+fun shipAwareCombinedBrightness(getter: BlockAndTintGetter, pos: BlockPos, skyDarken: Int, original: Int): Int {
+    if (getter !is ServerLevel) return original
+    val ship = getter.getShipManagingPos(pos) ?: return original
+    val shipSky = getter.getBrightness(LightLayer.SKY, pos)
+    val rendered = ship.transform.shipToWorld.transformPosition(
+        pos.x + 0.5, pos.y + 0.5, pos.z + 0.5, Vector3d()
+    )
+    val worldSky = getter.getBrightness(LightLayer.SKY,
+        BlockPos.containing(rendered.x, rendered.y, rendered.z))
+    val adjustedSky = Math.max(0, Math.min(shipSky, worldSky) - skyDarken)
+    val shipBlock = getter.getBrightness(LightLayer.BLOCK, pos)
+    return Math.max(adjustedSky, shipBlock)
+}
+
+/** Sky-only counterpart to [shipAwareCombinedBrightness] — returns `min(original, worldSky)`. */
+@JvmStatic
+fun shipAwareSkyBrightness(getter: BlockAndTintGetter, pos: BlockPos, original: Int): Int {
+    if (getter !is ServerLevel) return original
+    val ship = getter.getShipManagingPos(pos) ?: return original
+    val rendered = ship.transform.shipToWorld.transformPosition(
+        pos.x + 0.5, pos.y + 0.5, pos.z + 0.5, Vector3d()
+    )
+    val worldSky = getter.getBrightness(LightLayer.SKY,
+        BlockPos.containing(rendered.x, rendered.y, rendered.z))
+    return Math.min(original, worldSky)
+}
+
+/** Vanilla `canSeeSky` projected to the ship's world pos, plus a heightmap-including-ships
+ *  check so other ships above also block the sky view. */
+@JvmStatic
+fun shipAwareCanSeeSky(level: Level, pos: BlockPos): Boolean {
+    val ship = level.getShipManagingPos(pos)
+    val worldPos = if (ship != null) {
+        val world = ship.transform.shipToWorld.transformPosition(
+            pos.x + 0.5, pos.y + 0.5, pos.z + 0.5, Vector3d()
+        )
+        BlockPos.containing(world.x, world.y, world.z)
+    } else pos
+    if (!level.canSeeSky(worldPos)) return false
+    val heightInclShips = CompatUtil.getWorldHeightmapPosIncludingShips(
+        level, Heightmap.Types.MOTION_BLOCKING, worldPos
+    )
+    return worldPos.y + 1 >= heightInclShips.y
+}
+
+/**
+ * `Entity.getLightLevelDependentMagicValue()` re-computed against `min(shipSky, worldSky)`
+ * and `max(shipBlock, worldBlock)` so AI gates that read it see the entity's actual local
+ * lighting on the ship. Null when not on a ship — caller falls back to vanilla.
+ */
+@JvmStatic
+fun shipAwareEntityLightLevelDependentMagicValue(entity: Entity): Float? {
+    val level = entity.level()
+    if (level !is ServerLevel) return null
+    val ship = entity.getEnclosingShip() ?: return null
+    val worldPos = BlockPos.containing(entity.x, entity.eyeY, entity.z)
+    val shipyard = ship.transform.worldToShip.transformPosition(
+        entity.x, entity.eyeY, entity.z, Vector3d()
+    )
+    val shipyardPos = BlockPos.containing(shipyard.x, shipyard.y, shipyard.z)
+    val shipSky = level.getBrightness(LightLayer.SKY, shipyardPos)
+    val worldSky = level.getBrightness(LightLayer.SKY, worldPos)
+    val effectiveSky = Math.max(0, Math.min(shipSky, worldSky) - level.skyDarken)
+    val shipBlock = level.getBrightness(LightLayer.BLOCK, shipyardPos)
+    val worldBlock = level.getBrightness(LightLayer.BLOCK, worldPos)
+    val rawBrightness = Math.max(effectiveSky, Math.max(shipBlock, worldBlock))
+    val brightness = rawBrightness / 15.0f
+    val scaled = brightness / (4.0f - 3.0f * brightness)
+    val ambient = level.dimensionType().ambientLight()
+    return scaled + ambient * (1.0f - scaled)
+}
+
 // Level
 fun Level?.getShipManagingPos(chunkX: Int, chunkZ: Int) =
     getShipManagingPosImpl(this, chunkX, chunkZ)
@@ -573,6 +734,52 @@ fun Level?.transformAabbToWorld(aabb: AABBdc, dest: AABBd): AABBd {
 }
 
 /**
+ * Like [transformAabbToWorld], but yields the actual OBB (center, three unit axes, half-extents)
+ * rather than the loose AABB around it. Output layout matches [Intersectiond]'s `testObOb`.
+ */
+fun Level?.transformAabbToWorldObb(
+    aabb: AABBdc,
+    centerOut: Vector3d,
+    axisXOut: Vector3d,
+    axisYOut: Vector3d,
+    axisZOut: Vector3d,
+    halfExtentsOut: Vector3d,
+) {
+    val cx = (aabb.minX() + aabb.maxX()) * 0.5
+    val cy = (aabb.minY() + aabb.maxY()) * 0.5
+    val cz = (aabb.minZ() + aabb.maxZ()) * 0.5
+    val hx = (aabb.maxX() - aabb.minX()) * 0.5
+    val hy = (aabb.maxY() - aabb.minY()) * 0.5
+    val hz = (aabb.maxZ() - aabb.minZ()) * 0.5
+
+    val ship1 = getShipManagingPos(aabb.minX(), aabb.minY(), aabb.minZ())
+    val ship2 = getShipManagingPos(aabb.maxX(), aabb.maxY(), aabb.maxZ())
+    val ship = if (ship1 != null && ship2 != null && ship1.id == ship2.id) ship1 else null
+
+    if (ship == null) {
+        centerOut.set(cx, cy, cz)
+        axisXOut.set(1.0, 0.0, 0.0)
+        axisYOut.set(0.0, 1.0, 0.0)
+        axisZOut.set(0.0, 0.0, 1.0)
+        halfExtentsOut.set(hx, hy, hz)
+        return
+    }
+
+    val m = ship.shipToWorld
+    m.transformPosition(centerOut.set(cx, cy, cz))
+    m.transformDirection(axisXOut.set(hx, 0.0, 0.0))
+    m.transformDirection(axisYOut.set(0.0, hy, 0.0))
+    m.transformDirection(axisZOut.set(0.0, 0.0, hz))
+    val lx = axisXOut.length()
+    val ly = axisYOut.length()
+    val lz = axisZOut.length()
+    halfExtentsOut.set(lx, ly, lz)
+    if (lx > 0.0) axisXOut.div(lx)
+    if (ly > 0.0) axisYOut.div(ly)
+    if (lz > 0.0) axisZOut.div(lz)
+}
+
+/**
  * Execute [runnable] immediately iff the thread invoking this is the same as the game thread.
  * Otherwise, schedule [runnable] to run on the next tick.
  */
@@ -592,6 +799,22 @@ fun Level.executeOrSchedule(runnable: Runnable) {
 }
 
 fun getShipMountedToData(passenger: Entity, partialTicks: Float? = null): ShipMountedToData? {
+    // Sleeping in a ship-mounted bed counts as a mount relationship — render/cull/packet
+    // paths then treat it like a vehicle ride. Offset matches vanilla setPosToBed.
+    if (passenger is LivingEntity && passenger.isSleeping) {
+        val sleepingPos = passenger.sleepingPos.orElse(null)
+        if (sleepingPos != null) {
+            val ship = passenger.level().getLoadedShipManagingPos(sleepingPos)
+            if (ship != null) {
+                val mountedPosInShip: Vector3dc = Vector3d(
+                    sleepingPos.x + 0.5,
+                    sleepingPos.y + 0.6875,
+                    sleepingPos.z + 0.5
+                )
+                return ShipMountedToData(ship, mountedPosInShip)
+            }
+        }
+    }
     val vehicle = passenger.vehicle ?: return null
     if (vehicle is ShipMountedToDataProvider) {
         return vehicle.provideShipMountedToData(passenger, partialTicks)
