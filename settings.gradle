@@ -43,7 +43,7 @@ include("common")
 include("fabric")
 include("forge")
 
-/*
+
 try {
     def candidatePaths = [
         providers.gradleProperty("vsCoreDir").orNull,
@@ -66,7 +66,7 @@ try {
     println "VS-CORE DEBUG: Candidate paths: ${candidatePaths}"
     println "VS-CORE DEBUG: Resolved path: ${core?.absolutePath ?: '<not found>'}"
     println "VS-CORE DEBUG: Exists? ${core?.isDirectory() ?: false}"
-    if (core?.isDirectory() && false) {
+    if (core?.isDirectory()) {
         includeBuild(core) {
             dependencySubstitution {
                 // Tell Gradle: "Whenever someone asks for 'org.valkyrienskies.core:api',
@@ -79,6 +79,6 @@ try {
         }
     }
 } catch (SecurityException ignore) {}
-*/
+
 
 rootProject.name = "valkyrienskies"
