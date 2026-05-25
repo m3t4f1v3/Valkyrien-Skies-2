@@ -5,6 +5,8 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.blaze3d.vertex.VertexFormat;
+import java.util.ArrayList;
+import java.util.List;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.LevelRenderer;
@@ -26,12 +28,18 @@ import org.joml.Vector2d;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
 import org.joml.Vector3f;
+import org.joml.primitives.AABBd;
+import org.joml.primitives.AABBdc;
 import org.joml.primitives.AABBic;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.valkyrienskies.core.api.bodies.ClientVsBody;
+import org.valkyrienskies.core.api.bodies.VsBody;
+import org.valkyrienskies.core.api.bodies.VsBodyCreateData;
+import org.valkyrienskies.core.api.bodies.properties.BodyTransform;
 import org.valkyrienskies.core.api.ships.ClientShip;
 import org.valkyrienskies.core.api.ships.properties.ShipTransform;
 import org.valkyrienskies.core.internal.world.VsiClientShipWorld;
@@ -77,7 +85,9 @@ public class MixinDebugRenderer {
             // Reduced debug info (gamerule) disables ability to see normal hitboxes, so we disable ship ones too
             if (Minecraft.getInstance().showOnlyReducedInfo()) return;
 
+            List<Long> alreadyRenderedVSBodies = new ArrayList<>();
             for (final ClientShip shipObjectClient : shipObjectClientWorld.getLoadedShips()) {
+                alreadyRenderedVSBodies.add(shipObjectClient.getBodyId());
                 final ShipTransform shipRenderTransform = shipObjectClient.getRenderTransform();
                 final Vector3d shipRenderPosition = shipObjectClient.getRenderAABB().center(new Vector3d());
                 final Quaternionf shipRenderRotate = shipRenderTransform.getRotation().get(new Quaternionf());
@@ -169,6 +179,98 @@ public class MixinDebugRenderer {
                         .transformDirection(liftForce, new Vector3d());
                     vs_renderForce(matrices, bufferSource.getBuffer(RenderType.LINES), centerOfMass, liftForceInShip,
                         0.01, 10.0, 0.0F, 1.0F, 0.5F, 1.0F);
+                }
+
+                matrices.popPose();
+            }
+
+            // TODO: This render stuff is uh kinda broken.
+            //  Pretty much the only part that works is the center of mass box,
+            //  the rest renders in wrong places / coordinate spaces / incorrectly.
+            //  Ideally we could render the actual voxel shape of the vsbody,
+            //  but that doesn't seem to be synced to client?
+            for (ClientVsBody clientVsBody : shipObjectClientWorld.getAllBodies()) {
+                if (alreadyRenderedVSBodies.contains(clientVsBody.getId())) continue;
+                final BodyTransform bodyRenderTransform = clientVsBody.getRenderTransform();
+
+                AABBdc localRenderAABB = clientVsBody.getRenderAABB();
+                AABBdc renderAABBd = localRenderAABB.transform(bodyRenderTransform.getToWorld(), new AABBd());
+
+                final Vector3d bodyRenderPosition = renderAABBd.center(new Vector3d());
+                final Quaternionf bodyRenderRotate = bodyRenderTransform.getRotation().get(new Quaternionf());
+                // First, move to the location of the body
+                matrices.pushPose();
+                //matrices.translate(-cameraX + bodyRenderPosition.x(), -cameraY + bodyRenderPosition.y(), -cameraZ + bodyRenderPosition.z());
+
+                boolean xrayEligible =
+                    // Allow for spectators and creative builders.
+                    Minecraft.getInstance().player.isSpectator() || Minecraft.getInstance().player.isCreative()
+                        ||
+                        // Force xray if player is already inside the ship.
+                        clientVsBody.getRenderAABB().containsPoint(
+                            VectorConversionsMCKt.toJOML(Minecraft.getInstance().player.position())
+                        )
+                        ||
+                        // Otherwise, only allow if line of sight to ship is not obstructed by a solid block.
+                        clientVsBody.getRenderAABB().intersectsLineSegment(
+                            cameraX, cameraY, cameraZ,
+                            hit.location.x, hit.location.y, hit.location.z,
+                            new Vector2d()
+                        ) != Intersectiond.OUTSIDE
+                    ;
+
+                AABB renderAABB = VectorConversionsMCKt.toMinecraft(renderAABBd);
+
+                // Bounding Box
+                LevelRenderer
+                    .renderLineBox(matrices, bufferSource.getBuffer(RenderType.LINES), renderAABB, 234.0F / 255.0F, 0.0F, 217.0f / 255.0f, 1.0F);
+
+                // The following all rotate along with the ship.
+                // We do a union to make sure the AABB is at least 0.1x0.1x0.1 otherwise /0 happens and shit gets weird
+                AABBdc shipAABB = clientVsBody.getRenderAABB();//.union(new AABBd(-0.1, -0.1, -0.1, 0.1, 0.1, 0.1), new AABBd());
+
+                if (!shipAABB.isValid()) {
+                    shipAABB = new AABBd(shipAABB.minX(), shipAABB.minY(), shipAABB.minZ(), shipAABB.maxX()+0.1, shipAABB.maxY() + 0.1, shipAABB.maxZ() + 0.1);
+                }
+                // Ship Block Bounding Box
+                final Vector3dc centerOfShip = shipAABB.center(new Vector3d());
+                /*final AABB shipVoxelAABBAfterOffset =
+                    new AABB(
+                        shipAABB.minX() - centerOfShip.x(),
+                        shipAABB.minY() - centerOfShip.y(),
+                        shipAABB.minZ() - centerOfShip.z(),
+                        shipAABB.maxX() - centerOfShip.x(),
+                        shipAABB.maxY() - centerOfShip.y(),
+                        shipAABB.maxZ() - centerOfShip.z()
+                    );*/
+                if (shipAABB.isValid()) {
+                    LevelRenderer.renderLineBox(
+                        matrices, bufferSource.getBuffer(RenderType.LINES),
+                        VectorConversionsMCKt.toMinecraft(shipAABB),
+                        0.5F, 1.0F, 0.0F, 1.0F);
+                }
+
+                //LevelRenderer.renderVoxelShape(matrices, bufferSource.getBuffer(RenderType.LINES), (DataVsBody)  clientVsBody);
+                matrices.mulPose(bodyRenderRotate);
+                matrices.translate(-cameraX + bodyRenderPosition.x(), -cameraY + bodyRenderPosition.y(), -cameraZ + bodyRenderPosition.z());
+
+
+                // Render center of mass as a small cube
+                Vector3d centerOfMass = bodyRenderTransform.getPositionInModel().sub(centerOfShip, new Vector3d());
+                final double comBoxSize = .25;
+                final AABB comBox = AABB.ofSize(VectorConversionsMCKt.toMinecraft(centerOfMass), comBoxSize, comBoxSize, comBoxSize);
+                LevelRenderer.renderLineBox(
+                    matrices, bufferSource.getBuffer(xrayEligible ? XRAY_LINES : RenderType.LINES),
+                    comBox,
+                    250.0F / 255.0F, 194.0F / 255.0F, 19.0F / 255.0F, 1.0F
+                );
+                // Render gizmos (X, Y, Z axes from center of mass)
+                if (xrayEligible) {
+                    vs_renderGizmoInsideAABB(
+                        matrices, bufferSource.getBuffer(XRAY_LINES),
+                        VectorConversionsMCKt.toMinecraft(shipAABB),
+                        centerOfMass.x, centerOfMass.y, centerOfMass.z, 1.0F, .125F
+                    );
                 }
 
                 matrices.popPose();
