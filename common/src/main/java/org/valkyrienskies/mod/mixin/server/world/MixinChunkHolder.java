@@ -43,19 +43,17 @@ public abstract class MixinChunkHolder {
     @Inject(method = "getTickingChunk", at = @At("HEAD"), cancellable = true)
     private void vs$getTickingChunkForShipyard(CallbackInfoReturnable<LevelChunk> cir) {
         if (VS2ChunkAllocator.INSTANCE.isChunkInShipyardCompanion(pos.x, pos.z)) {
-            final Optional<LevelChunk> fullChunk =
-                ((ChunkHolderAccessor) this).getFullChunkFuture().getNow(ChunkHolder.UNLOADED_LEVEL_CHUNK).left();
-            if (fullChunk.isPresent()) {
-                cir.setReturnValue(fullChunk.get());
-                return;
-            }
-
             if (levelHeightAccessor instanceof ServerLevel serverLevel) {
                 LevelChunk chunk = serverLevel.getChunkSource().getChunkNow(pos.x, pos.z);
                 if (chunk != null) {
                     cir.setReturnValue(chunk);
+                    return;
                 }
             }
+
+            final Optional<LevelChunk> fullChunk =
+                ((ChunkHolderAccessor) this).getFullChunkFuture().getNow(ChunkHolder.UNLOADED_LEVEL_CHUNK).left();
+            fullChunk.ifPresent(cir::setReturnValue);
         }
     }
 
