@@ -1,20 +1,11 @@
 package org.valkyrienskies.mod.mixin.server.world;
 
-import java.util.Optional;
 import net.minecraft.server.level.ChunkHolder;
-import net.minecraft.server.level.FullChunkStatus;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.LevelHeightAccessor;
-import net.minecraft.world.level.chunk.LevelChunk;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
-import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
-import org.valkyrienskies.mod.common.VS2ChunkAllocator;
-import org.valkyrienskies.mod.mixin.accessors.server.level.ChunkHolderAccessor;
 
 /**
  * Fix multiple issues with shipyard chunks that were loaded only to FULL status:
@@ -40,35 +31,27 @@ public abstract class MixinChunkHolder {
     @Final
     private LevelHeightAccessor levelHeightAccessor;
 
-    @Inject(method = "getTickingChunk", at = @At("HEAD"), cancellable = true)
-    private void vs$getTickingChunkForShipyard(CallbackInfoReturnable<LevelChunk> cir) {
-        if (VS2ChunkAllocator.INSTANCE.isChunkInShipyardCompanion(pos.x, pos.z)) {
-            if (levelHeightAccessor instanceof ServerLevel serverLevel) {
-                LevelChunk chunk = serverLevel.getChunkSource().getChunkNow(pos.x, pos.z);
-                if (chunk != null) {
-                    cir.setReturnValue(chunk);
-                    return;
-                }
-            }
-
-            final Optional<LevelChunk> fullChunk =
-                ((ChunkHolderAccessor) this).getFullChunkFuture().getNow(ChunkHolder.UNLOADED_LEVEL_CHUNK).left();
-            fullChunk.ifPresent(cir::setReturnValue);
-        }
-    }
-
-    /**
-     * Report FULL-only shipyard chunk holders as BLOCK_TICKING status.
-     *
-     * ChunkMap uses this status to decide when to call registerTickContainerInLevel().
-     * Without this, ship chunks at level 33 (FULL) never get their tick containers
-     * registered, so scheduled ticks (repeaters, observers, buttons) don't work
-     * after a save/reload cycle.
-     */
-    @Inject(method = "getFullStatus", at = @At("HEAD"), cancellable = true)
-    private void vs$upgradeShipyardHolderStatus(CallbackInfoReturnable<FullChunkStatus> cir) {
-        if (VS2ChunkAllocator.INSTANCE.isChunkInShipyardCompanion(pos.x, pos.z)) {
-            cir.setReturnValue(FullChunkStatus.BLOCK_TICKING);
-        }
-    }
+//    @Inject(method = "getTickingChunk", at = @At("HEAD"), cancellable = true)
+//    private void vs$getTickingChunkForShipyard(CallbackInfoReturnable<LevelChunk> cir) {
+//        if (VS2ChunkAllocator.INSTANCE.isChunkInShipyardCompanion(pos.x, pos.z)) {
+//            final Optional<LevelChunk> fullChunk =
+//                ((ChunkHolderAccessor) this).getFullChunkFuture().getNow(ChunkHolder.UNLOADED_LEVEL_CHUNK).left();
+//            fullChunk.ifPresent(cir::setReturnValue);
+//        }
+//    }
+//
+//    /**
+//     * Report FULL-only shipyard chunk holders as BLOCK_TICKING status.
+//     *
+//     * ChunkMap uses this status to decide when to call registerTickContainerInLevel().
+//     * Without this, ship chunks at level 33 (FULL) never get their tick containers
+//     * registered, so scheduled ticks (repeaters, observers, buttons) don't work
+//     * after a save/reload cycle.
+//     */
+//    @Inject(method = "getFullStatus", at = @At("HEAD"), cancellable = true)
+//    private void vs$upgradeShipyardHolderStatus(CallbackInfoReturnable<FullChunkStatus> cir) {
+//        if (VS2ChunkAllocator.INSTANCE.isChunkInShipyardCompanion(pos.x, pos.z)) {
+//            cir.setReturnValue(FullChunkStatus.BLOCK_TICKING);
+//        }
+//    }
 }
