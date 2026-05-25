@@ -159,12 +159,16 @@ public class MixinDebugRenderer {
                 final Vector3dc dragForce = DragInfoReporter.INSTANCE.getShipDragValues().get(shipObjectClient.getId());
                 final Vector3dc liftForce = DragInfoReporter.INSTANCE.getShipLiftValues().get(shipObjectClient.getId());
                 if (dragForce != null) {
-                    vs_renderForce(matrices, bufferSource.getBuffer(RenderType.LINES), shipRenderPosition, dragForce,
-                    0.01, 10.0, 0.0F, 0.5F, 1.0F, 1.0F);
+                    final Vector3d dragForceInShip = shipRenderTransform.getWorldToShip()
+                        .transformDirection(dragForce, new Vector3d());
+                    vs_renderForce(matrices, bufferSource.getBuffer(RenderType.LINES), centerOfMass, dragForceInShip,
+                        0.01, 10.0, 0.0F, 0.5F, 1.0F, 1.0F);
                 }
                 if (liftForce != null) {
-                    vs_renderForce(matrices, bufferSource.getBuffer(RenderType.LINES), shipRenderPosition, liftForce,
-                    0.01, 10.0, 0.0F, 1.0F, 0.5F, 1.0F);
+                    final Vector3d liftForceInShip = shipRenderTransform.getWorldToShip()
+                        .transformDirection(liftForce, new Vector3d());
+                    vs_renderForce(matrices, bufferSource.getBuffer(RenderType.LINES), centerOfMass, liftForceInShip,
+                        0.01, 10.0, 0.0F, 1.0F, 0.5F, 1.0F);
                 }
 
                 matrices.popPose();
