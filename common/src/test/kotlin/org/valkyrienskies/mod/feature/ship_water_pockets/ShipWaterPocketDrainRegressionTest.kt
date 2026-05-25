@@ -108,6 +108,84 @@ class ShipWaterPocketDrainRegressionTest {
     }
 
     @Test
+    fun externallyPlacedShipyardWaterIsNotClaimedByFloodDrain() {
+        val level = createTrackingLevel(
+            states = mutableMapOf(blockKey(0, 0, 0) to Blocks.WATER.defaultBlockState()),
+            gameTime = 0L,
+        )
+        val state = verticalPocketState(
+            sizeY = 1,
+            simulationIndices = intArrayOf(0),
+            exteriorIndices = intArrayOf(),
+        ).apply {
+            dirty = false
+        }
+
+        withRegisteredServerState(level, shipId = 45L, state = state) {
+            ShipWaterPocketManager.onExternalShipFluidPlacement(level, 45L, BlockPos(0, 0, 0), Fluids.WATER)
+            invokeSyncMaterializedFloodFluidFromWorld(level, state)
+
+            assertTrue(state.externalFluid.get(0))
+            assertFalse(state.materializedWater.get(0))
+            assertFalse(state.flooded.get(0))
+        }
+    }
+
+    @Test
+    fun directSourcePlacementBypassesExteriorPlacementBlock() {
+        val level = createTrackingLevel(
+            states = mutableMapOf(blockKey(0, 0, 0) to Blocks.AIR.defaultBlockState()),
+            gameTime = 0L,
+        )
+        val state = verticalPocketState(
+            sizeY = 1,
+            simulationIndices = intArrayOf(),
+            exteriorIndices = intArrayOf(0),
+        ).apply {
+            dirty = false
+        }
+
+        withRegisteredServerState(level, shipId = 46L, state = state) {
+            assertTrue(ShipWaterPocketManager.shouldBlockShipyardWaterPlacement(level, 46L, BlockPos(0, 0, 0)))
+            assertTrue(
+                ShipWaterPocketManager.shouldAllowDirectExternalShipyardFluidPlacement(
+                    level,
+                    46L,
+                    BlockPos(0, 0, 0),
+                    Fluids.WATER.defaultFluidState(),
+                )
+            )
+        }
+    }
+
+    @Test
+    fun directSourcePlacementDoesNotBypassActiveDrainSuppression() {
+        val level = createTrackingLevel(
+            states = mutableMapOf(blockKey(0, 0, 0) to Blocks.AIR.defaultBlockState()),
+            gameTime = 0L,
+        )
+        val state = verticalPocketState(
+            sizeY = 1,
+            simulationIndices = intArrayOf(0),
+            exteriorIndices = intArrayOf(),
+        ).apply {
+            dirty = false
+            queuedFloodRemoves = bitSetOf(0)
+        }
+
+        withRegisteredServerState(level, shipId = 47L, state = state) {
+            assertFalse(
+                ShipWaterPocketManager.shouldAllowDirectExternalShipyardFluidPlacement(
+                    level,
+                    47L,
+                    BlockPos(0, 0, 0),
+                    Fluids.WATER.defaultFluidState(),
+                )
+            )
+        }
+    }
+
+    @Test
     fun queuedDrainRemovalBlocksVanillaRefillPlacement() {
         val level = createTrackingLevel(
             states = mutableMapOf(blockKey(0, 0, 0) to Blocks.AIR.defaultBlockState()),

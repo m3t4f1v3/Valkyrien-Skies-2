@@ -69,6 +69,7 @@ public abstract class MixinLevel {
         if (!VSGameUtilsKt.isBlockInShipyard(level, pos)) return;
 
         final BlockState existing = level.getBlockState(pos);
+        final var fluidState = state.getFluidState();
         if (state.hasProperty(BlockStateProperties.WATERLOGGED) &&
             state.getValue(BlockStateProperties.WATERLOGGED) &&
             existing.hasProperty(BlockStateProperties.WATERLOGGED) &&
@@ -76,13 +77,20 @@ public abstract class MixinLevel {
         ) {
             final Ship ship = VSGameUtilsKt.getShipManagingPos(level, pos);
             if (ship != null && ShipWaterPocketManager.shouldBlockShipyardWaterPlacement(level, ship.getId(), pos)) {
+                if (ShipWaterPocketManager.shouldAllowDirectExternalShipyardFluidPlacement(
+                    level,
+                    ship.getId(),
+                    pos,
+                    fluidState
+                )) {
+                    return;
+                }
                 cir.setReturnValue(false);
                 cir.cancel();
                 return;
             }
         }
 
-        final var fluidState = state.getFluidState();
         if (fluidState.isEmpty()) return;
         if (!(state.getBlock() instanceof LiquidBlock)) return;
 
@@ -103,6 +111,14 @@ public abstract class MixinLevel {
         if (ship == null) return;
 
         if (ShipWaterPocketManager.shouldBlockShipyardWaterPlacement(level, ship.getId(), pos)) {
+            if (ShipWaterPocketManager.shouldAllowDirectExternalShipyardFluidPlacement(
+                level,
+                ship.getId(),
+                pos,
+                fluidState
+            )) {
+                return;
+            }
             if (ShipWaterPocketManager.shouldAllowImmediateFragileShipyardFloodPlacement(
                 level,
                 ship.getId(),

@@ -63,6 +63,12 @@ public abstract class MixinLevelRenderer {
         final boolean renderBlockOutline, final Camera camera, final GameRenderer gameRenderer, final LightTexture lightTexture,
         final Matrix4f projectionMatrix, final CallbackInfo ci) {
         if (this.level == null || camera == null) return;
+        final boolean renderOverlay = VSGameConfig.CLIENT.getUnderwater().getEnableFluidOverlay() &&
+            !(VSGameConfig.CLIENT.getUnderwater().getEnableCustomFluidFog() &&
+                VSGameConfig.CLIENT.getUnderwater().getFadeFluidOverlayInCustomFog() &&
+                ShipInteriorFogRenderer.shouldSuppressLiquidOverlay(camera));
+        final boolean renderFog = VSGameConfig.CLIENT.getUnderwater().getEnableCustomFluidFog();
+        if (!renderOverlay && !renderFog) return;
 
         final var camPos = camera.getPosition();
         final Matrix4f oldProjection = new Matrix4f(RenderSystem.getProjectionMatrix());
@@ -76,10 +82,10 @@ public abstract class MixinLevelRenderer {
         RenderSystem.setProjectionMatrix(projectionMatrix, VertexSorting.DISTANCE_TO_ORIGIN);
         RenderSystem.applyModelViewMatrix();
         try {
-            if (VSGameConfig.CLIENT.getUnderwater().getEnableFluidOverlay() && !(VSGameConfig.CLIENT.getUnderwater().getEnableCustomFluidFog() && VSGameConfig.CLIENT.getUnderwater().getFadeFluidOverlayInCustomFog() && ShipInteriorFogRenderer.shouldSuppressLiquidOverlay(camera))) {
+            if (renderOverlay) {
                 ShipWaterPocketLiquidOverlay.render(camPos.x, camPos.y, camPos.z);
             }
-            if (VSGameConfig.CLIENT.getUnderwater().getEnableCustomFluidFog()) {
+            if (renderFog) {
                 ShipInteriorFogRenderer.render(camera, projectionMatrix, poseStack.last().pose());
             }
         } finally {

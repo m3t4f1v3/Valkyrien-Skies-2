@@ -79,11 +79,12 @@ object ShipWaterPocketManager {
     private const val WATER_SOLVE_STARVATION_SYNC_FALLBACK_TICKS = 3L
     private const val MAX_WATER_SOLVE_RESULT_AGE_TICKS = 4L
     private const val WATER_SOLVE_PENDING_CANCEL_EXTRA_AGE_TICKS = 2L
+    private const val SERVER_WATER_SOLVE_MIN_RESUBMIT_TICKS = 2L
     private const val ASYNC_DIAG_SUMMARY_INTERVAL_TICKS = 200L
     private const val MATERIALIZED_RESYNC_INTERVAL_TICKS = 2L
     private const val PERSIST_FLUSH_INTERVAL_TICKS = 20L
     private const val CLIENT_WATER_SOLVE_DEMAND_WINDOW_TICKS = 10L
-    private const val CLIENT_WATER_SOLVE_FORCED_REFRESH_STALE_TICKS = 20L
+    private const val CLIENT_WATER_SOLVE_FORCED_REFRESH_STALE_TICKS = 40L
     private const val CLIENT_WATER_SOLVE_TRANSFORM_KEY_QUANTIZATION = 16.0
     private const val CLIENT_WATER_SOLVE_LARGE_QUERY_RADIUS_CHUNKS = 12
     private const val CLIENT_WATER_SOLVE_HUGE_QUERY_RADIUS_CHUNKS = 8
@@ -245,10 +246,10 @@ object ShipWaterPocketManager {
 
     internal fun clientWaterSolveCadenceTicksForVolume(volume: Long): Long {
         return when {
-            volume <= 32_768L -> 2L
-            volume <= 131_072L -> 3L
-            volume <= 524_288L -> 5L
-            else -> 8L
+            volume <= 32_768L -> 4L
+            volume <= 131_072L -> 6L
+            volume <= 524_288L -> 10L
+            else -> 16L
         }
     }
 
@@ -874,6 +875,33 @@ object ShipWaterPocketManager {
         return true
     }
 
+    /**
+     * Bucket placement and other direct source writes should stay as player/mod-owned shipyard fluid. The flood system
+     * tracks these separately via [onExternalShipFluidPlacement] so drain jobs do not remove them.
+     */
+    @JvmStatic
+    fun shouldAllowDirectExternalShipyardFluidPlacement(
+        level: Level,
+        shipId: Long,
+        shipPos: BlockPos,
+        fluidState: FluidState,
+    ): Boolean {
+        if (!VSGameConfig.COMMON.enableAirPockets) return false
+        if (level.isClientSide) return false
+        if (fluidState.isEmpty || !fluidState.isSource) return false
+
+        val state = serverStates[level.dimensionId]?.get(shipId) ?: return true
+        if (state.sizeX <= 0 || state.sizeY <= 0 || state.sizeZ <= 0) return true
+
+        val lx = shipPos.x - state.minX
+        val ly = shipPos.y - state.minY
+        val lz = shipPos.z - state.minZ
+        if (lx !in 0 until state.sizeX || ly !in 0 until state.sizeY || lz !in 0 until state.sizeZ) return true
+
+        val idx = indexOf(state, lx, ly, lz)
+        return !state.queuedFloodRemoves.get(idx) && !state.drainSuppressed.get(idx)
+    }
+
     @JvmStatic
     fun shouldAllowImmediateFragileShipyardFloodPlacement(
         level: Level,
@@ -943,8 +971,10 @@ object ShipWaterPocketManager {
             state.dirty = true
         }
 
-        state.flooded.set(idx)
-        state.materializedWater.set(idx)
+        state.externalFluid.set(idx)
+        state.flooded.clear(idx)
+        state.materializedWater.clear(idx)
+        state.brokenByFlood.clear(idx)
         state.queuedFloodAdds.clear(idx)
         state.queuedFloodRemoves.clear(idx)
         state.persistDirty = true
@@ -2283,6 +2313,22 @@ object ShipWaterPocketManager {
             return false
         }
 
+        val currentTransformKey = transformKeyOverride ?: transformKey(
+            minX = state.minX,
+            minY = state.minY,
+            minZ = state.minZ,
+            shipTransform = shipTransform,
+            shipPosTmp = tmpShipPos2.get(),
+            worldPosTmp = tmpWorldPos2.get(),
+        )
+        if (!level.isClientSide &&
+            state.lastWaterSolveSubmitTick != Long.MIN_VALUE &&
+            captureTick - state.lastWaterSolveSubmitTick < SERVER_WATER_SOLVE_MIN_RESUBMIT_TICKS &&
+            currentTransformKey == state.lastWaterSolveSubmittedTransformKey
+        ) {
+            return false
+        }
+
         val generation = state.requestedWaterSolveGeneration + 1L
         state.requestedWaterSolveGeneration = generation
 
@@ -2293,7 +2339,7 @@ object ShipWaterPocketManager {
                 shipTransform = shipTransform,
                 generation = generation,
                 captureTick = captureTick,
-                transformKeyOverride = transformKeyOverride,
+                transformKeyOverride = currentTransformKey,
                 clientWorldQueryBounds = clientWorldQueryBounds,
             )
         } catch (t: Throwable) {
@@ -2320,6 +2366,7 @@ object ShipWaterPocketManager {
         state.pendingWaterSolveFuture = submittedFuture
         state.waterSolveJobInFlight = true
         state.lastWaterSolveSubmitTick = captureTick
+        state.lastWaterSolveSubmittedTransformKey = snapshot.transformKey
         if (level.isClientSide) {
             state.lastClientWaterSolveSubmittedTransformKey = snapshot.transformKey
         }
@@ -2362,6 +2409,7 @@ object ShipWaterPocketManager {
         state.waterSolveComputeCount++
         state.lastWaterReachableUpdateTick = appliedTick
         state.lastWaterSolveApplyTick = appliedTick
+        state.lastWaterSolveAppliedTransformKey = result.transformKey
         if (isClientSide) {
             state.lastClientWaterSolveApplyTick = appliedTick
             state.lastClientWaterSolveAppliedTransformKey = result.transformKey
@@ -2955,6 +3003,7 @@ object ShipWaterPocketManager {
         val volume = state.sizeX * state.sizeY * state.sizeZ
         if (volume <= 0 || open.isEmpty) {
             state.materializedWater.clear()
+            state.externalFluid.clear()
             state.flooded.clear()
             state.brokenByFlood.clear()
             state.drainSuppressed.clear()
@@ -2963,12 +3012,14 @@ object ShipWaterPocketManager {
         }
 
         val materialized = state.materializedWater
+        val externalFluid = state.externalFluid
         val flooded = state.flooded
         val brokenByFlood = state.brokenByFlood
         val drainSuppressed = state.drainSuppressed
         val beforeMaterialized = materialized.clone() as BitSet
         val beforeFlooded = flooded.clone() as BitSet
         materialized.and(open)
+        externalFluid.and(open)
         flooded.and(open)
         flooded.and(state.simulationDomain)
         brokenByFlood.and(open)
@@ -2985,6 +3036,26 @@ object ShipWaterPocketManager {
             }
         }
 
+        fun touchesFloodOwnedFluid(idx: Int): Boolean {
+            val lx = idx % state.sizeX
+            val t = idx / state.sizeX
+            val ly = t % state.sizeY
+            val lz = t / state.sizeY
+            val strideY = state.sizeX
+            val strideZ = state.sizeX * state.sizeY
+
+            fun owned(n: Int): Boolean = n in 0 until volume &&
+                state.open.get(n) &&
+                (materialized.get(n) || flooded.get(n) || state.queuedFloodAdds.get(n))
+
+            return (lx > 0 && owned(idx - 1)) ||
+                (lx + 1 < state.sizeX && owned(idx + 1)) ||
+                (ly > 0 && owned(idx - strideY)) ||
+                (ly + 1 < state.sizeY && owned(idx + strideY)) ||
+                (lz > 0 && owned(idx - strideZ)) ||
+                (lz + 1 < state.sizeZ && owned(idx + strideZ))
+        }
+
         val pos = BlockPos.MutableBlockPos()
         try {
             var idx = open.nextSetBit(0)
@@ -2993,6 +3064,28 @@ object ShipWaterPocketManager {
                 val current = level.getBlockState(pos)
                 val isWaterloggable = isWaterloggableForFlood(current, state.floodFluid)
                 val inSimulationDomain = state.simulationDomain.get(idx)
+                val isFloodFluid = countsAsMaterializedFloodFluid(current, state.floodFluid)
+                if (externalFluid.get(idx)) {
+                    if (!isFloodFluid) {
+                        changed = true
+                        externalFluid.clear(idx)
+                    } else {
+                        if (materialized.get(idx)) {
+                            changed = true
+                            materialized.clear(idx)
+                        }
+                        if (flooded.get(idx)) {
+                            changed = true
+                            flooded.clear(idx)
+                        }
+                        if (brokenByFlood.get(idx)) {
+                            changed = true
+                            brokenByFlood.clear(idx)
+                        }
+                        idx = open.nextSetBit(idx + 1)
+                        continue
+                    }
+                }
                 if (isWaterloggable &&
                     current.getValue(BlockStateProperties.WATERLOGGED) &&
                     shouldPreventExteriorWaterlogging(state, idx)
@@ -3041,7 +3134,9 @@ object ShipWaterPocketManager {
                     continue
                 }
 
-                if (countsAsMaterializedFloodFluid(current, state.floodFluid)) {
+                if (isFloodFluid &&
+                    (materialized.get(idx) || flooded.get(idx) || state.queuedFloodAdds.get(idx) || touchesFloodOwnedFluid(idx))
+                ) {
                     if (!materialized.get(idx)) {
                         changed = true
                         materialized.set(idx)
@@ -3480,6 +3575,81 @@ object ShipWaterPocketManager {
         val simulationDomain = state.simulationDomain
         val particle = leakParticleForFluid(state.floodFluid)
         val particleSpeedMultiplier = VSGameConfig.COMMON.shipPocketParticleSpeedMultiplier.coerceIn(0.1, 5.0)
+        val visited = tmpFloodComponentVisited.get()
+        var queue = tmpFloodQueue.get()
+        if (queue.size < volume) {
+            queue = IntArray(volume)
+            tmpFloodQueue.set(queue)
+        }
+
+        data class Opening(val cellIdx: Int, val dirCode: Int, val conductance: Int)
+
+        fun bestExteriorOpening(cellIdx: Int): Opening? {
+            if (cellIdx < 0 || cellIdx >= volume) return null
+            val lx = cellIdx % sizeX
+            val t = cellIdx / sizeX
+            val ly = t % sizeY
+            val lz = t / sizeY
+            var bestDir = -1
+            var bestConductance = 0
+
+            fun consider(n: Int, dirCode: Int) {
+                if (n < 0 || n >= volume) return
+                if (!open.get(n) || !exterior.get(n)) return
+                val cond = edgeConductance(state, cellIdx, lx, ly, lz, dirCode)
+                if (cond > bestConductance) {
+                    bestConductance = cond
+                    bestDir = dirCode
+                }
+            }
+
+            if (lx > 0) consider(cellIdx - 1, 0)
+            if (lx + 1 < sizeX) consider(cellIdx + 1, 1)
+            if (ly > 0) consider(cellIdx - strideY, 2)
+            if (ly + 1 < sizeY) consider(cellIdx + strideY, 3)
+            if (lz > 0) consider(cellIdx - strideZ, 4)
+            if (lz + 1 < sizeZ) consider(cellIdx + strideZ, 5)
+
+            return if (bestDir >= 0 && bestConductance > 0) {
+                Opening(cellIdx, bestDir, bestConductance)
+            } else {
+                null
+            }
+        }
+
+        fun findNearestExteriorOpening(seedIdx: Int): Opening? {
+            bestExteriorOpening(seedIdx)?.let { return it }
+            visited.clear()
+            var head = 0
+            var tail = 0
+            visited.set(seedIdx)
+            queue[tail++] = seedIdx
+
+            while (head < tail && head < 64 && tail < queue.size) {
+                val cur = queue[head++]
+                bestExteriorOpening(cur)?.let { return it }
+                val lx = cur % sizeX
+                val t = cur / sizeX
+                val ly = t % sizeY
+                val lz = t / sizeY
+
+                fun enqueue(n: Int) {
+                    if (n < 0 || n >= volume || visited.get(n)) return
+                    if (!open.get(n) || !simulationDomain.get(n)) return
+                    if (!state.materializedWater.get(n) && n != seedIdx) return
+                    visited.set(n)
+                    queue[tail++] = n
+                }
+
+                if (lx > 0) enqueue(cur - 1)
+                if (lx + 1 < sizeX) enqueue(cur + 1)
+                if (ly > 0) enqueue(cur - strideY)
+                if (ly + 1 < sizeY) enqueue(cur + strideY)
+                if (lz > 0) enqueue(cur - strideZ)
+                if (lz + 1 < sizeZ) enqueue(cur + strideZ)
+            }
+            return null
+        }
 
         var budget = 8
         for (idx in addedIndices) {
@@ -3487,43 +3657,18 @@ object ShipWaterPocketManager {
             if (idx < 0 || idx >= volume) continue
             if (!open.get(idx) || !simulationDomain.get(idx)) continue
 
-            val lx = idx % sizeX
-            val t = idx / sizeX
-            val ly = t % sizeY
-            val lz = t / sizeY
-
-            var bestDir = -1
-            var bestConductance = 0
-
-            fun consider(n: Int, dirCode: Int) {
-                if (n < 0 || n >= volume) return
-                if (!open.get(n) || !exterior.get(n)) return
-                val cond = edgeConductance(state, idx, lx, ly, lz, dirCode)
-                if (cond > bestConductance) {
-                    bestConductance = cond
-                    bestDir = dirCode
-                }
-            }
-
-            if (lx > 0) consider(idx - 1, 0)
-            if (lx + 1 < sizeX) consider(idx + 1, 1)
-            if (ly > 0) consider(idx - strideY, 2)
-            if (ly + 1 < sizeY) consider(idx + strideY, 3)
-            if (lz > 0) consider(idx - strideZ, 4)
-            if (lz + 1 < sizeZ) consider(idx + strideZ, 5)
-
-            if (bestDir < 0 || bestConductance <= 0) continue
+            val opening = findNearestExteriorOpening(idx) ?: continue
             budget--
 
-            val particleCount = (2 + bestConductance / 10).coerceIn(2, 12)
-            val speed = ((0.08 + bestConductance * 0.00035).coerceIn(0.08, 0.2)) * particleSpeedMultiplier
+            val particleCount = (2 + opening.conductance / 10).coerceIn(2, 12)
+            val speed = ((0.08 + opening.conductance * 0.00035).coerceIn(0.08, 0.2)) * particleSpeedMultiplier
             emitDirectionalLeakParticles(
                 level = level,
                 state = state,
                 shipTransform = shipTransform,
-                cellIdx = idx,
-                faceDirCode = bestDir,
-                jetDirCode = bestDir xor 1,
+                cellIdx = opening.cellIdx,
+                faceDirCode = opening.dirCode,
+                jetDirCode = opening.dirCode xor 1,
                 particle = particle,
                 particleCount = particleCount,
                 baseSpeed = speed,
@@ -3839,6 +3984,12 @@ object ShipWaterPocketManager {
             state.waterReachable,
             state.unreachableVoid,
         )
+    }
+
+    @JvmStatic
+    fun hasClientWaterReachableSnapshots(level: Level): Boolean {
+        if (!level.isClientSide) return false
+        return clientStates[level.dimensionId]?.isNotEmpty() == true
     }
 
     private fun isSuppressionClassification(state: ShipPocketState, classification: PointVoidClassification): Boolean {
@@ -7392,6 +7543,7 @@ object ShipWaterPocketManager {
                         setBlockFlags = flags,
                     )
                     if (write.materialized) {
+                        state.externalFluid.clear(idx)
                         state.materializedWater.set(idx)
                         if (write.effect == FloodWriteEffectKind.BREAK_ON_FLOOD) {
                             state.brokenByFlood.set(idx)
@@ -7406,6 +7558,7 @@ object ShipWaterPocketManager {
                         toWater = false,
                         setBlockFlags = flags,
                     )
+                    state.externalFluid.clear(idx)
                     state.materializedWater.clear(idx)
                     state.brokenByFlood.clear(idx)
                 }

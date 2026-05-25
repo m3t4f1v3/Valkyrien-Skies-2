@@ -28,6 +28,9 @@ internal data class ShipPocketState(
     var floodFluid: Fluid = Fluids.WATER,
     var flooded: BitSet = BitSet(),
     var materializedWater: BitSet = BitSet(),
+    // Fluid placed by external gameplay (player buckets, modded block updates, vanilla flow) rather than by the
+    // flood writer. These cells must not be drained as flood-owned water.
+    var externalFluid: BitSet = BitSet(),
     var brokenByFlood: BitSet = BitSet(),
     // Cells currently above an active drain plane. While set, shipyard fluid placement back into the cell
     // should be blocked so vanilla flow doesn't immediately undo drain progress.
@@ -60,6 +63,8 @@ internal data class ShipPocketState(
     var appliedWaterSolveGeneration: Long = 0,
     var lastWaterSolveSubmitTick: Long = Long.MIN_VALUE,
     var lastWaterSolveApplyTick: Long = Long.MIN_VALUE,
+    var lastWaterSolveSubmittedTransformKey: Long = Long.MIN_VALUE,
+    var lastWaterSolveAppliedTransformKey: Long = Long.MIN_VALUE,
     var lastClientDemandTick: Long = Long.MIN_VALUE,
     var lastClientWaterSolveSubmittedTransformKey: Long = Long.MIN_VALUE,
     var lastClientWaterSolveAppliedTransformKey: Long = Long.MIN_VALUE,

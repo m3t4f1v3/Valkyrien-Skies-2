@@ -23,12 +23,12 @@ class ShipWaterPocketClientSchedulingTest {
 
     @Test
     fun volumeTiersMapToCadenceBuckets() {
-        assertEquals(2L, ShipWaterPocketManager.clientWaterSolveCadenceTicksForVolume(32_768L))
-        assertEquals(3L, ShipWaterPocketManager.clientWaterSolveCadenceTicksForVolume(32_769L))
-        assertEquals(3L, ShipWaterPocketManager.clientWaterSolveCadenceTicksForVolume(131_072L))
-        assertEquals(5L, ShipWaterPocketManager.clientWaterSolveCadenceTicksForVolume(131_073L))
-        assertEquals(5L, ShipWaterPocketManager.clientWaterSolveCadenceTicksForVolume(524_288L))
-        assertEquals(8L, ShipWaterPocketManager.clientWaterSolveCadenceTicksForVolume(524_289L))
+        assertEquals(4L, ShipWaterPocketManager.clientWaterSolveCadenceTicksForVolume(32_768L))
+        assertEquals(6L, ShipWaterPocketManager.clientWaterSolveCadenceTicksForVolume(32_769L))
+        assertEquals(6L, ShipWaterPocketManager.clientWaterSolveCadenceTicksForVolume(131_072L))
+        assertEquals(10L, ShipWaterPocketManager.clientWaterSolveCadenceTicksForVolume(131_073L))
+        assertEquals(10L, ShipWaterPocketManager.clientWaterSolveCadenceTicksForVolume(524_288L))
+        assertEquals(16L, ShipWaterPocketManager.clientWaterSolveCadenceTicksForVolume(524_289L))
     }
 
     @Test
@@ -106,7 +106,7 @@ class ShipWaterPocketClientSchedulingTest {
         assertFalse(decision.shouldSubmit)
         assertFalse(decision.forcedRefresh)
         assertEquals(ClientWaterSolveSkipReason.CADENCE, decision.skipReason)
-        assertEquals(5L, decision.cadenceTicks)
+        assertEquals(10L, decision.cadenceTicks)
     }
 
     @Test
@@ -147,12 +147,12 @@ class ShipWaterPocketClientSchedulingTest {
             volume = 900_000L,
             geometryApplied = false,
             currentTransformKey = 22L,
-            nowTick = 31L,
+            nowTick = 51L,
         )
 
         assertTrue(decision.shouldSubmit)
         assertTrue(decision.forcedRefresh)
         assertEquals(null, decision.skipReason)
-        assertEquals(8L, decision.cadenceTicks)
+        assertEquals(16L, decision.cadenceTicks)
     }
 }

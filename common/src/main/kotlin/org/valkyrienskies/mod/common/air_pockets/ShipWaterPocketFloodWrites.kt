@@ -395,6 +395,7 @@ internal fun flushFloodWriteQueue(
                 removedApplied++
             }
             state.materializedWater.clear(idx)
+            state.externalFluid.clear(idx)
             state.brokenByFlood.clear(idx)
         }
         state.nextQueuedRemoveIdx = removeResult.second
@@ -416,6 +417,7 @@ internal fun flushFloodWriteQueue(
                 !currentFluid.isEmpty && isFloodFluidType(currentFluid.type) && !currentFluid.isSource
 
             if (!currentFluid.isEmpty && isFloodFluidType(currentFluid.type) && currentFluid.isSource) {
+                state.externalFluid.clear(idx)
                 state.materializedWater.set(idx)
                 addedThisFlush.set(idx)
                 return@processQueuedAddIndices FloodWriteAddDisposition.APPLIED
@@ -441,6 +443,7 @@ internal fun flushFloodWriteQueue(
                 }
 
                 addedApplied++
+                state.externalFluid.clear(idx)
                 state.materializedWater.set(idx)
                 if (write.effect == FloodWriteEffectKind.BREAK_ON_FLOOD) {
                     state.brokenByFlood.set(idx)
@@ -463,6 +466,7 @@ internal fun flushFloodWriteQueue(
                 return@processQueuedAddIndices FloodWriteAddDisposition.REJECTED
             }
 
+            state.externalFluid.clear(idx)
             state.materializedWater.set(idx)
             if (write.effect == FloodWriteEffectKind.BREAK_ON_FLOOD) {
                 state.brokenByFlood.set(idx)

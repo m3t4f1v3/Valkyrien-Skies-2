@@ -53,7 +53,7 @@ public final class ShipWaterPocketLiquidOverlay {
 
     private ShipWaterPocketLiquidOverlay() {}
 
-    private static final int MAX_SHIPS = 8;
+    private static final int MAX_SHIPS = 4;
     private static final int MAX_FLUID_SURFACE_CACHE = 8192;
     private static final int MAX_FLUID_SURFACE_POINT_CACHE = 16384;
     private static final double MAX_OVERLAY_SHIP_DISTANCE_BLOCKS_FALLBACK = 192.0;
@@ -230,6 +230,7 @@ public final class ShipWaterPocketLiquidOverlay {
         final Minecraft mc = Minecraft.getInstance();
         final var level = mc.level;
         if (level == null || mc.gameRenderer == null) return;
+        if (!ShipWaterPocketManager.hasClientWaterReachableSnapshots(level)) return;
 
         final Camera camera = mc.gameRenderer.getMainCamera();
         if (camera.getFluidInCamera() != FogType.NONE &&
