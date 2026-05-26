@@ -101,39 +101,31 @@ public final class ShipPocketWorldWaterOccluder {
 
         RenderSystem.assertOnRenderThread();
 
-        // ----- Save state we'll change -----
-        final boolean prevCullFace = GL11.glIsEnabled(GL11.GL_CULL_FACE);
-        final boolean prevBlend = GL11.glIsEnabled(GL11.GL_BLEND);
-        final boolean prevDepthTest = GL11.glIsEnabled(GL11.GL_DEPTH_TEST);
-        final boolean prevPolygonOffset = GL11.glIsEnabled(GL11.GL_POLYGON_OFFSET_FILL);
-        final int prevDepthFunc = GL11.glGetInteger(GL11.GL_DEPTH_FUNC);
-        final boolean prevDepthMask = GL11.glGetBoolean(GL11.GL_DEPTH_WRITEMASK);
-        final float prevPolygonOffsetFactor = GL11.glGetFloat(GL11.GL_POLYGON_OFFSET_FACTOR);
-        final float prevPolygonOffsetUnits = GL11.glGetFloat(GL11.GL_POLYGON_OFFSET_UNITS);
-        final java.nio.ByteBuffer prevColorMask = java.nio.ByteBuffer.allocateDirect(4);
-        GL11.glGetBooleanv(GL11.GL_COLOR_WRITEMASK, prevColorMask);
-
         // ----- Configure depth-only state -----
-        if (!prevDepthTest) RenderSystem.enableDepthTest();
+        RenderSystem.enableDepthTest();
         RenderSystem.disableCull();
         RenderSystem.disableBlend();
         RenderSystem.depthMask(true);
         RenderSystem.depthFunc(GL11.GL_LEQUAL);
+        
         if (DEBUG_VISUALIZE) {
             RenderSystem.colorMask(true, true, true, true);
         } else {
             RenderSystem.colorMask(false, false, false, false);
         }
+        
         // Force ColorModulator to (1,1,1,1) so per-vertex magenta is preserved in debug mode.
         RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
-        GL11.glEnable(GL11.GL_POLYGON_OFFSET_FILL);
+        
         // Aggressive bias: drivers vary on tiny offsets, so use a few units. Sign is negative
         // = depth pulled toward camera so water at the same world position loses GL_LEQUAL.
+        GL11.glEnable(GL11.GL_POLYGON_OFFSET_FILL);
         GL11.glPolygonOffset(-2.0f, -8.0f);
 
         int totalShipsRendered = 0;
         int totalShipsWithSnapshot = 0;
         int totalVerts = 0;
+        
         try {
             for (final LoadedShip ship : VSGameUtilsKt.getShipObjectWorld(level).getLoadedShips()) {
                 final long shipId = ship.getId();
@@ -177,31 +169,18 @@ public final class ShipPocketWorldWaterOccluder {
             VertexBuffer.unbind();
         } finally {
             // ----- Restore state -----
-            if (prevPolygonOffset) {
-                GL11.glEnable(GL11.GL_POLYGON_OFFSET_FILL);
-            } else {
-                GL11.glDisable(GL11.GL_POLYGON_OFFSET_FILL);
-            }
-            GL11.glPolygonOffset(prevPolygonOffsetFactor, prevPolygonOffsetUnits);
-            RenderSystem.colorMask(
-                prevColorMask.get(0) != 0,
-                prevColorMask.get(1) != 0,
-                prevColorMask.get(2) != 0,
-                prevColorMask.get(3) != 0
-            );
-            RenderSystem.depthMask(prevDepthMask);
-            RenderSystem.depthFunc(prevDepthFunc);
-            if (!prevDepthTest) RenderSystem.disableDepthTest();
-            if (prevCullFace) {
-                RenderSystem.enableCull();
-            } else {
-                RenderSystem.disableCull();
-            }
-            if (prevBlend) {
-                RenderSystem.enableBlend();
-            } else {
-                RenderSystem.disableBlend();
-            }
+            // 1. Turn off Polygon Offset
+            GL11.glDisable(GL11.GL_POLYGON_OFFSET_FILL);
+            GL11.glPolygonOffset(0.0f, 0.0f);
+            
+            // 2. Restore Color Mask to normal Vanilla rendering expectations
+            RenderSystem.colorMask(true, true, true, true);
+            
+            // 3. Restore Culling 
+            RenderSystem.enableCull();
+            
+            // Note: depthMask, depthFunc, and blend state will be implicitly overridden 
+            // by the RenderType setups that immediately follow this pass.
         }
 
         // Periodic diagnostic — visible in client logs to confirm the hook is actually running.
