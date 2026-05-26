@@ -23,7 +23,7 @@ public abstract class MixinSodiumWorldRenderer {
     private void afterChunkLayer(RenderType renderLayer, ChunkRenderMatrices matrices, double x, double y, double z,
             CallbackInfo ci) {
             if (renderLayer == RenderType.tripwire() && VSGameConfig.CLIENT.getUnderwater().getEnableWaterCulling()) {
-                renderSectionManager.renderLayer(matrices, AirPocketRenderHooks.AIR_POCKET_PASS, x, y, z);
+                renderSectionManager.renderLayer(matrices, SodiumCompat.AIR_POCKET_PASS, x, y, z);
             }
             SodiumCompat.renderShips(renderSectionManager, renderLayer, matrices, x, y, z);
     }

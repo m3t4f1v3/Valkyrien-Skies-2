@@ -11,6 +11,7 @@ dependencies {
     modCompileOnly "fuzs.forgeconfigapiport:forgeconfigapiport-common:${rootProject.fcap_version}"
 
     modCompileOnly("maven.modrinth:sodium:${sodium_version}")
+    modCompileOnly("maven.modrinth:iris:${iris_version}")
 
     // Alex Caves
     modCompileOnly("maven.modrinth:alexs-caves:$alexscaves_version")

@@ -6,8 +6,6 @@ import com.mojang.blaze3d.vertex.VertexSorting;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.client.renderer.GameRenderer;
-import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.world.phys.Vec3;
@@ -18,6 +16,7 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.valkyrienskies.mod.air_pockets.client.AirPocketRenderHooks;
 import org.valkyrienskies.mod.air_pockets.client.ShipInteriorFogRenderer;
 import org.valkyrienskies.mod.air_pockets.client.ShipPocketWorldWaterOccluder;
 import org.valkyrienskies.mod.air_pockets.client.ShipWaterPocketLiquidOverlay;
@@ -28,6 +27,10 @@ public abstract class MixinLevelRenderer {
 
     @Shadow
     private @Nullable ClientLevel level;
+
+    @Shadow
+    protected abstract void renderChunkLayer(RenderType arg, PoseStack arg2, double d, double e, double f,
+        Matrix4f matrix4f);
 
     // render RIGHT before where water is rendered, tripwire chosen bc its last
     @Inject(
@@ -45,6 +48,7 @@ public abstract class MixinLevelRenderer {
         if (camera == null) return;
         final Vec3 camPos = camera.getPosition();
         ShipPocketWorldWaterOccluder.render(camPos.x, camPos.y, camPos.z, projectionMatrix, poseStack);
+        renderChunkLayer(AirPocketRenderHooks.AIR_CULL_RENDER_TYPE, poseStack, camX, camY, camZ, projectionMatrix);
     }
 
     @Inject(

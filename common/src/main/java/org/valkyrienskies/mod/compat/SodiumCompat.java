@@ -8,6 +8,8 @@ import me.jellysquid.mods.sodium.client.render.chunk.map.ChunkStatus;
 import me.jellysquid.mods.sodium.client.render.chunk.map.ChunkTrackerHolder;
 import me.jellysquid.mods.sodium.client.render.chunk.terrain.DefaultTerrainRenderPasses;
 import me.jellysquid.mods.sodium.client.render.chunk.terrain.TerrainRenderPass;
+import me.jellysquid.mods.sodium.client.render.chunk.terrain.material.Material;
+import me.jellysquid.mods.sodium.client.render.chunk.terrain.material.parameters.AlphaCutoffParameter;
 import me.jellysquid.mods.sodium.client.render.viewport.CameraTransform;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.RenderType;
@@ -18,6 +20,7 @@ import org.joml.Matrix4f;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
 import org.valkyrienskies.core.api.ships.properties.ShipTransform;
+import org.valkyrienskies.mod.air_pockets.client.AirPocketRenderHooks;
 import org.valkyrienskies.mod.common.hooks.VSGameEvents;
 import org.valkyrienskies.mod.common.hooks.VSGameEvents.ShipRenderEventSodium;
 import org.valkyrienskies.mod.mixin.ValkyrienCommonMixinConfigPlugin;
@@ -27,6 +30,14 @@ import org.valkyrienskies.mod.mixinducks.mod_compat.sodium.RenderSectionManagerD
 import com.mojang.blaze3d.systems.RenderSystem;
 
 public class SodiumCompat {
+
+    public static final TerrainRenderPass AIR_POCKET_PASS =
+        new TerrainRenderPass(AirPocketRenderHooks.AIR_CULL_RENDER_TYPE, true, false);
+
+    public static final Material AIR_POCKET_MATERIAL = new Material(
+        SodiumCompat.AIR_POCKET_PASS,
+        AlphaCutoffParameter.ZERO,
+        true);
 
     public static void onChunkAdded(final ClientLevel level, final int x, final int z) {
         if (ValkyrienCommonMixinConfigPlugin.getVSRenderer() == VSRenderer.SODIUM) {

@@ -7,6 +7,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+import org.valkyrienskies.mod.air_pockets.client.AirPocketRenderHooks;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.config.VSGameConfig;
 
@@ -36,18 +37,18 @@ public class MixinRebuildTask {
 
     @Redirect(method = "compile", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/ItemBlockRenderTypes;getRenderLayer(Lnet/minecraft/world/level/material/FluidState;)Lnet/minecraft/client/renderer/RenderType;"))
     private RenderType redirectFluidRenderLayer(FluidState state) {
-        // if (this.vs$airRenderChunkRegion == null)
-        //     return ItemBlockRenderTypes.getRenderLayer(state);
-        // Level level = ((RenderChunkRegionAccessor) this.vs$airRenderChunkRegion).getLevel();
-        // int centerX = ((RenderChunkRegionAccessor) this.vs$airRenderChunkRegion).getCenterX();
-        // int centerZ = ((RenderChunkRegionAccessor) this.vs$airRenderChunkRegion).getCenterZ();
-        // if (level == null)
-        //     return ItemBlockRenderTypes.getRenderLayer(state);
+        if (this.vs$airRenderChunkRegion == null)
+            return ItemBlockRenderTypes.getRenderLayer(state);
+        Level level = ((RenderChunkRegionAccessor) this.vs$airRenderChunkRegion).getLevel();
+        int centerX = ((RenderChunkRegionAccessor) this.vs$airRenderChunkRegion).getCenterX();
+        int centerZ = ((RenderChunkRegionAccessor) this.vs$airRenderChunkRegion).getCenterZ();
+        if (level == null)
+            return ItemBlockRenderTypes.getRenderLayer(state);
         if ((state.is(Fluids.WATER) || state.is(Fluids.FLOWING_WATER))
                 && VSGameConfig.CLIENT.getUnderwater().getEnableWaterCulling()
-                // && !VSGameUtilsKt.isChunkInShipyard(level, centerX, centerZ)
+                && !VSGameUtilsKt.isChunkInShipyard(level, centerX, centerZ)
             ) {
-            return RenderType.tripwire();
+            return AirPocketRenderHooks.AIR_CULL_RENDER_TYPE;
         }
 
         return ItemBlockRenderTypes.getRenderLayer(state);

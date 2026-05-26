@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.Map;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.GameRenderer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -243,7 +244,7 @@ public final class ShipPocketWorldWaterOccluder {
         // POSITION_COLOR — color is per-vertex so it's robust against shaderpacks that mess with
         // the ColorModulator uniform. In non-debug mode color writes are masked off so the color
         // bytes are inert.
-        bb.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
+        bb.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.BLOCK);
 
         // Bright magenta when debug, else fully-opaque (color writes are masked off anyway).
         final int dr = DEBUG_VISUALIZE ? 255 : 0;
@@ -265,44 +266,63 @@ public final class ShipPocketWorldWaterOccluder {
                     final float wy0 = (float) y;
                     final float wz0 = (float) z;
                     final float wx1 = wx0 + 1.0f;
-                    final float wy1 = wy0 + 1.0f;
                     final float wz1 = wz0 + 1.0f;
 
                     // All 6 cube faces. We don't cull internal faces between adjacent pocket
                     // voxels — depth coverage of the *full* volume matters, so the shared face
                     // must still write depth.
-                    // -X face
-                    bb.vertex(wx0, wy0, wz0).color(dr, dg, db, da).endVertex();
-                    bb.vertex(wx0, wy1, wz0).color(dr, dg, db, da).endVertex();
-                    bb.vertex(wx0, wy1, wz1).color(dr, dg, db, da).endVertex();
-                    bb.vertex(wx0, wy0, wz1).color(dr, dg, db, da).endVertex();
-                    // +X face
-                    bb.vertex(wx1, wy0, wz1).color(dr, dg, db, da).endVertex();
-                    bb.vertex(wx1, wy1, wz1).color(dr, dg, db, da).endVertex();
-                    bb.vertex(wx1, wy1, wz0).color(dr, dg, db, da).endVertex();
-                    bb.vertex(wx1, wy0, wz0).color(dr, dg, db, da).endVertex();
+                    // // -X face
+                    // bb.vertex(wx0, wy0, wz0).color(dr, dg, db, da).endVertex();
+                    // bb.vertex(wx0, wy1, wz0).color(dr, dg, db, da).endVertex();
+                    // bb.vertex(wx0, wy1, wz1).color(dr, dg, db, da).endVertex();
+                    // bb.vertex(wx0, wy0, wz1).color(dr, dg, db, da).endVertex();
+                    // // +X face
+                    // bb.vertex(wx1, wy0, wz1).color(dr, dg, db, da).endVertex();
+                    // bb.vertex(wx1, wy1, wz1).color(dr, dg, db, da).endVertex();
+                    // bb.vertex(wx1, wy1, wz0).color(dr, dg, db, da).endVertex();
+                    // bb.vertex(wx1, wy0, wz0).color(dr, dg, db, da).endVertex();
                     // -Y face
-                    bb.vertex(wx0, wy0, wz0).color(dr, dg, db, da).endVertex();
-                    bb.vertex(wx0, wy0, wz1).color(dr, dg, db, da).endVertex();
-                    bb.vertex(wx1, wy0, wz1).color(dr, dg, db, da).endVertex();
-                    bb.vertex(wx1, wy0, wz0).color(dr, dg, db, da).endVertex();
-                    // +Y face
-                    bb.vertex(wx0, wy1, wz0).color(dr, dg, db, da).endVertex();
-                    bb.vertex(wx1, wy1, wz0).color(dr, dg, db, da).endVertex();
-                    bb.vertex(wx1, wy1, wz1).color(dr, dg, db, da).endVertex();
-                    bb.vertex(wx0, wy1, wz1).color(dr, dg, db, da).endVertex();
-                    // -Z face
-                    bb.vertex(wx0, wy0, wz0).color(dr, dg, db, da).endVertex();
-                    bb.vertex(wx1, wy0, wz0).color(dr, dg, db, da).endVertex();
-                    bb.vertex(wx1, wy1, wz0).color(dr, dg, db, da).endVertex();
-                    bb.vertex(wx0, wy1, wz0).color(dr, dg, db, da).endVertex();
-                    // +Z face
-                    bb.vertex(wx0, wy0, wz1).color(dr, dg, db, da).endVertex();
-                    bb.vertex(wx0, wy1, wz1).color(dr, dg, db, da).endVertex();
-                    bb.vertex(wx1, wy1, wz1).color(dr, dg, db, da).endVertex();
-                    bb.vertex(wx1, wy0, wz1).color(dr, dg, db, da).endVertex();
+                    bb.vertex(wx0, wy0, wz0)
+                        .color(dr, dg, db, da)
+                        .uv(0.0f, 0.0f)
+                        .uv2(LightTexture.FULL_BRIGHT)
+                        .normal(0.0f, 1.0f, 0.0f)
+                        .endVertex();
+                    bb.vertex(wx0, wy0, wz1)
+                        .color(dr, dg, db, da)
+                        .uv(0.0f, 0.0f)
+                        .uv2(LightTexture.FULL_BRIGHT)
+                        .normal(0.0f, 1.0f, 0.0f)
+                        .endVertex();
+                    bb.vertex(wx1, wy0, wz1)
+                        .color(dr, dg, db, da)
+                        .uv(0.0f, 0.0f)
+                        .uv2(LightTexture.FULL_BRIGHT)
+                        .normal(0.0f, 1.0f, 0.0f)
+                        .endVertex();
+                    bb.vertex(wx1, wy0, wz0)
+                        .color(dr, dg, db, da)
+                        .uv(0.0f, 0.0f)
+                        .uv2(LightTexture.FULL_BRIGHT)
+                        .normal(0.0f, 1.0f, 0.0f)
+                        .endVertex();
+                    // // +Y face
+                    // bb.vertex(wx0, wy1, wz0).color(dr, dg, db, da).endVertex();
+                    // bb.vertex(wx1, wy1, wz0).color(dr, dg, db, da).endVertex();
+                    // bb.vertex(wx1, wy1, wz1).color(dr, dg, db, da).endVertex();
+                    // bb.vertex(wx0, wy1, wz1).color(dr, dg, db, da).endVertex();
+                    // // -Z face
+                    // bb.vertex(wx0, wy0, wz0).color(dr, dg, db, da).endVertex();
+                    // bb.vertex(wx1, wy0, wz0).color(dr, dg, db, da).endVertex();
+                    // bb.vertex(wx1, wy1, wz0).color(dr, dg, db, da).endVertex();
+                    // bb.vertex(wx0, wy1, wz0).color(dr, dg, db, da).endVertex();
+                    // // +Z face
+                    // bb.vertex(wx0, wy0, wz1).color(dr, dg, db, da).endVertex();
+                    // bb.vertex(wx0, wy1, wz1).color(dr, dg, db, da).endVertex();
+                    // bb.vertex(wx1, wy1, wz1).color(dr, dg, db, da).endVertex();
+                    // bb.vertex(wx1, wy0, wz1).color(dr, dg, db, da).endVertex();
 
-                    vertCount += 24;
+                    vertCount += 4;
                 }
             }
         }

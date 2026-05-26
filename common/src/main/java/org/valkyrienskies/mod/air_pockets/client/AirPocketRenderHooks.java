@@ -1,12 +1,16 @@
 package org.valkyrienskies.mod.air_pockets.client;
 
-import me.jellysquid.mods.sodium.client.render.chunk.terrain.TerrainRenderPass;
+import com.mojang.blaze3d.vertex.DefaultVertexFormat;
+import com.mojang.blaze3d.vertex.VertexFormat.Mode;
+import net.minecraft.client.renderer.RenderStateShard;
 import net.minecraft.client.renderer.RenderType;
 
 public final class AirPocketRenderHooks {
 
-    public static final TerrainRenderPass AIR_POCKET_PASS =
-            new TerrainRenderPass(RenderType.tripwire(), true, false);
+    public static final RenderType AIR_CULL_RENDER_TYPE =
+        RenderType.create("vs_air_pocket", DefaultVertexFormat.BLOCK, Mode.QUADS, 2097152, true, true,
+            RenderType.translucentState(RenderStateShard.RENDERTYPE_TRANSLUCENT_SHADER));
 
-    private AirPocketRenderHooks() {}
+    private AirPocketRenderHooks() {
+    }
 }

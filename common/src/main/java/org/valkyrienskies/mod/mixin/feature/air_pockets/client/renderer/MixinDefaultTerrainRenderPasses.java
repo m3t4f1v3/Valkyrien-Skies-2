@@ -7,10 +7,9 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import org.valkyrienskies.mod.air_pockets.client.AirPocketRenderHooks;
-
 import me.jellysquid.mods.sodium.client.render.chunk.terrain.DefaultTerrainRenderPasses;
 import me.jellysquid.mods.sodium.client.render.chunk.terrain.TerrainRenderPass;
+import org.valkyrienskies.mod.compat.SodiumCompat;
 
 @Mixin(DefaultTerrainRenderPasses.class)
 public class MixinDefaultTerrainRenderPasses {
@@ -26,7 +25,7 @@ public class MixinDefaultTerrainRenderPasses {
         TerrainRenderPass[] updated = new TerrainRenderPass[old.length + 1];
 
         System.arraycopy(old, 0, updated, 0, old.length);
-        updated[old.length] = AirPocketRenderHooks.AIR_POCKET_PASS;
+        updated[old.length] = SodiumCompat.AIR_POCKET_PASS;
 
         ALL = updated;
     }
