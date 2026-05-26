@@ -4,7 +4,6 @@ import com.mojang.brigadier.CommandDispatcher
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands.literal
 import net.minecraft.commands.SharedSuggestionProvider
-import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.Component.translatable
 import org.joml.Quaterniond
 import org.joml.Quaterniondc
@@ -17,6 +16,7 @@ import org.valkyrienskies.mod.common.command.arguments.ContraptionSelectorOption
 import org.valkyrienskies.mod.common.command.commands.BackendCommand
 import org.valkyrienskies.mod.common.command.commands.DeleteCommand
 import org.valkyrienskies.mod.common.command.commands.DryCommand
+import org.valkyrienskies.mod.common.command.commands.ApplyCommand
 import org.valkyrienskies.mod.common.command.commands.GetAirCommand
 import org.valkyrienskies.mod.common.command.commands.GetGravityCommand
 import org.valkyrienskies.mod.common.command.commands.GetShipCommand
@@ -43,6 +43,7 @@ object VSCommands {
         BackendCommand.register(vs)
         DeleteCommand.register(vs)
         DryCommand.register(vs)
+        ApplyCommand.register(vs)
         GetAirCommand.register(vs)
         GetGravityCommand.register(vs)
         GetShipCommand.register(vs)

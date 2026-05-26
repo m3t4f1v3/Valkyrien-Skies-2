@@ -10,6 +10,7 @@ import org.valkyrienskies.core.api.ships.ServerShip
 import org.valkyrienskies.core.api.ships.Ship
 import org.valkyrienskies.mod.api.dimensionId
 import org.valkyrienskies.mod.api.toMinecraft
+import org.valkyrienskies.mod.common.toWorldCoordinates
 import java.util.function.Function
 import java.util.function.Predicate
 import kotlin.math.min
@@ -51,7 +52,7 @@ class ShipSelector(
                 predicate.and(Predicate { ship: ServerShip -> this.mass.matches(ship.inertiaData.mass) })
         }
 
-        if (!this.size.isAny()) {
+        if (!this.size.isAny) {
             predicate =
                 predicate.and(Predicate { ship: ServerShip -> this.size.matches(ship.worldAABB.toMinecraft().size) })
         }
@@ -74,7 +75,7 @@ class ShipSelector(
             found = found.filter { it.chunkClaimDimension == source.level.dimensionId }
         }
 
-        val position = this.position.apply(source.position)
+        val position = this.position.apply(source.level.toWorldCoordinates(source.position))
         val predicate = this.addPositionalPredicates(position)
 
         // Do all the other selectors
