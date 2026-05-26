@@ -149,6 +149,16 @@ object VSGameConfig {
     }
 
     class Server {
+        @ConfigCategory(title = "Create")
+        val Create = CREATE()
+
+        class CREATE {
+            @ConfigEntry(
+                description = "Adds contraptions to the ship collider"
+            )
+            var enableContraptionCollisions = false
+        }
+
         @ConfigCategory(title = "FTB Chunks")
         val FTBChunks = FTBCHUNKS()
 

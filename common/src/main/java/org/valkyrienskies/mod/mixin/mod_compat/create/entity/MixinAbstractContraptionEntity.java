@@ -46,11 +46,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.valkyrienskies.core.api.ships.ContraptionWingProvider;
 import org.valkyrienskies.core.api.ships.LoadedServerShip;
 import org.valkyrienskies.core.api.ships.LoadedShip;
-import org.valkyrienskies.core.api.ships.ServerShip;
 import org.valkyrienskies.core.api.ships.Ship;
-import org.valkyrienskies.core.api.world.ServerShipWorld;
-import org.valkyrienskies.core.internal.world.VsiServerShipWorld;
-import org.valkyrienskies.mod.api.ValkyrienSkies;
 import org.valkyrienskies.mod.common.CompatUtil;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.entity.ShipMountedToData;
@@ -389,18 +385,22 @@ public abstract class MixinAbstractContraptionEntity extends Entity implements M
         if (segmentId == -1 || this.level().isClientSide) {
             return;
         }
+        final ServerLevel serverLevel = (ServerLevel) this.level();
+        final AbstractContraptionEntity thisAsACE = AbstractContraptionEntity.class.cast(this);
+        final long bodyId = this.vs$getSegmentBodyId();
+        final boolean isWorld = this.vs$isWorldSegment();
         ContraptionSegmentHelper.updateContraptionSegmentTransform(
-            (ServerLevel) this.level(),
-            AbstractContraptionEntity.class.cast(this),
+            serverLevel,
+            thisAsACE,
             segmentId,
-            this.vs$getSegmentBodyId(),
-            this.vs$isWorldSegment(),
+            bodyId,
+            isWorld,
             this.vs$getLastSegmentPosition(),
             this.vs$getLastSegmentRotation()
         );
         this.vs$setLastSegmentPose(
-            ContraptionSegmentHelper.getContraptionSegmentPosition(AbstractContraptionEntity.class.cast(this)),
-            ContraptionSegmentHelper.getContraptionSegmentRotation(AbstractContraptionEntity.class.cast(this))
+            ContraptionSegmentHelper.getContraptionSegmentPosition(serverLevel, thisAsACE, bodyId, isWorld),
+            ContraptionSegmentHelper.getContraptionSegmentRotation(serverLevel, thisAsACE, bodyId, isWorld)
         );
     }
 

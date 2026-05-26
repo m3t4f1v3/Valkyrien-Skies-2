@@ -12,11 +12,11 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.valkyrienskies.core.api.bodies.shape.VoxelBodyShapeData;
-import org.valkyrienskies.core.api.ships.ServerShip;
+import org.valkyrienskies.core.api.ships.Ship;
 import org.valkyrienskies.core.api.world.ServerShipWorld;
 import org.valkyrienskies.core.internal.world.VsiServerShipWorld;
 import org.valkyrienskies.mod.api.ValkyrienSkies;
-import org.valkyrienskies.mod.common.VSGameUtilsKt;
+import org.valkyrienskies.mod.common.config.VSGameConfig;
 import org.valkyrienskies.mod.compat.create.ContraptionSegmentHelper;
 import org.valkyrienskies.mod.mixinducks.mod_compat.create.MixinAbstractContraptionEntityDuck;
 
@@ -42,13 +42,17 @@ public class MixinContraption {
         if (level.isClientSide) {
             return;
         }
+
+        if (!VSGameConfig.SERVER.getCreate().getEnableContraptionCollisions()) {
+            return;
+        }
         ServerLevel serverLevel = (ServerLevel) level;
         ServerShipWorld serverShipWorld = ValkyrienSkies.getShipWorld(serverLevel.getServer());
         VsiServerShipWorld vsServerShipWorld = (VsiServerShipWorld) serverShipWorld;
 
         long bodyId = vsServerShipWorld.getDimensionToGroundBodyIdImmutable().get(ValkyrienSkies.getDimensionId(serverLevel));
 
-        ServerShip ship = VSGameUtilsKt.getShipManagingPos(serverLevel, BlockPos.containing(entity.getAnchorVec()));
+        Ship ship = ContraptionSegmentHelper.getContraptionAnchorShip(serverLevel, entity);
 
         if (ship != null && ship.getBodyId() != null && ship.getBodyId() != bodyId) {
             bodyId = ship.getBodyId();

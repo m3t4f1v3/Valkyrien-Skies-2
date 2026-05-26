@@ -20,26 +20,39 @@ import org.joml.Vector3i;
 import org.joml.Vector3ic;
 import org.joml.primitives.AABBdc;
 import org.valkyrienskies.core.api.bodies.ServerVsBody;
+import org.valkyrienskies.core.api.bodies.shape.BoxBodyShapeData;
 import org.valkyrienskies.core.api.bodies.shape.VoxelBodyShapeData;
 import org.valkyrienskies.core.api.bodies.shape.VoxelType;
 import org.valkyrienskies.core.api.bodies.shape.VoxelUpdate;
+import org.valkyrienskies.core.api.ships.Ship;
 import org.valkyrienskies.core.api.world.ServerShipWorld;
 import org.valkyrienskies.core.internal.world.chunks.VsiBlockType;
 import org.valkyrienskies.mod.api.ValkyrienSkies;
 import org.valkyrienskies.mod.common.DefaultBlockStateInfoProvider;
+import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod;
 import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
 
 public class ContraptionSegmentHelper {
     private static final double TICKS_PER_SECOND = 20.0;
+    private static final boolean USE_PRIMITIVE_SEGMENT_DEBUG = Boolean.getBoolean("vs.createContraptionPrimitiveSegmentDebug");
+    private static final Vector3dc MINECRAFT_BLOCK_CENTER_OFFSET = new Vector3d(0.5, 0.5, 0.5);
 
     @Nullable
     public static VoxelBodyShapeData toShapeData(AbstractContraptionEntity entity) {
         Contraption contraption = entity.getContraption();
         if (contraption != null) {
             AABBdc contraptionBounds = VectorConversionsMCKt.toJOML(contraption.bounds);
-            Vector3ic lowerCorner = new Vector3i((int) contraptionBounds.minX(), (int) contraptionBounds.minY(), (int) contraptionBounds.minZ());
-            Vector3ic upperCorner = new Vector3i((int) contraptionBounds.maxX(), (int) contraptionBounds.maxY(), (int) contraptionBounds.maxZ());
+            Vector3ic lowerCorner = new Vector3i(
+                (int) Math.floor(contraptionBounds.minX()),
+                (int) Math.floor(contraptionBounds.minY()),
+                (int) Math.floor(contraptionBounds.minZ())
+            );
+            Vector3ic upperCorner = new Vector3i(
+                (int) Math.ceil(contraptionBounds.maxX()) - 1,
+                (int) Math.ceil(contraptionBounds.maxY()) - 1,
+                (int) Math.ceil(contraptionBounds.maxZ()) - 1
+            );
             VoxelBodyShapeData data = new VoxelBodyShapeData(lowerCorner, upperCorner);
             return data;
         }
@@ -91,6 +104,47 @@ public class ContraptionSegmentHelper {
         return VectorConversionsMCKt.toJOML(contraption.getAnchorVec());
     }
 
+    @Nullable
+    public static Ship getContraptionAnchorShip(ServerLevel level, AbstractContraptionEntity contraptionEntity) {
+        Contraption contraption = contraptionEntity.getContraption();
+        if (contraption != null && contraption.anchor != null) {
+            Ship anchorShip = VSGameUtilsKt.getShipManagingPos(level, contraption.anchor);
+            if (anchorShip != null) {
+                return anchorShip;
+            }
+        }
+
+        return VSGameUtilsKt.getShipManagingPos(level, BlockPos.containing(contraptionEntity.getAnchorVec()));
+    }
+
+    public static Vector3d getContraptionSegmentPosition(ServerLevel level, AbstractContraptionEntity contraption, long bodyId, boolean isWorld) {
+        Vector3dc anchorVec = getContraptionSegmentPosition(contraption);
+        Ship anchorShip = getContraptionAnchorShip(level, contraption);
+
+        if (isWorld) {
+            if (anchorShip != null) {
+                return anchorShip.getTransform().getShipToWorld().transformPosition(anchorVec, new Vector3d());
+            }
+            return new Vector3d(anchorVec);
+        }
+
+        ServerShipWorld shipWorld = ValkyrienSkies.getShipWorld(level.getServer());
+        if (shipWorld == null) {
+            return new Vector3d(anchorVec);
+        }
+
+        ServerVsBody body = shipWorld.getAllBodies().getById(bodyId);
+        if (body == null) {
+            return new Vector3d(anchorVec);
+        }
+
+        if (anchorShip != null && anchorShip.getBodyId() != null && anchorShip.getBodyId() == bodyId) {
+            return new Vector3d(anchorVec);
+        }
+
+        return body.getKinematics().getTransform().getToModel().transformPosition(anchorVec, new Vector3d());
+    }
+
     public static Quaterniond getContraptionSegmentRotation(AbstractContraptionEntity contraption) {
         ContraptionRotationState rotationState = contraption.getRotationState();
         Quaterniond contraptionRot = new Quaterniond(0, 0, 0, 1).rotateZYX(
@@ -104,9 +158,38 @@ public class ContraptionSegmentHelper {
         return contraptionRot;
     }
 
-    public static int addContraptionSegment(ServerLevel level, VoxelBodyShapeData shapeData, AbstractContraptionEntity contraption, long bodyId, boolean isWorld) {
+    public static Quaterniond getContraptionSegmentRotation(ServerLevel level, AbstractContraptionEntity contraption, long bodyId, boolean isWorld) {
         Quaterniond contraptionRot = getContraptionSegmentRotation(contraption);
-        Vector3dc anchorVec = getContraptionSegmentPosition(contraption);
+        Ship anchorShip = getContraptionAnchorShip(level, contraption);
+
+        if (isWorld) {
+            if (anchorShip != null) {
+                return new Quaterniond(anchorShip.getTransform().getShipToWorldRotation()).mul(contraptionRot).normalize();
+            }
+            return contraptionRot;
+        }
+
+        ServerShipWorld shipWorld = ValkyrienSkies.getShipWorld(level.getServer());
+        if (shipWorld == null) {
+            return contraptionRot;
+        }
+
+        ServerVsBody body = shipWorld.getAllBodies().getById(bodyId);
+        if (body == null) {
+            return contraptionRot;
+        }
+
+        if (anchorShip != null && anchorShip.getBodyId() != null && anchorShip.getBodyId() == bodyId) {
+            return contraptionRot;
+        }
+
+        return new Quaterniond(body.getKinematics().getRotation()).conjugate().mul(contraptionRot).normalize();
+    }
+
+    public static int addContraptionSegment(ServerLevel level, VoxelBodyShapeData shapeData, AbstractContraptionEntity contraption, long bodyId, boolean isWorld) {
+        Quaterniond contraptionRot = getContraptionSegmentRotation(level, contraption, bodyId, isWorld);
+        Vector3dc anchorVec = getContraptionSegmentPosition(level, contraption, bodyId, isWorld);
+        Vector3d collisionShapeOffset = getLocalBoundsCenter(shapeData);
 
         int segmentId = -1;
 
@@ -121,14 +204,20 @@ public class ContraptionSegmentHelper {
                 return segmentId;
             }
             String dimensionId = ValkyrienSkies.getDimensionId(level);
-            segmentId = shipWorld.addWorldCollisionSegment(dimensionId, shapeData, anchorVec, contraptionRot, 1.0, new Vector3d());
+            if (USE_PRIMITIVE_SEGMENT_DEBUG) {
+                segmentId = shipWorld.addWorldCollisionSegment(dimensionId, toBoxShapeData(shapeData), anchorVec, contraptionRot, 1.0, collisionShapeOffset);
+            } else {
+                segmentId = shipWorld.addWorldCollisionSegment(dimensionId, shapeData, anchorVec, contraptionRot, 1.0, MINECRAFT_BLOCK_CENTER_OFFSET);
+            }
 
             if (segmentId == -1) {
                 return segmentId;
             }
 
-            for (VoxelUpdate voxelUpdate : voxelUpdates) {
-                shipWorld.applyWorldVoxelSegmentUpdate(dimensionId, segmentId, voxelUpdate);
+            if (!USE_PRIMITIVE_SEGMENT_DEBUG) {
+                for (VoxelUpdate voxelUpdate : voxelUpdates) {
+                    shipWorld.applyWorldVoxelSegmentUpdate(dimensionId, segmentId, voxelUpdate);
+                }
             }
         } else {
             ServerVsBody body = ValkyrienSkies.getShipWorld(level.getServer()).getAllBodies().getById(bodyId);
@@ -136,14 +225,40 @@ public class ContraptionSegmentHelper {
                 return segmentId;
             }
 
-            segmentId = body.addCollisionSegment(shapeData, anchorVec, contraptionRot, 1.0, new Vector3d());
+            if (USE_PRIMITIVE_SEGMENT_DEBUG) {
+                segmentId = body.addCollisionSegment(toBoxShapeData(shapeData), anchorVec, contraptionRot, 1.0, collisionShapeOffset);
+            } else {
+                segmentId = body.addCollisionSegment(shapeData, anchorVec, contraptionRot, 1.0, MINECRAFT_BLOCK_CENTER_OFFSET);
+            }
 
-            for (VoxelUpdate voxelUpdate : voxelUpdates) {
-                body.applyVoxelSegmentUpdate(segmentId, voxelUpdate);
+            if (!USE_PRIMITIVE_SEGMENT_DEBUG) {
+                for (VoxelUpdate voxelUpdate : voxelUpdates) {
+                    body.applyVoxelSegmentUpdate(segmentId, voxelUpdate);
+                }
             }
         }
 
         return segmentId;
+    }
+
+    private static BoxBodyShapeData toBoxShapeData(VoxelBodyShapeData shapeData) {
+        Vector3ic min = shapeData.getMinDefined();
+        Vector3ic max = shapeData.getMaxDefined();
+        return new BoxBodyShapeData(new Vector3d(
+            (max.x() - min.x() + 1.0) * 0.5,
+            (max.y() - min.y() + 1.0) * 0.5,
+            (max.z() - min.z() + 1.0) * 0.5
+        ));
+    }
+
+    private static Vector3d getLocalBoundsCenter(VoxelBodyShapeData shapeData) {
+        Vector3ic min = shapeData.getMinDefined();
+        Vector3ic max = shapeData.getMaxDefined();
+        return new Vector3d(
+            (min.x() + max.x() + 1.0) * 0.5,
+            (min.y() + max.y() + 1.0) * 0.5,
+            (min.z() + max.z() + 1.0) * 0.5
+        );
     }
 
     private static Vector3d estimateLinearVelocity(Vector3dc currentPosition, @Nullable Vector3dc previousPosition) {
@@ -197,8 +312,8 @@ public class ContraptionSegmentHelper {
             return false;
         }
 
-        Vector3dc anchorVec = getContraptionSegmentPosition(contraption);
-        Quaterniond contraptionRot = getContraptionSegmentRotation(contraption);
+        Vector3dc anchorVec = getContraptionSegmentPosition(level, contraption, bodyId, isWorld);
+        Quaterniond contraptionRot = getContraptionSegmentRotation(level, contraption, bodyId, isWorld);
         Vector3d velocity = estimateLinearVelocity(anchorVec, previousPosition);
         Vector3d angularVelocity = estimateAngularVelocity(contraptionRot, previousRotation);
 
