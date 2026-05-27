@@ -104,6 +104,9 @@ object EntityShipCollisionUtils {
     }
 
     private fun getAllShipsIntersectingEvenIfNotYetFullyLoaded(level: Level, aabb: AABBd): Stream<Ship> {
+        // Includes both unloaded ships AND loaded ships, because a ship can be in `loadedShips`
+        // (metadata received from server) before its block chunks have arrived on the client.
+        // The downstream areAllChunksLoaded check distinguishes the two.
         // shipAABB and worldAABB are sometimes too small when ship was just loaded for the first time.
         // To circumvent this, we use activeChunksSet to find a rougher bounding box which should always contain the entire ship.
         return level.allShips.stream().filter { ship ->
