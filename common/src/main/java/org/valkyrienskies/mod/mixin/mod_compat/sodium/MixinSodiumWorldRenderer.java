@@ -34,6 +34,7 @@ import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.assembly.SeamlessChunksManager;
 import org.valkyrienskies.mod.compat.LoadedMods;
 import org.valkyrienskies.mod.compat.LoadedMods.FlywheelVersion;
+import org.valkyrienskies.mod.compat.sodium.SodiumCompat;
 import org.valkyrienskies.mod.mixinducks.mod_compat.sodium.RenderSectionManagerDuck;
 import org.valkyrienskies.mod.mixinducks.mod_compat.sodium.SodiumWorldRendererDuck;
 
@@ -178,5 +179,14 @@ public abstract class MixinSodiumWorldRenderer implements SodiumWorldRendererDuc
                 world.pollLightUpdates();
             }
         }
+    }
+
+    @Inject(
+        method = {"reload", "unloadWorld"},
+        at = @At("HEAD"),
+        remap = false
+    )
+    private void deleteStorages(CallbackInfo ci) {
+        SodiumCompat.deleteStorages();
     }
 }

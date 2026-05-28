@@ -155,6 +155,29 @@ public class SodiumCompat {
         return shipOccluderList;
     }
 
+    public static void deleteStorages() {
+        if (biomeStorage != null) {
+            biomeStorage.delete();
+            biomeStorage = null;
+        }
+        if (lightStorage != null) {
+            lightStorage.delete();
+            lightStorage = null;
+        }
+        if (worldFromShipStorage != null) {
+            worldFromShipStorage.delete();
+            worldFromShipStorage = null;
+        }
+        if (shipOccluderList != null) {
+            shipOccluderList.delete();
+            shipOccluderList = null;
+        }
+        if (shipEmitterList != null) {
+            shipEmitterList.delete();
+            shipEmitterList = null;
+        }
+    }
+
     /**
      * Populate the world-from-ship storage AND the ship-emitter list,
      * called from {@code MixinLevelRenderer.updateDynamicLight} so the data updates every game tick.
@@ -187,7 +210,7 @@ public class SodiumCompat {
 
     public static void populateLightSectionStorage(ClientLevel level) {
         if (!VSGameConfig.CLIENT.getDynamicShipLighting()) return;
-        final VsShipLightStorage storage = SodiumCompat.getLightStorage();
+        final VsShipLightStorage storage = getLightStorage();
         storage.beginFrame();
         for (ClientShip clientShip : VSGameUtilsKt.getShipObjectWorld(level).getLoadedShips()) {
             final AABBdc aabb = clientShip.getRenderAABB();
@@ -201,7 +224,7 @@ public class SodiumCompat {
 
     public static void populateBiomeSectionStorage(ClientLevel level) {
         if (!VSGameConfig.CLIENT.getDynamicShipBiomeTinting()) return;
-        final VsShipBiomeColorStorage biomeStorageLocal = SodiumCompat.getBiomeStorage();
+        final VsShipBiomeColorStorage biomeStorageLocal = getBiomeStorage();
         biomeStorageLocal.beginFrame();
         for (ClientShip clientShip : VSGameUtilsKt.getShipObjectWorld(level).getLoadedShips()) {
             final AABBdc aabb = clientShip.getRenderAABB();
