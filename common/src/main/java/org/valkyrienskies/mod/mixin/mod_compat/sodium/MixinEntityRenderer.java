@@ -11,6 +11,7 @@ import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
+import org.valkyrienskies.mod.common.config.VSGameConfig;
 import org.valkyrienskies.mod.compat.sodium.SodiumCompat;
 
 @Mixin(EntityRenderer.class)
@@ -28,6 +29,7 @@ public abstract class MixinEntityRenderer<T extends Entity> {
         Level level = entity.level();
         Vec3 lightProbe = entity.getLightProbePosition(f);
         int packedLight = original.call(entity, f);
+        if (!VSGameConfig.CLIENT.getDynamicShipLighting() && !VSGameConfig.CLIENT.getDynamicShipToWorldLighting()) return packedLight;
         int sky = LightTexture.sky(packedLight);
         int block = LightTexture.block(packedLight);
         if (VSGameUtilsKt.isBlockInShipyard(level, lightProbe)) {
@@ -35,9 +37,11 @@ public abstract class MixinEntityRenderer<T extends Entity> {
             BlockPos worldPos = BlockPos.containing(center);
             sky = Math.min(sky, getSkyLightLevel(entity, worldPos));
             block = Math.max(block, getBlockLightLevel(entity, worldPos));
-            int blockShipToShip = SodiumCompat.getWorldFromShipStorage().getBlockLightAt(worldPos);
-            block = Math.max(block, blockShipToShip);
-        } else {
+            if (VSGameConfig.CLIENT.getDynamicShipToWorldLighting()) {
+                int blockShipToShip = SodiumCompat.getWorldFromShipStorage().getBlockLightAt(worldPos);
+                block = Math.max(block, blockShipToShip);
+            }
+        } else if (VSGameConfig.CLIENT.getDynamicShipToWorldLighting()) {
             int blockShipToWorld = SodiumCompat.getWorldFromShipStorage().getBlockLightAt(BlockPos.containing(lightProbe));
             block = Math.max(block, blockShipToWorld);
         }
