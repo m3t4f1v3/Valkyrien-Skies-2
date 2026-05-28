@@ -1,6 +1,7 @@
 package org.valkyrienskies.mod.compat.flywheel;
 
 import dev.engine_room.flywheel.api.visualization.VisualizationManager;
+import java.util.Set;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -179,4 +180,6 @@ public class ShipEmbeddingManager {
     public void register(BlockEntity blockEntity, ClientShip ship) {
         vs$shipBEs.put(blockEntity, ship);
     }
+
+    public Set<BlockEntity> blockEntitiesOnShip() { return Set.copyOf(vs$shipBEs.keySet()); }
 }

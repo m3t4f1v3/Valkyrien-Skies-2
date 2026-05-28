@@ -12,6 +12,7 @@ import java.nio.ByteOrder;
 import java.nio.IntBuffer;
 import java.util.BitSet;
 
+import java.util.Set;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL13;
 import org.lwjgl.opengl.GL15;
@@ -596,6 +597,8 @@ public class VsWorldFromShipLightStorage {
     public int trackedSectionCount() {
         return section2Index.size();
     }
+
+    public Set<Long> trackedSections() { return Set.copyOf(section2Index.keySet()); }
 
     private void ensureGlObjects() {
         if (sectionsBuffer == 0) sectionsBuffer = GL15.glGenBuffers();

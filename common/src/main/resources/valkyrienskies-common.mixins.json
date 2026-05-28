@@ -355,7 +355,6 @@
     "mod_compat.immersive_portals.MixinVisibleSectionDiscovery",
     "mod_compat.optifine.RenderChunkInfoAccessorOptifine",
     "mod_compat.optifine_vanilla.MixinLevelRenderer",
-    "mod_compat.sodium.MixinBlockEntityRenderDispatcher",
     "mod_compat.sodium.MixinChunkTracker",
     "mod_compat.sodium.MixinClientPacketListener",
     "mod_compat.sodium.MixinDefaultChunkRenderer",
