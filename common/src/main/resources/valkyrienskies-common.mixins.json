@@ -361,6 +361,7 @@
     "mod_compat.sodium.MixinDefaultChunkRenderer",
     "mod_compat.sodium.MixinEntityRenderer",
     "mod_compat.sodium.MixinItemInHandRenderer",
+    "mod_compat.sodium.MixinLevelRenderer",
     "mod_compat.sodium.MixinRenderSection",
     "mod_compat.sodium.MixinRenderSectionManager",
     "mod_compat.sodium.MixinSodiumOptionsGUI",
