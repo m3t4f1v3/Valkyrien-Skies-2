@@ -34,6 +34,7 @@ import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.assembly.SeamlessChunksManager;
 import org.valkyrienskies.mod.compat.LoadedMods;
 import org.valkyrienskies.mod.compat.LoadedMods.FlywheelVersion;
+import org.valkyrienskies.mod.compat.sodium.SodiumCompat;
 import org.valkyrienskies.mod.mixinducks.mod_compat.sodium.RenderSectionManagerDuck;
 import org.valkyrienskies.mod.mixinducks.mod_compat.sodium.SodiumWorldRendererDuck;
 
@@ -138,18 +139,6 @@ public abstract class MixinSodiumWorldRenderer implements SodiumWorldRendererDuc
             this.vs$markShipRenderListsDirty();
         }
         vs$prevFrameHadShips = curFrameHasShips;
-
-        // Populate world-from-ship storage + ship-emitter list BEFORE chunk
-        // rendering. The world FSH samples both during world chunk rendering,
-        // which happens after setupTerrain but before VS's ship pass — so
-        // populating here is the only place the data is ready in time.
-        Minecraft.getInstance().getProfiler().push("vs_world_from_ship_lighting");
-        try {
-            org.valkyrienskies.mod.compat.sodium.SodiumCompat.populateWorldFromShipsForFrame(
-                Minecraft.getInstance().level, viewport);
-        } finally {
-            Minecraft.getInstance().getProfiler().pop();
-        }
     }
 
     @Inject(method = "setupTerrain", at = @At("TAIL"))
@@ -190,5 +179,14 @@ public abstract class MixinSodiumWorldRenderer implements SodiumWorldRendererDuc
                 world.pollLightUpdates();
             }
         }
+    }
+
+    @Inject(
+        method = {"reload", "unloadWorld"},
+        at = @At("HEAD"),
+        remap = false
+    )
+    private void deleteStorages(CallbackInfo ci) {
+        SodiumCompat.deleteStorages();
     }
 }

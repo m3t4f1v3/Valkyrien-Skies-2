@@ -155,11 +155,32 @@ public class SodiumCompat {
         return shipOccluderList;
     }
 
+    public static void deleteStorages() {
+        if (biomeStorage != null) {
+            biomeStorage.delete();
+            biomeStorage = null;
+        }
+        if (lightStorage != null) {
+            lightStorage.delete();
+            lightStorage = null;
+        }
+        if (worldFromShipStorage != null) {
+            worldFromShipStorage.delete();
+            worldFromShipStorage = null;
+        }
+        if (shipOccluderList != null) {
+            shipOccluderList.delete();
+            shipOccluderList = null;
+        }
+        if (shipEmitterList != null) {
+            shipEmitterList.delete();
+            shipEmitterList = null;
+        }
+    }
+
     /**
-     * Populate the world-from-ship storage AND the ship-emitter list once per
-     * frame, called from {@code MixinSodiumWorldRenderer.setupTerrain} HEAD so
-     * the data is ready when sodium starts rendering world chunks (which
-     * happens before VS's ship pass each frame).
+     * Populate the world-from-ship storage AND the ship-emitter list,
+     * called from {@code MixinLevelRenderer.updateDynamicLight} so the data updates every game tick.
      */
     public static void populateWorldFromShipsForFrame(net.minecraft.client.multiplayer.ClientLevel level) {
         populateWorldFromShipsForFrame(level, null);
@@ -177,7 +198,7 @@ public class SodiumCompat {
         occluders.beginFrame();
         org.valkyrienskies.mod.common.VSGameUtilsKt.getShipObjectWorld(
                 net.minecraft.client.Minecraft.getInstance()).getLoadedShips().forEach(ship -> {
-            ClientShip cs = (ClientShip) ship;
+            ClientShip cs = ship;
             if (!isShipRelevantToWorldFromShipFrame(cs, viewport)) return;
             storage.populateFromShip(level, cs, emitters, occluders);
         });
@@ -185,6 +206,34 @@ public class SodiumCompat {
         storage.upload();
         emitters.upload();
         occluders.upload();
+    }
+
+    public static void populateLightSectionStorage(ClientLevel level) {
+        if (!VSGameConfig.CLIENT.getDynamicShipLighting()) return;
+        final VsShipLightStorage storage = getLightStorage();
+        storage.beginFrame();
+        for (ClientShip clientShip : VSGameUtilsKt.getShipObjectWorld(level).getLoadedShips()) {
+            final AABBdc aabb = clientShip.getRenderAABB();
+            storage.requestSectionsInAabb(level,
+                aabb.minX(), aabb.minY(), aabb.minZ(),
+                aabb.maxX(), aabb.maxY(), aabb.maxZ());
+        }
+        storage.pruneUnused();
+        storage.upload();
+    }
+
+    public static void populateBiomeSectionStorage(ClientLevel level) {
+        if (!VSGameConfig.CLIENT.getDynamicShipBiomeTinting()) return;
+        final VsShipBiomeColorStorage biomeStorageLocal = getBiomeStorage();
+        biomeStorageLocal.beginFrame();
+        for (ClientShip clientShip : VSGameUtilsKt.getShipObjectWorld(level).getLoadedShips()) {
+            final AABBdc aabb = clientShip.getRenderAABB();
+            biomeStorageLocal.requestSectionsInAabb(level,
+                aabb.minX(), aabb.minY(), aabb.minZ(),
+                aabb.maxX(), aabb.maxY(), aabb.maxZ());
+        }
+        biomeStorageLocal.pruneUnused();
+        biomeStorageLocal.upload();
     }
 
     private static boolean isShipRelevantToWorldFromShipFrame(ClientShip ship, Viewport viewport) {
@@ -337,60 +386,20 @@ public class SodiumCompat {
         VSGameEvents.INSTANCE.getShipsStartRenderingSodium().emit(new VSGameEvents.ShipStartRenderEventSodium(
             pass, matrices, x, y, z
         ));
-
-        // Refresh the world-light + biome-color buffers for any sections occupied
-        // by the ships we are about to render. Each storage is gated by its own
-        // config — when a feature is disabled, we skip the per-frame work AND
-        // the shader was compiled without the corresponding `#define`, so it
-        // never samples the buffer either.
-        final ClientLevel level = net.minecraft.client.Minecraft.getInstance().level;
         final boolean dynamicLight = VSGameConfig.CLIENT.getDynamicShipLighting();
         final boolean dynamicBiome = VSGameConfig.CLIENT.getDynamicShipBiomeTinting();
-        final boolean dynamicShipToWorld = VSGameConfig.CLIENT.getDynamicShipToWorldLighting();
         final VsShipLightStorage storage = dynamicLight ? getLightStorage() : null;
         final VsShipBiomeColorStorage biomeStorageLocal = dynamicBiome ? getBiomeStorage() : null;
         final ArrayList<ClientShip> renderableShips = new ArrayList<>();
         final ArrayList<SortedRenderLists> renderableRenderLists = new ArrayList<>();
         ((RenderSectionManagerDuck) renderSectionManager).vs_getShipRenderLists().forEach((ship, renderList) -> {
             if (hasRenderableGeometryForPass(renderList, pass)) {
-                renderableShips.add((ClientShip) ship);
+                renderableShips.add(ship);
                 renderableRenderLists.add(renderList);
             }
         });
         if (renderableShips.isEmpty()) {
             return;
-        }
-        // World-from-ship storage and the emitter list are populated in
-        // MixinSodiumWorldRenderer's setupTerrain HEAD hook, not here — sodium
-        // renders world chunks before this VS ship pass, so populating in
-        // vsRenderLayer would leave the storage empty during world rendering.
-        if (level != null) {
-            if (storage != null) storage.beginFrame();
-            if (biomeStorageLocal != null) biomeStorageLocal.beginFrame();
-            for (int i = 0; i < renderableShips.size(); i++) {
-                final ClientShip clientShip = renderableShips.get(i);
-                final AABBdc aabb = clientShip.getRenderAABB();
-                if (aabb != null) {
-                    if (storage != null) {
-                        storage.requestSectionsInAabb(level,
-                                aabb.minX(), aabb.minY(), aabb.minZ(),
-                                aabb.maxX(), aabb.maxY(), aabb.maxZ());
-                    }
-                    if (biomeStorageLocal != null) {
-                        biomeStorageLocal.requestSectionsInAabb(level,
-                                aabb.minX(), aabb.minY(), aabb.minZ(),
-                                aabb.maxX(), aabb.maxY(), aabb.maxZ());
-                    }
-                }
-            }
-            if (storage != null) {
-                storage.pruneUnused();
-                storage.upload();
-            }
-            if (biomeStorageLocal != null) {
-                biomeStorageLocal.pruneUnused();
-                biomeStorageLocal.upload();
-            }
         }
 
         for (int i = 0; i < renderableShips.size(); i++) {

@@ -1,53 +1,63 @@
 package org.valkyrienskies.mod.mixin.mod_compat.sodium;
 
-import com.mojang.blaze3d.vertex.PoseStack;
-import java.util.Map;
-import net.minecraft.client.Camera;
-import net.minecraft.client.renderer.GameRenderer;
+import dev.engine_room.flywheel.api.visualization.VisualizationManager;
+import dev.engine_room.flywheel.impl.visualization.VisualManagerImpl;
+import dev.engine_room.flywheel.impl.visualization.storage.BlockEntityStorage;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.LevelRenderer;
-import net.minecraft.client.renderer.LightTexture;
-import net.minecraft.client.renderer.ShaderInstance;
-import org.joml.Matrix4f;
-import org.joml.Vector3f;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.valkyrienskies.mod.common.config.VSGameConfig;
+import org.valkyrienskies.mod.compat.LoadedMods;
+import org.valkyrienskies.mod.compat.LoadedMods.FlywheelVersion;
+import org.valkyrienskies.mod.compat.flywheel.ShipEmbeddingManager;
 import org.valkyrienskies.mod.compat.sodium.SodiumCompat;
-import org.valkyrienskies.mod.mixin.accessors.client.render.GameRendererAccessor;
 
 @Mixin(LevelRenderer.class)
 public class MixinLevelRenderer {
+    @Shadow
+    private @Nullable ClientLevel level;
+
+    /**
+     * Updating world-to-ship, ship-to-world dynamic lighting and dynamic biome tint storages require
+     * movement of ship or block update in either ship or world.
+     * These changes only happen per game tick, not per frame. Updating per game tick disables dynamic
+     * lighting/tinting interpolation over time, but the cost of update per frame is too much.
+     */
     @Inject(
-        method = "renderLevel",
+        method = "tick",
         at = @At("HEAD")
     )
-    private void setUniforms(PoseStack poseStack, float f, long l, boolean bl, Camera camera, GameRenderer gameRenderer,
-        LightTexture lightTexture, Matrix4f matrix4f, CallbackInfo ci){
-
-        Vector3f camerPos = camera.getPosition().toVector3f();
-        Matrix4f localToCamera = new Matrix4f(poseStack.last().pose()).invert();
-        Map<String, ShaderInstance> shaders = ((GameRendererAccessor) gameRenderer).vs$getShaders();
-        for(ShaderInstance entityShader : shaders.values()) {
-            if(entityShader.getUniform("u_VsLightSections") == null) continue;
-            entityShader.getUniform("u_VsLightSections").set(SodiumCompat.LIGHT_SECTIONS_TEXTURE_UNIT);
-            entityShader.getUniform("u_VsLightLut").set(SodiumCompat.LIGHT_LUT_TEXTURE_UNIT);
-            entityShader.getUniform("u_LocalToCameraRel").set(localToCamera);
-            entityShader.getUniform("u_VsRenderOrigin").set(camerPos.x, camerPos.y, camerPos.z);
-            entityShader.getUniform("u_isInWorld").set(1);
-        }
-    }
-
-    @Inject(
-        method = "renderLevel",
-        at = @At("RETURN")
-    )
-    private void unsetUniform(PoseStack poseStack, float f, long l, boolean bl, Camera camera,
-        GameRenderer gameRenderer, LightTexture lightTexture, Matrix4f matrix4f, CallbackInfo ci){
-        Map<String, ShaderInstance> shaders = ((GameRendererAccessor) gameRenderer).vs$getShaders();
-        for(ShaderInstance entityShader : shaders.values()) {
-            if(entityShader.getUniform("u_isInWorld") == null) continue;
-            entityShader.getUniform("u_isInWorld").set(0);
+    private void updateDynamicLight(CallbackInfo ci) {
+        Minecraft.getInstance().getProfiler().push("vs_dynamic_lighting");
+        try {
+            SodiumCompat.populateWorldFromShipsForFrame(level);
+            SodiumCompat.populateLightSectionStorage(level);
+            SodiumCompat.populateBiomeSectionStorage(level);
+            if (LoadedMods.getFlywheel() != FlywheelVersion.NONE) {
+                VisualizationManager manager = VisualizationManager.get(level);
+                if (manager != null) {
+                    VisualManagerImpl<BlockEntity, BlockEntityStorage> blockEntityManager = (VisualManagerImpl<BlockEntity, BlockEntityStorage>) manager.blockEntities();
+                    if (VSGameConfig.CLIENT.getDynamicShipLighting()) {
+                        for (Long sectionLong : ShipEmbeddingManager.INSTANCE.sectionsWithBlockEntities()) {
+                            blockEntityManager.onLightUpdate(sectionLong);
+                        }
+                    }
+                    if (VSGameConfig.CLIENT.getDynamicShipToWorldLighting()) {
+                        for (Long sectionLong : SodiumCompat.getWorldFromShipStorage().trackedSections()) {
+                            blockEntityManager.onLightUpdate(sectionLong);
+                        }
+                    }
+                }
+            }
+        } finally {
+            Minecraft.getInstance().getProfiler().pop();
         }
     }
 }
