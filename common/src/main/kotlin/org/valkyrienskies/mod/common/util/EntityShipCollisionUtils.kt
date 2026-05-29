@@ -21,10 +21,10 @@ import org.valkyrienskies.core.internal.collision.VsiConvexPolygonc
 import org.valkyrienskies.core.util.extend
 import org.valkyrienskies.core.util.toAABBd
 import org.valkyrienskies.core.api.ships.properties.ShipId
+import org.valkyrienskies.mod.common.allShips
 import org.valkyrienskies.mod.common.dimensionId
 import org.valkyrienskies.mod.common.getLoadedShipManagingPos
 import org.valkyrienskies.mod.common.shipObjectWorld
-import org.valkyrienskies.mod.common.unloadedShips
 import org.valkyrienskies.mod.common.vsCore
 import org.valkyrienskies.mod.mixinducks.feature.tickets.PlayerKnownShipsDuck
 import org.valkyrienskies.mod.util.BugFixUtil
@@ -104,9 +104,12 @@ object EntityShipCollisionUtils {
     }
 
     private fun getAllShipsIntersectingEvenIfNotYetFullyLoaded(level: Level, aabb: AABBd): Stream<Ship> {
+        // Includes both unloaded ships AND loaded ships, because a ship can be in `loadedShips`
+        // (metadata received from server) before its block chunks have arrived on the client.
+        // The downstream areAllChunksLoaded check distinguishes the two.
         // shipAABB and worldAABB are sometimes too small when ship was just loaded for the first time.
         // To circumvent this, we use activeChunksSet to find a rougher bounding box which should always contain the entire ship.
-        return level.unloadedShips.stream().filter { ship ->
+        return level.allShips.stream().filter { ship ->
             ship.chunkClaimDimension == level.dimensionId &&
             getShipyardChunkAABBAround(ship).toAABBd(AABBd()).transform(ship.shipToWorld).intersectsAABB(aabb)
         }
@@ -121,9 +124,6 @@ object EntityShipCollisionUtils {
                 return shouldBlockPlayerForClientShipSync(entity, level.gameTime)
             } else if (entity is Player) {
                 playerClientSyncBlockStartTicks.remove(entity.id)
-            }
-            if (level.unloadedShips.isEmpty()) {
-                return false
             }
 
             val aabb = entity.boundingBox.toJOML()
