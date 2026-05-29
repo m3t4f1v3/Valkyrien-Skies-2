@@ -1,32 +1,18 @@
 package org.valkyrienskies.mod.mixin.mod_compat.sodium;
 
-import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
-import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
-import dev.engine_room.flywheel.api.visual.BlockEntityVisual;
-import dev.engine_room.flywheel.api.visual.LightUpdatedVisual;
 import dev.engine_room.flywheel.api.visualization.VisualizationManager;
 import dev.engine_room.flywheel.impl.visualization.VisualManagerImpl;
-import dev.engine_room.flywheel.impl.visualization.VisualizationManagerImpl;
 import dev.engine_room.flywheel.impl.visualization.storage.BlockEntityStorage;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.LevelRenderer;
-import net.minecraft.client.renderer.LightTexture;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.SectionPos;
-import net.minecraft.world.level.BlockAndTintGetter;
-import net.minecraft.world.level.Level;
-import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.config.VSGameConfig;
 import org.valkyrienskies.mod.compat.LoadedMods;
 import org.valkyrienskies.mod.compat.LoadedMods.FlywheelVersion;
@@ -54,45 +40,24 @@ public class MixinLevelRenderer {
             SodiumCompat.populateWorldFromShipsForFrame(level);
             SodiumCompat.populateLightSectionStorage(level);
             SodiumCompat.populateBiomeSectionStorage(level);
-            if(LoadedMods.getFlywheel() != FlywheelVersion.NONE) {
-                VisualizationManagerImpl manager = (VisualizationManagerImpl) VisualizationManager.get(level);
-                for (Long sectionLong : SodiumCompat.getWorldFromShipStorage().trackedSections()) {
-                    manager.onLightUpdate(SectionPos.of(sectionLong), LightLayer.BLOCK);
-                }
-                for (BlockEntity blockEntity : ShipEmbeddingManager.INSTANCE.blockEntitiesOnShip()) {
-                    BlockPos pos = blockEntity.getBlockPos();
-                    BlockEntityVisual<?> beVisual = ((VisualManagerImpl<BlockEntity, BlockEntityStorage>)manager.blockEntities()).getStorage().visualAtPos(pos.asLong());
-                    if(beVisual instanceof LightUpdatedVisual lightUpdatedVisual) lightUpdatedVisual.updateLight(0.0f);
+            if (LoadedMods.getFlywheel() != FlywheelVersion.NONE) {
+                VisualizationManager manager = VisualizationManager.get(level);
+                if (manager != null) {
+                    VisualManagerImpl<BlockEntity, BlockEntityStorage> blockEntityManager = (VisualManagerImpl<BlockEntity, BlockEntityStorage>) manager.blockEntities();
+                    if (VSGameConfig.CLIENT.getDynamicShipLighting()) {
+                        for (Long sectionLong : ShipEmbeddingManager.INSTANCE.sectionsWithBlockEntities()) {
+                            blockEntityManager.onLightUpdate(sectionLong);
+                        }
+                    }
+                    if (VSGameConfig.CLIENT.getDynamicShipToWorldLighting()) {
+                        for (Long sectionLong : SodiumCompat.getWorldFromShipStorage().trackedSections()) {
+                            blockEntityManager.onLightUpdate(sectionLong);
+                        }
+                    }
                 }
             }
         } finally {
             Minecraft.getInstance().getProfiler().pop();
         }
-    }
-
-    @WrapMethod(
-        method = "getLightColor(Lnet/minecraft/world/level/BlockAndTintGetter;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/core/BlockPos;)I"
-    )
-    private static int getDynamicLight(BlockAndTintGetter blockAndTintGetter, BlockState blockState, BlockPos blockPos, Operation<Integer> original) {
-        int packedLight = original.call(blockAndTintGetter, blockState, blockPos);
-        if (!(blockAndTintGetter instanceof Level level)) return packedLight;
-        if (!VSGameConfig.CLIENT.getDynamicShipLighting() && !VSGameConfig.CLIENT.getDynamicShipToWorldLighting()) return packedLight;
-        int sky = LightTexture.sky(packedLight);
-        int block = LightTexture.block(packedLight);
-        if (VSGameUtilsKt.isBlockInShipyard(level, blockPos)) {
-            Vec3 center = VSGameUtilsKt.toWorldCoordinates(level, blockPos.getCenter());
-            BlockPos worldPos = BlockPos.containing(center);
-            int packedLightWorld = original.call(blockAndTintGetter, blockState, worldPos);
-            sky = Math.min(sky, LightTexture.sky(packedLightWorld));
-            block = Math.max(block, LightTexture.block(packedLightWorld));
-            if (VSGameConfig.CLIENT.getDynamicShipToWorldLighting()) {
-                int blockShipToShip = SodiumCompat.getWorldFromShipStorage().getBlockLightAt(worldPos);
-                block = Math.max(block, blockShipToShip);
-            }
-        } else if (VSGameConfig.CLIENT.getDynamicShipToWorldLighting()) {
-            int blockShipToWorld = SodiumCompat.getWorldFromShipStorage().getBlockLightAt(blockPos);
-            block = Math.max(block, blockShipToWorld);
-        }
-        return LightTexture.pack(block, sky);
     }
 }
