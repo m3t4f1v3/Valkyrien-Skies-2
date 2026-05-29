@@ -16,6 +16,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.valkyrienskies.mod.common.config.VSGameConfig;
 import org.valkyrienskies.mod.compat.LoadedMods;
 import org.valkyrienskies.mod.compat.LoadedMods.FlywheelVersion;
+import org.valkyrienskies.mod.compat.flywheel.FlywheelDynLightCompat;
 import org.valkyrienskies.mod.compat.flywheel.ShipEmbeddingManager;
 import org.valkyrienskies.mod.compat.sodium.SodiumCompat;
 
@@ -41,20 +42,7 @@ public class MixinLevelRenderer {
             SodiumCompat.populateLightSectionStorage(level);
             SodiumCompat.populateBiomeSectionStorage(level);
             if (LoadedMods.getFlywheel() != FlywheelVersion.NONE) {
-                VisualizationManager manager = VisualizationManager.get(level);
-                if (manager != null) {
-                    VisualManagerImpl<BlockEntity, BlockEntityStorage> blockEntityManager = (VisualManagerImpl<BlockEntity, BlockEntityStorage>) manager.blockEntities();
-                    if (VSGameConfig.CLIENT.getDynamicShipLighting()) {
-                        for (Long sectionLong : ShipEmbeddingManager.INSTANCE.sectionsWithBlockEntities()) {
-                            blockEntityManager.onLightUpdate(sectionLong);
-                        }
-                    }
-                    if (VSGameConfig.CLIENT.getDynamicShipToWorldLighting()) {
-                        for (Long sectionLong : SodiumCompat.getWorldFromShipStorage().trackedSections()) {
-                            blockEntityManager.onLightUpdate(sectionLong);
-                        }
-                    }
-                }
+                FlywheelDynLightCompat.updateDynamicLightingForFlywheel(level);
             }
         } finally {
             Minecraft.getInstance().getProfiler().pop();
