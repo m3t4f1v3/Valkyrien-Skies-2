@@ -270,6 +270,16 @@ object VSGameConfig {
                 max = 4096.0
             )
             var shipTerrainChunkUnloadsPerTick = 64
+
+            @ConfigEntry(
+                description = "How often (in ticks) the natural-mob-spawn pass runs for each ship. " +
+                    "1 = every spawn cycle (vanilla parity). Higher values stagger ships across ticks " +
+                    "and reduce the per-tick spawning cost of large ships carrying a whole population " +
+                    "(e.g. a village on a ship), at the cost of proportionally slower spawning on ships.",
+                min = 1.0,
+                max = 200.0
+            )
+            var shipMobSpawnIntervalTicks = 1
         }
 
 
@@ -464,6 +474,9 @@ object VSGameConfig {
         @ConfigEntry(
             description = "Enables ship air pockets. Must be enabled on both client and server."
         )
-        var enableAirPockets = true
+        // VS benchmark patch: defaulted OFF. Disables the ship water-pocket / flooding subsystem and the
+        // ship-water rendering that is gated on it. The hot server entry points (tickServerLevel /
+        // tickClientLevel) and every per-query fluid override early-out on this flag.
+        var enableAirPockets = false
     }
 }

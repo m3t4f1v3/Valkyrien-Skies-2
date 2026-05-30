@@ -5,7 +5,6 @@ import java.util.HashSet;
 import java.util.Set;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Registry;
-import net.minecraft.core.SectionPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.FullChunkStatus;
@@ -27,7 +26,6 @@ import net.minecraft.world.level.chunk.storage.ChunkSerializer;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.levelgen.blending.BlendingData;
 import net.minecraft.world.level.material.Fluid;
-import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.ticks.LevelChunkTicks;
 import org.jetbrains.annotations.NotNull;
 import org.spongepowered.asm.mixin.Final;
@@ -116,27 +114,10 @@ public abstract class MixinLevelChunk extends ChunkAccess implements VSLevelChun
         LevelChunkTicks levelChunkTicks2, long l, LevelChunkSection[] levelChunkSections,
         PostLoadProcessor postLoadProcessor, BlendingData blendingData, CallbackInfo ci
     ) {
+        // VS benchmark patch (air pockets removed): the per-chunk fluid snapshot was only read by the
+        // ship water-pocket solver, which is now disabled. Skip the expensive full-section fluid scan on
+        // every chunk load; keep an empty stub so the LevelChunkDuck#vs$getFluidData contract still holds.
         this.fluidData = new FluidStateManager.ChunkFluidData();
-
-        final BlockPos.MutableBlockPos tmpPos = new BlockPos.MutableBlockPos();
-        int sectionIndex = -1;
-        for (final LevelChunkSection section : this.getSections()) {
-            sectionIndex++;
-            if (section == null || section.hasOnlyAir()) {
-                continue;
-            }
-            final int yBase = SectionPos.sectionToBlockCoord(this.getSectionYFromSectionIndex(sectionIndex));
-            for (int x = 0; x < 16; x++) {
-                for (int z = 0; z < 16; z++) {
-                    for (int y = 0; y < 16; y++) {
-                        final FluidState state = section.getFluidState(x, y, z);
-                        if (!state.isEmpty()) {
-                            this.fluidData.setFluidState(tmpPos.set(x, yBase + y, z), state);
-                        }
-                    }
-                }
-            }
-        }
     }
 
     @Override
@@ -158,7 +139,7 @@ public abstract class MixinLevelChunk extends ChunkAccess implements VSLevelChun
             BlockStateInfo.INSTANCE.onSetBlock(level, pos, prevState, state);
             VanillaFluidFlowWindProvider.INSTANCE.markDirty(level, pos, prevState, state);
         });
-        this.fluidData.setFluidState(pos, state.getFluidState());
+        // VS benchmark patch (air pockets removed): per-block fluid snapshot updates are no longer needed.
     }
 
     @Shadow
