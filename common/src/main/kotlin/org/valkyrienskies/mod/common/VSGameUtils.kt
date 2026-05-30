@@ -481,12 +481,31 @@ fun Entity?.getShipBlockStoodOn(probeDepth: Double): ShipBlock? {
     for (ship in level.getShipsIntersecting(probe)) {
         val w2s = ship.transform.worldToShip
         val local = w2s.transformPosition(foot, Vector3d())
-        val cellPos = BlockPos.containing(local.x, local.y, local.z)
-        if (!level.getBlockState(cellPos).isAir) return ShipBlock(ship, cellPos)
-        // Try one below for fence/slab edge cases.
+        val centerPos = BlockPos.containing(local.x, local.y, local.z)
+        if (!level.getBlockState(centerPos).isAir) return ShipBlock(ship, centerPos)
+        // One cell below for fence/slab edge cases at the foot center.
         val belowLocal = w2s.transformPosition(Vector3d(foot.x, foot.y - 1.0, foot.z))
         val belowPos = BlockPos.containing(belowLocal.x, belowLocal.y, belowLocal.z)
         if (!level.getBlockState(belowPos).isAir) return ShipBlock(ship, belowPos)
+
+        val halfW = this.boundingBox.xsize / 2.0
+        val halfD = this.boundingBox.zsize / 2.0
+        if (halfW <= 0.5 && halfD <= 0.5) continue
+
+        val centerLong = centerPos.asLong()
+        val cornerScratch = Vector3d()
+        val cornerXs = doubleArrayOf(this.x - halfW, this.x + halfW, this.x - halfW, this.x + halfW)
+        val cornerZs = doubleArrayOf(this.z - halfD, this.z - halfD, this.z + halfD, this.z + halfD)
+        var lastSeen = centerLong
+        for (i in 0 until 4) {
+            cornerScratch.set(cornerXs[i], foot.y, cornerZs[i])
+            w2s.transformPosition(cornerScratch)
+            val cornerPos = BlockPos.containing(cornerScratch.x, cornerScratch.y, cornerScratch.z)
+            val cornerLong = cornerPos.asLong()
+            if (cornerLong == centerLong || cornerLong == lastSeen) continue
+            lastSeen = cornerLong
+            if (!level.getBlockState(cornerPos).isAir) return ShipBlock(ship, cornerPos)
+        }
     }
     return null
 }
