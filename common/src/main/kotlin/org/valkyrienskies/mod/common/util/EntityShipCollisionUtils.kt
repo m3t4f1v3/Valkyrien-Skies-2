@@ -29,7 +29,6 @@ import org.valkyrienskies.mod.common.vsCore
 import org.valkyrienskies.mod.mixinducks.feature.tickets.PlayerKnownShipsDuck
 import org.valkyrienskies.mod.util.BugFixUtil
 import java.util.concurrent.ConcurrentHashMap
-import java.util.stream.Stream
 
 object EntityShipCollisionUtils {
 
@@ -103,14 +102,16 @@ object EntityShipCollisionUtils {
         return box
     }
 
-    private fun getAllShipsIntersectingEvenIfNotYetFullyLoaded(level: Level, aabb: AABBd): Stream<Ship> {
+    private fun getAllShipsIntersectingEvenIfNotYetFullyLoaded(level: Level, aabb: AABBd): List<Ship> {
         // Includes both unloaded ships AND loaded ships, because a ship can be in `loadedShips`
         // (metadata received from server) before its block chunks have arrived on the client.
         // The downstream areAllChunksLoaded check distinguishes the two.
-        // shipAABB and worldAABB are sometimes too small when ship was just loaded for the first time.
-        // To circumvent this, we use activeChunksSet to find a rougher bounding box which should always contain the entire ship.
-        return level.allShips.stream().filter { ship ->
-            ship.chunkClaimDimension == level.dimensionId &&
+        // KNOWN REGRESSION (re-opens commit bfe4d328 "fix player falling through ship on world
+        // load"): the spatial index keys ships on their worldAABB, which can be stale/too-small for a
+        // ship that was just loaded — so such a ship may be missed here until its bounds update,
+        // briefly letting an entity fall through it. Accepted deliberately for the perf win; the
+        // proper fix is a spatial index keyed on activeChunks-derived world bounds, not worldAABB.
+        return level.allShips.getIntersecting(aabb, level.dimensionId).filter { ship ->
             getShipyardChunkAABBAround(ship).toAABBd(AABBd()).transform(ship.shipToWorld).intersectsAABB(aabb)
         }
     }
@@ -129,7 +130,7 @@ object EntityShipCollisionUtils {
             val aabb = entity.boundingBox.toJOML()
             val currentTick = level.gameTime
             return getAllShipsIntersectingEvenIfNotYetFullyLoaded(level, aabb)
-                .allMatch { ship ->
+                .all { ship ->
                     // Skip collision check for recently-spawned ships whose chunks are still
                     // loading. Without this, spawning a new ship near a player would freeze
                     // them because isCollidingWithUnloadedShips returns true (the new ship's
@@ -137,16 +138,16 @@ object EntityShipCollisionUtils {
                     // This must be checked BEFORE vs_isKnownShip, because the player won't
                     // know about a brand-new ship yet either.
                     if (isInSpawnGracePeriod(ship.id)) {
-                        return@allMatch true // pretend it's loaded → don't block movement
+                        return@all true // pretend it's loaded → don't block movement
                     }
                     val aabbInShip = AABBd(aabb).transform(ship.worldToShip)
                     val chunksLoaded = areAllChunksLoaded(ship, aabbInShip, level)
                     if (chunksLoaded) {
                         playerUnloadedShipBlockStartTicks.remove(playerShipBlockKey(entity, ship.id))
-                        return@allMatch true
+                        return@all true
                     }
                     if (entity is PlayerKnownShipsDuck && !entity.vs_isKnownShip(ship.id)) {
-                        return@allMatch !shouldBlockPlayerForUnloadedShip(entity, ship, currentTick)
+                        return@all !shouldBlockPlayerForUnloadedShip(entity, ship, currentTick)
                     }
                     !shouldBlockPlayerForUnloadedShip(entity, ship, currentTick)
                 }
