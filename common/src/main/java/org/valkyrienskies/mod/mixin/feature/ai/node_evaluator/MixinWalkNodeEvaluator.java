@@ -2,13 +2,17 @@ package org.valkyrienskies.mod.mixin.feature.ai.node_evaluator;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.Mth;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.level.pathfinder.BlockPathTypes;
 import net.minecraft.world.level.pathfinder.Node;
 import net.minecraft.world.level.pathfinder.NodeEvaluator;
 import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import org.joml.Matrix4dc;
 import org.joml.Vector3d;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -21,6 +25,12 @@ import org.valkyrienskies.mod.common.VSGameUtilsKt;
 
 @Mixin(WalkNodeEvaluator.class)
 public abstract class MixinWalkNodeEvaluator extends NodeEvaluator {
+
+    @Shadow
+    protected abstract Node getStartNode(BlockPos blockPos);
+
+    @Shadow
+    protected abstract BlockPathTypes getBlockPathType(Mob mob, BlockPos blockPos);
 
     @Unique
     private static final ThreadLocal<Vector3d> VS$IN = ThreadLocal.withInitial(Vector3d::new);
@@ -40,20 +50,42 @@ public abstract class MixinWalkNodeEvaluator extends NodeEvaluator {
         final PathfindingFrame.InShip inShip = vs$inShipOrNull();
         if (inShip == null) return;
         final Ship ship = inShip.getShip();
+        final Matrix4dc w2s = ship.getTransform().getWorldToShip();
 
+        final BlockPos centerCell;
         final ShipBlock standingOn = VSGameUtilsKt.getShipBlockStoodOn(this.mob, 0.5);
         if (standingOn != null && standingOn.ship.getId() == ship.getId()) {
-            final BlockPos above = standingOn.shipLocalBlockPos.above();
-            cir.setReturnValue(new Node(above.getX(), above.getY(), above.getZ()));
-            return;
+            centerCell = standingOn.shipLocalBlockPos.above();
+        } else {
+            final Vector3d local = w2s.transformPosition(
+                VS$IN.get().set(this.mob.getX(), this.mob.getY(), this.mob.getZ()), VS$OUT.get()
+            );
+            centerCell = new BlockPos(
+                (int) Math.floor(local.x), (int) Math.floor(local.y), (int) Math.floor(local.z)
+            );
         }
 
-        final Vector3d local = ship.getTransform().getWorldToShip().transformPosition(
-            VS$IN.get().set(this.mob.getX(), this.mob.getY(), this.mob.getZ()), VS$OUT.get()
-        );
-        cir.setReturnValue(new Node(
-            (int) Math.floor(local.x), (int) Math.floor(local.y), (int) Math.floor(local.z)
-        ));
+        // Vanilla corner-search projected to shipyard: if the multi-cell footprint at the
+        // center cell has negative malus, sample the four bbox corners at the mob's foot Y.
+        final BlockPathTypes centerType = this.getBlockPathType(this.mob, centerCell);
+        if (this.mob.getPathfindingMalus(centerType) < 0.0F) {
+            final AABB bbox = this.mob.getBoundingBox();
+            final double mobY = this.mob.getY();
+            final double[] xs = { bbox.minX, bbox.minX, bbox.maxX, bbox.maxX };
+            final double[] zs = { bbox.minZ, bbox.maxZ, bbox.minZ, bbox.maxZ };
+            final Vector3d scratch = VS$IN.get();
+            for (int i = 0; i < 4; i++) {
+                scratch.set(xs[i], mobY, zs[i]);
+                w2s.transformPosition(scratch);
+                final BlockPos corner = BlockPos.containing(scratch.x, scratch.y, scratch.z);
+                if (this.mob.getPathfindingMalus(this.getBlockPathType(this.mob, corner)) >= 0.0F) {
+                    cir.setReturnValue(this.getStartNode(corner));
+                    return;
+                }
+            }
+        }
+
+        cir.setReturnValue(this.getStartNode(centerCell));
     }
 
     // Vanilla canReachWithoutCollision sweeps an AABB from mob.position() to node coords assuming both share one frame; in an InShip frame the mob is at world coords (~hundreds) and the node at shipyard coords (~10^7), and the delta blows up to millions of iterations.
