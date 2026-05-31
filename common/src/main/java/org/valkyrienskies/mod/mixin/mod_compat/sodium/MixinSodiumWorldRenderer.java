@@ -5,6 +5,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import java.util.SortedSet;
 
+import me.jellysquid.mods.sodium.client.gl.device.CommandList;
 import net.minecraft.client.Minecraft;
 import me.jellysquid.mods.sodium.client.render.SodiumWorldRenderer;
 import me.jellysquid.mods.sodium.client.render.chunk.RenderSectionManager;
@@ -188,5 +189,17 @@ public abstract class MixinSodiumWorldRenderer implements SodiumWorldRendererDuc
     )
     private void deleteStorages(CallbackInfo ci) {
         SodiumCompat.deleteStorages();
+    }
+
+    @Inject(
+        method = "initRenderer",
+        at = @At("HEAD"),
+        remap = false
+    )
+    private void populateStorage(CommandList commandList, CallbackInfo ci){
+        SodiumCompat.populateWorldFromShipsForFrame(world);
+        SodiumCompat.populateLightSectionStorage(world);
+        SodiumCompat.populateBiomeSectionStorage(world);
+
     }
 }

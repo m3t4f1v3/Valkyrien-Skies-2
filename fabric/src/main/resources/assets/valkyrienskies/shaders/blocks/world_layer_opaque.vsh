@@ -107,7 +107,7 @@ void main() {
     // do the divide here once. Without this, the FSH samples u_LightTex at
     // clamped (~31/32, ~31/32) every fragment and the world renders
     // uniformly maxed out — vanilla torch falloff disappears.
-    v_LightCoord = vec2(_vert_tex_light_coord) / 256.0;
+    v_LightCoord = _vert_tex_light_coord;
     v_TexCoord = (_vert_tex_diffuse_coord_bias * u_TexCoordShrink) + _vert_tex_diffuse_coord;
 
     v_MaterialMipBias = _material_mip_bias(_material_params);
