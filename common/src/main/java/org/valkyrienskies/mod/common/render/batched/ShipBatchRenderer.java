@@ -25,6 +25,7 @@ import org.joml.Matrix4f;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
 import org.joml.Vector3f;
+import org.lwjgl.opengl.GL20;
 import org.valkyrienskies.core.api.ships.ClientShip;
 import org.valkyrienskies.core.api.ships.properties.ShipTransform;
 import org.valkyrienskies.mod.common.VSClientGameUtils;
@@ -41,7 +42,29 @@ public final class ShipBatchRenderer {
     private final ShipSectionCompiler compiler = new ShipSectionCompiler();
     private final LongOpenHashSet presentScratch = new LongOpenHashSet();
     private final ArrayList<ShipRenderObject> drawOrder = new ArrayList<>();
-    private final ArrayList<ShipSectionMesh> translucentOrderScratch = new ArrayList<>();
+
+    private final ArrayList<ShipFrameData> frameData = new ArrayList<>();
+    private int preparedFrameToken = -1;
+    private int currentFrameToken = 0;
+
+    private final ShipTransformStorage transformStorage = new ShipTransformStorage();
+    private static final int SHIP_TRANSFORMS_TEXTURE_UNIT = 4;
+
+    private static final int MAX_SHIP_REMESH_PER_FRAME = 2;
+
+    private static final class ShipFrameData {
+        final Matrix4f modelView = new Matrix4f();
+        double camShipX, camShipY, camShipZ;
+        boolean visible;
+        // Slot of this ship's matrix in transformStorage (= the ShipIndex uniform value).
+        int transformIndex;
+        // ChunkOffset for the merged opaque buffers: ship reference R minus the camera in ship space.
+        // The opaque vertices are stored relative to R, so this single offset covers the whole ship.
+        float opaqueOffsetX, opaqueOffsetY, opaqueOffsetZ;
+        // Translucent sections sorted back-to-front, computed once here and used by the translucent
+        // layer's drawLayer (translucent stays per-section so its ordering is preserved).
+        final ArrayList<ShipSectionMesh> translucentOrder = new ArrayList<>();
+    }
 
     private ShipBatchRenderer() {
     }
@@ -69,6 +92,7 @@ public final class ShipBatchRenderer {
 
     public void beginFrame(final ClientLevel level) {
         RenderSystem.assertOnRenderThread();
+        currentFrameToken++;
         if (level == null) {
             freeAll();
             return;
@@ -77,6 +101,7 @@ public final class ShipBatchRenderer {
         final BlockRenderDispatcher dispatcher = Minecraft.getInstance().getBlockRenderer();
         presentScratch.clear();
 
+        int reMeshBudget = MAX_SHIP_REMESH_PER_FRAME;
         for (final ClientShip ship : VSGameUtilsKt.getShipObjectWorld(level).getLoadedShips()) {
             if (!ShipRendererKt.getUsesBatchedRenderer(ship)) {
                 continue;
@@ -90,7 +115,9 @@ public final class ShipBatchRenderer {
                     ships.put(ship.getId(), renderObject);
                 }
             }
-            renderObject.ensureCompiled(level, dispatcher, compiler);
+            if (renderObject.ensureCompiled(level, dispatcher, compiler, reMeshBudget > 0)) {
+                reMeshBudget--;
+            }
         }
 
         synchronized (ships) {
@@ -119,10 +146,18 @@ public final class ShipBatchRenderer {
         }
         RenderSystem.assertOnRenderThread();
 
+        prepareFrameData(poseStack, camX, camY, camZ, frustum);
+
         renderType.setupRenderState();
 
-        final ShaderInstance shipShader = VSRenderTypes.Companion.shipShaderFor(renderType);
-        final ShaderInstance shader = shipShader != null ? shipShader : RenderSystem.getShader();
+        ShaderInstance shader = VSRenderTypes.Companion.shipBatchedShaderFor(renderType);
+        final boolean usingBatchedShader = shader != null;
+        if (shader == null) {
+            shader = VSRenderTypes.Companion.shipShaderFor(renderType);
+        }
+        if (shader == null) {
+            shader = RenderSystem.getShader();
+        }
         if (shader == null) {
             renderType.clearRenderState();
             return;
@@ -161,59 +196,58 @@ public final class ShipBatchRenderer {
         RenderSystem.setupShaderLights(shader);
         shader.apply();
 
+        int shipIndexLoc = -1;
+        if (usingBatchedShader) {
+            final int programId = shader.getId();
+            transformStorage.bind(SHIP_TRANSFORMS_TEXTURE_UNIT);
+            final int samplerLoc = GL20.glGetUniformLocation(programId, "ShipTransforms");
+            if (samplerLoc >= 0) {
+                GL20.glUniform1i(samplerLoc, SHIP_TRANSFORMS_TEXTURE_UNIT);
+            }
+            shipIndexLoc = GL20.glGetUniformLocation(programId, "ShipIndex");
+        }
+
         final Uniform modelViewUniform = shader.MODEL_VIEW_MATRIX;
         final Uniform chunkOffsetUniform = shader.CHUNK_OFFSET;
-        final Vector3d camScratch = new Vector3d();
         final boolean translucent = renderType == RenderType.translucent();
 
-        for (int shipIdx = 0; shipIdx < drawOrder.size(); shipIdx++) {
-            final ShipRenderObject renderObject = drawOrder.get(shipIdx);
-            final ClientShip ship = renderObject.ship;
-            if (renderObject.getSections().isEmpty()) {
+        for (int shipIdx = 0; shipIdx < frameData.size(); shipIdx++) {
+            final ShipFrameData data = frameData.get(shipIdx);
+            if (!data.visible) {
                 continue;
             }
-            if (frustum != null
-                && !frustum.isVisible(VectorConversionsMCKt.toMinecraft(ship.getRenderAABB()))) {
-                continue;
-            }
-
-            final ShipTransform transform = ship.getRenderTransform();
-            camScratch.set(camX, camY, camZ);
-            final Vector3dc camShip = transform.getWorldToShip().transformPosition(camScratch);
-
-            poseStack.pushPose();
-            VSClientGameUtils.transformRenderWithShip(transform, poseStack,
-                camShip.x(), camShip.y(), camShip.z(), camX, camY, camZ);
-            if (modelViewUniform != null) {
-                modelViewUniform.set(poseStack.last().pose());
-                modelViewUniform.upload();
-            }
-            poseStack.popPose();
-
-            final Iterable<ShipSectionMesh> sectionsToDraw;
             if (translucent) {
-                translucentOrderScratch.clear();
-                translucentOrderScratch.addAll(renderObject.getSections().values());
-                final double cx = camShip.x();
-                final double cy = camShip.y();
-                final double cz = camShip.z();
-                translucentOrderScratch.sort((a, b) ->
-                    Double.compare(sectionCenterDistSq(b, cx, cy, cz), sectionCenterDistSq(a, cx, cy, cz)));
-                sectionsToDraw = translucentOrderScratch;
+                final ArrayList<ShipSectionMesh> order = data.translucentOrder;
+                boolean shipTransformSet = false;
+                for (int i = 0; i < order.size(); i++) {
+                    final ShipSectionMesh mesh = order.get(i);
+                    final VertexBuffer buffer = mesh.getBuffer(layerIndex);
+                    if (buffer == null) {
+                        continue;
+                    }
+                    if (!shipTransformSet) {
+                        setShipTransform(data, usingBatchedShader, shipIndexLoc, modelViewUniform);
+                        shipTransformSet = true;
+                    }
+                    if (chunkOffsetUniform != null) {
+                        chunkOffsetUniform.set(
+                            (float) (mesh.originX - data.camShipX),
+                            (float) (mesh.originY - data.camShipY),
+                            (float) (mesh.originZ - data.camShipZ));
+                        chunkOffsetUniform.upload();
+                    }
+                    buffer.bind();
+                    buffer.draw();
+                }
             } else {
-                sectionsToDraw = renderObject.getSections().values();
-            }
-
-            for (final ShipSectionMesh mesh : sectionsToDraw) {
-                final VertexBuffer buffer = mesh.getBuffer(layerIndex);
+                final ShipMesh mesh = drawOrder.get(shipIdx).getMesh();
+                final VertexBuffer buffer = mesh == null ? null : mesh.getOpaque(layerIndex);
                 if (buffer == null) {
                     continue;
                 }
+                setShipTransform(data, usingBatchedShader, shipIndexLoc, modelViewUniform);
                 if (chunkOffsetUniform != null) {
-                    chunkOffsetUniform.set(
-                        (float) (mesh.originX - camShip.x()),
-                        (float) (mesh.originY - camShip.y()),
-                        (float) (mesh.originZ - camShip.z()));
+                    chunkOffsetUniform.set(data.opaqueOffsetX, data.opaqueOffsetY, data.opaqueOffsetZ);
                     chunkOffsetUniform.upload();
                 }
                 buffer.bind();
@@ -227,6 +261,79 @@ public final class ShipBatchRenderer {
         shader.clear();
         VertexBuffer.unbind();
         renderType.clearRenderState();
+    }
+
+    private static void setShipTransform(final ShipFrameData data, final boolean usingBatchedShader,
+        final int shipIndexLoc, final Uniform modelViewUniform) {
+        if (usingBatchedShader) {
+            if (shipIndexLoc >= 0) {
+                GL20.glUniform1i(shipIndexLoc, data.transformIndex);
+            }
+        } else if (modelViewUniform != null) {
+            modelViewUniform.set(data.modelView);
+            modelViewUniform.upload();
+        }
+    }
+
+    private void prepareFrameData(final PoseStack levelPoseStack, final double camX, final double camY,
+        final double camZ, final Frustum frustum) {
+        if (preparedFrameToken == currentFrameToken) {
+            return;
+        }
+        preparedFrameToken = currentFrameToken;
+
+        while (frameData.size() < drawOrder.size()) {
+            frameData.add(new ShipFrameData());
+        }
+        while (frameData.size() > drawOrder.size()) {
+            frameData.remove(frameData.size() - 1);
+        }
+
+        transformStorage.beginFrame();
+        final Vector3d camScratch = new Vector3d();
+        final PoseStack poseStack = levelPoseStack;
+        for (int i = 0; i < drawOrder.size(); i++) {
+            final ShipRenderObject renderObject = drawOrder.get(i);
+            final ShipFrameData data = frameData.get(i);
+            data.translucentOrder.clear();
+
+            final ClientShip ship = renderObject.ship;
+            if (renderObject.isEmpty()
+                || (frustum != null
+                    && !frustum.isVisible(VectorConversionsMCKt.toMinecraft(ship.getRenderAABB())))) {
+                data.visible = false;
+                continue;
+            }
+            data.visible = true;
+
+            final ShipTransform transform = ship.getRenderTransform();
+            camScratch.set(camX, camY, camZ);
+            final Vector3dc camShip = transform.getWorldToShip().transformPosition(camScratch);
+            data.camShipX = camShip.x();
+            data.camShipY = camShip.y();
+            data.camShipZ = camShip.z();
+
+            poseStack.pushPose();
+            VSClientGameUtils.transformRenderWithShip(transform, poseStack,
+                camShip.x(), camShip.y(), camShip.z(), camX, camY, camZ);
+            data.modelView.set(poseStack.last().pose());
+            poseStack.popPose();
+
+            data.transformIndex = transformStorage.append(data.modelView);
+
+            final ShipMesh mesh = renderObject.getMesh();
+            data.opaqueOffsetX = (float) (mesh.refX - data.camShipX);
+            data.opaqueOffsetY = (float) (mesh.refY - data.camShipY);
+            data.opaqueOffsetZ = (float) (mesh.refZ - data.camShipZ);
+
+            data.translucentOrder.addAll(mesh.translucentSections.values());
+            final double cx = data.camShipX;
+            final double cy = data.camShipY;
+            final double cz = data.camShipZ;
+            data.translucentOrder.sort((a, b) ->
+                Double.compare(sectionCenterDistSq(b, cx, cy, cz), sectionCenterDistSq(a, cx, cy, cz)));
+        }
+        transformStorage.upload();
     }
 
     private static double sectionCenterDistSq(final ShipSectionMesh mesh,

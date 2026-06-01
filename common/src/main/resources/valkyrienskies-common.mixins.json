@@ -523,7 +523,9 @@
     "mod_compat.vista.ViewFinderControllerMixin",
     "mod_compat.vista.VistaLevelRendererMixin",
     "realms.MixinRealmsConnect",
-    "world.level.lighting.MixinSkyLightSectionStorage"
+    "world.level.lighting.MixinSkyLightSectionStorage",
+    "world.level.lighting.MixinLightEngineNullSafeRead",
+    "world.level.lighting.MixinLevelLightEngineSafeUpdates"
   ],
   "injectors": {
     "defaultRequire": 1,
