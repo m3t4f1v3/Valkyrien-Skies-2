@@ -21,6 +21,7 @@ import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.phys.Vec3;
+import org.joml.Matrix4d;
 import org.joml.Matrix4f;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
@@ -32,6 +33,7 @@ import org.valkyrienskies.mod.common.VSClientGameUtils;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.VSRenderTypes;
 import org.valkyrienskies.mod.common.config.ShipRendererKt;
+import org.valkyrienskies.mod.common.render.light.VsDynamicLight;
 import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
 
 public final class ShipBatchRenderer {
@@ -46,9 +48,13 @@ public final class ShipBatchRenderer {
     private final ArrayList<ShipFrameData> frameData = new ArrayList<>();
     private int preparedFrameToken = -1;
     private int currentFrameToken = 0;
+    private long lastLightPopulationGameTime = Long.MIN_VALUE;
 
     private final ShipTransformStorage transformStorage = new ShipTransformStorage();
     private static final int SHIP_TRANSFORMS_TEXTURE_UNIT = 4;
+
+    private final Matrix4d localToCameraRelScratch = new Matrix4d();
+    private final Matrix4f localToCameraRelFloat = new Matrix4f();
 
     private static final int MAX_SHIP_REMESH_PER_FRAME = 2;
 
@@ -97,6 +103,13 @@ public final class ShipBatchRenderer {
             freeAll();
             return;
         }
+
+        final long gameTime = level.getGameTime();
+        if (gameTime != lastLightPopulationGameTime) {
+            lastLightPopulationGameTime = gameTime;
+            VsDynamicLight.populateWorldLightForBatched(level);
+        }
+        VsDynamicLight.populateShipEmittersForBatched(level);
 
         final BlockRenderDispatcher dispatcher = Minecraft.getInstance().getBlockRenderer();
         presentScratch.clear();
@@ -205,6 +218,31 @@ public final class ShipBatchRenderer {
                 GL20.glUniform1i(samplerLoc, SHIP_TRANSFORMS_TEXTURE_UNIT);
             }
             shipIndexLoc = GL20.glGetUniformLocation(programId, "ShipIndex");
+
+            VsDynamicLight.getLightStorage().bind(
+                VsDynamicLight.LIGHT_SECTIONS_TEXTURE_UNIT, VsDynamicLight.LIGHT_LUT_TEXTURE_UNIT);
+
+            bindSamplerUniform(programId, "u_VsLightSections", VsDynamicLight.LIGHT_SECTIONS_TEXTURE_UNIT);
+            bindSamplerUniform(programId, "u_VsLightLut", VsDynamicLight.LIGHT_LUT_TEXTURE_UNIT);
+            VsDynamicLight.getShipEmitterList().bind(VsDynamicLight.SHIP_EMITTER_LIST_TEXTURE_UNIT);
+            bindSamplerUniform(programId, "u_VsShipEmitters", VsDynamicLight.SHIP_EMITTER_LIST_TEXTURE_UNIT);
+            final int emitterCountLoc = GL20.glGetUniformLocation(programId, "u_VsShipEmitterCount");
+            if (emitterCountLoc >= 0) {
+                GL20.glUniform1i(emitterCountLoc, VsDynamicLight.getShipEmitterList().size());
+            }
+
+            final int originX = (int) Math.floor(camX);
+            final int originY = (int) Math.floor(camY);
+            final int originZ = (int) Math.floor(camZ);
+            final int originLoc = GL20.glGetUniformLocation(programId, "u_VsRenderOrigin");
+            if (originLoc >= 0) {
+                GL20.glUniform3i(originLoc, originX, originY, originZ);
+            }
+            final int fracLoc = GL20.glGetUniformLocation(programId, "u_VsCameraFrac");
+            if (fracLoc >= 0) {
+                GL20.glUniform3f(fracLoc,
+                    (float) (camX - originX), (float) (camY - originY), (float) (camZ - originZ));
+            }
         }
 
         final Uniform modelViewUniform = shader.MODEL_VIEW_MATRIX;
@@ -275,6 +313,13 @@ public final class ShipBatchRenderer {
         }
     }
 
+    private static void bindSamplerUniform(final int programId, final String name, final int unit) {
+        final int loc = GL20.glGetUniformLocation(programId, name);
+        if (loc >= 0) {
+            GL20.glUniform1i(loc, unit);
+        }
+    }
+
     private void prepareFrameData(final PoseStack levelPoseStack, final double camX, final double camY,
         final double camZ, final Frustum frustum) {
         if (preparedFrameToken == currentFrameToken) {
@@ -319,7 +364,17 @@ public final class ShipBatchRenderer {
             data.modelView.set(poseStack.last().pose());
             poseStack.popPose();
 
-            data.transformIndex = transformStorage.append(data.modelView);
+            final int originX = (int) Math.floor(camX);
+            final int originY = (int) Math.floor(camY);
+            final int originZ = (int) Math.floor(camZ);
+            localToCameraRelScratch
+                .translation(camX - originX, camY - originY, camZ - originZ)
+                .translate(-camX, -camY, -camZ)
+                .mul(transform.getShipToWorld())
+                .translate(data.camShipX, data.camShipY, data.camShipZ);
+            localToCameraRelFloat.set(localToCameraRelScratch);
+
+            data.transformIndex = transformStorage.append(data.modelView, localToCameraRelFloat);
 
             final ShipMesh mesh = renderObject.getMesh();
             data.opaqueOffsetX = (float) (mesh.refX - data.camShipX);
@@ -381,5 +436,7 @@ public final class ShipBatchRenderer {
             ships.clear();
         }
         drawOrder.clear();
+        VsDynamicLight.deleteStorages();
+        lastLightPopulationGameTime = Long.MIN_VALUE;
     }
 }

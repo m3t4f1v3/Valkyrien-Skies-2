@@ -41,11 +41,17 @@ import org.joml.Matrix4fc;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
 import org.valkyrienskies.core.api.ships.properties.ShipTransform;
+import org.valkyrienskies.mod.common.config.ShipRendererKt;
 import org.valkyrienskies.mod.common.config.VSGameConfig;
+import org.valkyrienskies.mod.common.render.batched.ShipBatchRenderer;
+import org.valkyrienskies.mod.common.render.batched.ShipSectionMesh;
+import org.valkyrienskies.mod.common.render.light.VsDynamicLight;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.hooks.VSGameEvents;
 import org.valkyrienskies.mod.common.hooks.VSGameEvents.ShipRenderEventSodium;
+import org.valkyrienskies.mod.compat.LoadedMods;
 import org.valkyrienskies.mod.compat.VSRenderer;
+import org.valkyrienskies.mod.compat.iris.IrisCompat;
 import org.valkyrienskies.mod.compat.sodium.light.VsShipBiomeColorStorage;
 import org.valkyrienskies.mod.compat.sodium.light.VsShipEmitterList;
 import org.valkyrienskies.mod.compat.sodium.light.VsShipOccluderList;
@@ -59,6 +65,7 @@ import org.valkyrienskies.core.api.ships.ClientShip;
 import org.joml.primitives.AABBdc;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.PoseStack;
 
 public class SodiumCompat {
     /**
@@ -109,11 +116,7 @@ public class SodiumCompat {
      *  (cell-storage-based AO can only morph between cell-aligned configs). */
     public static final int SHIP_OCCLUDER_LIST_TEXTURE_UNIT = 13;
 
-    private static VsShipLightStorage lightStorage;
     private static VsShipBiomeColorStorage biomeStorage;
-    private static VsWorldFromShipLightStorage worldFromShipStorage;
-    private static VsShipEmitterList shipEmitterList;
-    private static VsShipOccluderList shipOccluderList;
 
     private static final double WORLD_FROM_SHIP_VISIBILITY_PADDING = 32.0;
 
@@ -121,10 +124,7 @@ public class SodiumCompat {
     private static final Map<ChunkShaderOptions, GlProgram<WorldThing>> cachedWorldPrograms = new HashMap<>();
 
     public static VsShipLightStorage getLightStorage() {
-        if (lightStorage == null) {
-            lightStorage = new VsShipLightStorage();
-        }
-        return lightStorage;
+        return VsDynamicLight.getLightStorage();
     }
 
     public static VsShipBiomeColorStorage getBiomeStorage() {
@@ -135,24 +135,15 @@ public class SodiumCompat {
     }
 
     public static VsWorldFromShipLightStorage getWorldFromShipStorage() {
-        if (worldFromShipStorage == null) {
-            worldFromShipStorage = new VsWorldFromShipLightStorage();
-        }
-        return worldFromShipStorage;
+        return VsDynamicLight.getWorldFromShipStorage();
     }
 
     public static VsShipEmitterList getShipEmitterList() {
-        if (shipEmitterList == null) {
-            shipEmitterList = new VsShipEmitterList();
-        }
-        return shipEmitterList;
+        return VsDynamicLight.getShipEmitterList();
     }
 
     public static VsShipOccluderList getShipOccluderList() {
-        if (shipOccluderList == null) {
-            shipOccluderList = new VsShipOccluderList();
-        }
-        return shipOccluderList;
+        return VsDynamicLight.getShipOccluderList();
     }
 
     public static void deleteStorages() {
@@ -160,22 +151,7 @@ public class SodiumCompat {
             biomeStorage.delete();
             biomeStorage = null;
         }
-        if (lightStorage != null) {
-            lightStorage.delete();
-            lightStorage = null;
-        }
-        if (worldFromShipStorage != null) {
-            worldFromShipStorage.delete();
-            worldFromShipStorage = null;
-        }
-        if (shipOccluderList != null) {
-            shipOccluderList.delete();
-            shipOccluderList = null;
-        }
-        if (shipEmitterList != null) {
-            shipEmitterList.delete();
-            shipEmitterList = null;
-        }
+        VsDynamicLight.deleteStorages();
     }
 
     /**
@@ -348,6 +324,12 @@ public class SodiumCompat {
         if (ValkyrienCommonMixinConfigPlugin.getVSRenderer() == VSRenderer.SODIUM) {
             ChunkTrackerHolder.get(level).onChunkStatusAdded(x, z, ChunkStatus.FLAG_HAS_BLOCK_DATA);
             markShipSectionCacheDirty(level, x, z);
+            if (VSGameUtilsKt.getShipManagingPos(level, x, z) instanceof final ClientShip ship
+                    && ShipRendererKt.getUsesBatchedRenderer(ship)) {
+                for (int sy = level.getMinSection(); sy < level.getMaxSection(); sy++) {
+                    ShipBatchRenderer.INSTANCE.markSectionDirty(ship.getId(), x, sy, z);
+                }
+            }
         }
     }
 
@@ -518,6 +500,29 @@ public class SodiumCompat {
             renderShipsForPass(renderSectionManager, matrices, DefaultTerrainRenderPasses.CUTOUT, x, y, z);
         } else if (renderLayer == RenderType.translucent()) {
             renderShipsForPass(renderSectionManager, matrices, DefaultTerrainRenderPasses.TRANSLUCENT, x, y, z);
+        }
+        renderBatchedShips(renderLayer, matrices, x, y, z);
+    }
+
+    public static void renderBatchedShips(RenderType renderLayer, ChunkRenderMatrices matrices,
+            double x, double y, double z) {
+        if (LoadedMods.getIris() && IrisCompat.isIrisShaderActive()) {
+            return;
+        }
+        final PoseStack poseStack = new PoseStack();
+        poseStack.last().pose().set(new Matrix4f(matrices.modelView()));
+        final Matrix4f projection = new Matrix4f(matrices.projection());
+
+        if (renderLayer == RenderType.solid()) {
+            ShipBatchRenderer.INSTANCE.beginFrame(net.minecraft.client.Minecraft.getInstance().level);
+            for (final RenderType layer : ShipSectionMesh.CHUNK_LAYERS) {
+                if (layer == RenderType.translucent()) {
+                    continue;
+                }
+                ShipBatchRenderer.INSTANCE.drawLayer(layer, poseStack, x, y, z, projection, null);
+            }
+        } else if (renderLayer == RenderType.translucent()) {
+            ShipBatchRenderer.INSTANCE.drawLayer(RenderType.translucent(), poseStack, x, y, z, projection, null);
         }
     }
 

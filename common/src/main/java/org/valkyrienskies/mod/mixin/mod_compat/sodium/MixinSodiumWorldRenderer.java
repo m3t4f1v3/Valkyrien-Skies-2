@@ -33,6 +33,7 @@ import org.valkyrienskies.core.api.ships.ClientShip;
 import org.valkyrienskies.mod.common.VSClientGameUtils;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.assembly.SeamlessChunksManager;
+import org.valkyrienskies.mod.common.render.batched.ShipBatchRenderer;
 import org.valkyrienskies.mod.compat.LoadedMods;
 import org.valkyrienskies.mod.compat.LoadedMods.FlywheelVersion;
 import org.valkyrienskies.mod.compat.sodium.SodiumCompat;
@@ -131,6 +132,17 @@ public abstract class MixinSodiumWorldRenderer implements SodiumWorldRendererDuc
         }
     }
 
+    @Inject(
+        method = "renderBlockEntities(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/RenderBuffers;Lit/unimi/dsi/fastutil/longs/Long2ObjectMap;Lnet/minecraft/client/Camera;F)V",
+        at = @At("TAIL")
+    )
+    private void vs$renderBatchedShipBlockEntities(final PoseStack matrices, final RenderBuffers bufferBuilders,
+        final Long2ObjectMap<SortedSet<BlockDestructionProgress>> blockBreakingProgressions, final Camera camera,
+        final float tickDelta, final CallbackInfo ci) {
+        ShipBatchRenderer.INSTANCE.renderBlockEntities(world, matrices, bufferBuilders.bufferSource(), camera,
+            tickDelta);
+    }
+
     @Inject(method = "setupTerrain", at = @At("HEAD"))
     private void preUpdateChunks(final Camera camera, final Viewport viewport, final int frame,
         final boolean spectator, final boolean updateChunksImmediately, final CallbackInfo callbackInfo) {
@@ -188,6 +200,7 @@ public abstract class MixinSodiumWorldRenderer implements SodiumWorldRendererDuc
         remap = false
     )
     private void deleteStorages(CallbackInfo ci) {
+        ShipBatchRenderer.INSTANCE.freeAll();
         SodiumCompat.deleteStorages();
     }
 

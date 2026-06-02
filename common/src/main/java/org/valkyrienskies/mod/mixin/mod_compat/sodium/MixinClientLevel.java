@@ -9,12 +9,19 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.util.profiling.ProfilerFiller;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LightLayer;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.dimension.DimensionType;
 import net.minecraft.world.level.storage.WritableLevelData;
 import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.valkyrienskies.core.api.ships.ClientShip;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
+import org.valkyrienskies.mod.common.config.ShipRendererKt;
 import org.valkyrienskies.mod.common.config.VSGameConfig;
+import org.valkyrienskies.mod.common.render.batched.ShipBatchRenderer;
 import org.valkyrienskies.mod.compat.sodium.SodiumCompat;
 
 @Mixin(ClientLevel.class)
@@ -49,6 +56,18 @@ public abstract class MixinClientLevel extends Level {
                 int shipToWorld = SodiumCompat.getWorldFromShipStorage().getBlockLightAt(worldPos);
                 return Math.max(worldToShipCombined, shipToWorld);
             }
+        }
+    }
+
+    @Inject(method = "sendBlockUpdated", at = @At("HEAD"))
+    private void vs$markBatchedShipSectionDirty(final BlockPos pos, final BlockState oldState,
+        final BlockState newState, final int flags, final CallbackInfo ci) {
+        final int sectionX = pos.getX() >> 4;
+        final int sectionY = pos.getY() >> 4;
+        final int sectionZ = pos.getZ() >> 4;
+        if (VSGameUtilsKt.getShipManagingPos((ClientLevel) (Object) this, sectionX, sectionZ)
+                instanceof final ClientShip ship && ShipRendererKt.getUsesBatchedRenderer(ship)) {
+            ShipBatchRenderer.INSTANCE.markSectionDirty(ship.getId(), sectionX, sectionY, sectionZ);
         }
     }
 }
