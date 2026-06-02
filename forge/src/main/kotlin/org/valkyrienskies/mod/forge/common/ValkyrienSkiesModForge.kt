@@ -362,6 +362,18 @@ class ValkyrienSkiesModForge {
         event.registerShader(
             ShaderInstance(event.resourceProvider, "rendertype_ship_translucent", DefaultVertexFormat.BLOCK)
         ) { shaderInstance: ShaderInstance? -> VSRenderTypes.shipTranslucentShader = shaderInstance }
+        event.registerShader(
+            ShaderInstance(event.resourceProvider, "rendertype_ship_batched_solid", DefaultVertexFormat.BLOCK)
+        ) { shaderInstance: ShaderInstance? -> VSRenderTypes.shipBatchedSolidShader = shaderInstance }
+        event.registerShader(
+            ShaderInstance(event.resourceProvider, "rendertype_ship_batched_cutout_mipped", DefaultVertexFormat.BLOCK)
+        ) { shaderInstance: ShaderInstance? -> VSRenderTypes.shipBatchedCutoutMippedShader = shaderInstance }
+        event.registerShader(
+            ShaderInstance(event.resourceProvider, "rendertype_ship_batched_cutout", DefaultVertexFormat.BLOCK)
+        ) { shaderInstance: ShaderInstance? -> VSRenderTypes.shipBatchedCutoutShader = shaderInstance }
+        event.registerShader(
+            ShaderInstance(event.resourceProvider, "rendertype_ship_batched_translucent", DefaultVertexFormat.BLOCK)
+        ) { shaderInstance: ShaderInstance? -> VSRenderTypes.shipBatchedTranslucentShader = shaderInstance }
     }
 
     private fun tagsUpdated(event: TagsUpdatedEvent) {

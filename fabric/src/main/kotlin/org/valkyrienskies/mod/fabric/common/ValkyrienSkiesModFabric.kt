@@ -371,6 +371,18 @@ class ValkyrienSkiesModFabric : ModInitializer {
             context.register(ResourceLocation("rendertype_ship_translucent"), DefaultVertexFormat.BLOCK) { shaderInstance: ShaderInstance? ->
                 VSRenderTypes.shipTranslucentShader = shaderInstance
             }
+            context.register(ResourceLocation("rendertype_ship_batched_solid"), DefaultVertexFormat.BLOCK) { shaderInstance: ShaderInstance? ->
+                VSRenderTypes.shipBatchedSolidShader = shaderInstance
+            }
+            context.register(ResourceLocation("rendertype_ship_batched_cutout_mipped"), DefaultVertexFormat.BLOCK) { shaderInstance: ShaderInstance? ->
+                VSRenderTypes.shipBatchedCutoutMippedShader = shaderInstance
+            }
+            context.register(ResourceLocation("rendertype_ship_batched_cutout"), DefaultVertexFormat.BLOCK) { shaderInstance: ShaderInstance? ->
+                VSRenderTypes.shipBatchedCutoutShader = shaderInstance
+            }
+            context.register(ResourceLocation("rendertype_ship_batched_translucent"), DefaultVertexFormat.BLOCK) { shaderInstance: ShaderInstance? ->
+                VSRenderTypes.shipBatchedTranslucentShader = shaderInstance
+            }
         }
 
         VSKeyBindings.clientSetup {
