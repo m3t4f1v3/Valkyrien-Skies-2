@@ -22,6 +22,11 @@ class VSRenderTypes(
         var shipCutoutShader: ShaderInstance? = null
         var shipTranslucentShader: ShaderInstance? = null
 
+        var shipBatchedSolidShader: ShaderInstance? = null
+        var shipBatchedCutoutMippedShader: ShaderInstance? = null
+        var shipBatchedCutoutShader: ShaderInstance? = null
+        var shipBatchedTranslucentShader: ShaderInstance? = null
+
         private val RENDERTYPE_SHIP_SOLID_SHADER: ShaderStateShard = ShaderStateShard(Supplier { shipSolidShader })
         private val RENDERTYPE_SHIP_CUTOUT_MIPPED_SHADER: ShaderStateShard = ShaderStateShard(Supplier { shipCutoutMippedShader })
         private val RENDERTYPE_SHIP_CUTOUT_SHADER: ShaderStateShard = ShaderStateShard(Supplier { shipCutoutShader })
@@ -86,6 +91,16 @@ class VSRenderTypes(
                 RenderType.cutoutMipped() -> shipCutoutMippedShader
                 RenderType.cutout() -> shipCutoutShader
                 RenderType.translucent() -> shipTranslucentShader
+                else -> null
+            }
+        }
+
+        fun shipBatchedShaderFor(renderType: RenderType): ShaderInstance? {
+            return when (renderType) {
+                RenderType.solid() -> shipBatchedSolidShader
+                RenderType.cutoutMipped() -> shipBatchedCutoutMippedShader
+                RenderType.cutout() -> shipBatchedCutoutShader
+                RenderType.translucent() -> shipBatchedTranslucentShader
                 else -> null
             }
         }

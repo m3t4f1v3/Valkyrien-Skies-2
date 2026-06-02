@@ -26,6 +26,8 @@ import org.valkyrienskies.core.api.world.ClientShipWorld;
 import org.valkyrienskies.core.api.world.ServerShipWorld;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.assembly.SeamlessChunksManager;
+import org.valkyrienskies.mod.common.config.VSGameConfig;
+import org.valkyrienskies.mod.mixin.ValkyrienCommonMixinConfigPlugin;
 import org.valkyrienskies.mod.common.util.EntityDraggingInformation;
 import org.valkyrienskies.mod.common.util.IEntityDraggingInformationProvider;
 
@@ -42,6 +44,8 @@ public abstract class MixinDebugScreenOverlay {
     @Inject(method = "getGameInformation", at = @At(value = "INVOKE", target = "Ljava/util/List;add(Ljava/lang/Object;)Z", ordinal = 1))
     private void addShipCountInformation(CallbackInfoReturnable<List<String>> cir, @Local List<String> list) {
         Level l = getLevel();
+        list.add("Ship renderer: " + VSGameConfig.CLIENT.getDefaultRenderer()
+            + " (world: " + ValkyrienCommonMixinConfigPlugin.getVSRenderer() + ")");
         if (l instanceof ServerLevel) {
             ServerShipWorld world = VSGameUtilsKt.getShipObjectWorld((ServerLevel)l);
             list.add("Ships Loaded: " + world.getLoadedShips().size() + "/" + world.getAllShips().size());
