@@ -130,9 +130,9 @@ object VSGameConfig {
         }
 
         @ConfigEntry(
-            description = "The way ships are rendered by default"
+            description = "The way ships are rendered by default. BATCHED is the built-in default and powers advanced features (e.g. air pockets); VANILLA uses MC's terrain chunk renderer; FLYWHEEL requires the Flywheel mod."
         )
-        var defaultRenderer = ShipRenderer.VANILLA
+        var defaultRenderer = ShipRenderer.BATCHED
 
         @ConfigEntry(description = "Use a custom vanilla shader for rendering ship chunks, improving lighting on tilted and upside down ships. Also enables the directional-shade fix for the sodium/embeddium ship renderer.")
         var betterVanillaShipShading = false

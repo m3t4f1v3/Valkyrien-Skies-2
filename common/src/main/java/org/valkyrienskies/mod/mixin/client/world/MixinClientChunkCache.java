@@ -45,6 +45,7 @@ import org.valkyrienskies.mod.common.assembly.SeamlessChunksManager;
 import org.valkyrienskies.mod.common.VS2ChunkAllocator;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.config.VSGameConfig;
+import org.valkyrienskies.mod.common.render.light.VsDynamicLight;
 import org.valkyrienskies.mod.compat.VSRenderer;
 import org.valkyrienskies.mod.compat.sodium.SodiumCompat;
 import org.valkyrienskies.mod.mixin.ValkyrienCommonMixinConfigPlugin;
@@ -104,9 +105,7 @@ public abstract class MixinClientChunkCache implements ClientChunkCacheDuck {
      */
     @Inject(method = "onLightUpdate", at = @At("HEAD"))
     private void vs_sodium$onLightUpdate(LightLayer layer, SectionPos pos, CallbackInfo ci) {
-        if (ValkyrienCommonMixinConfigPlugin.getVSRenderer() == VSRenderer.SODIUM) {
-            SodiumCompat.getLightStorage().invalidateSection(pos.asLong());
-        }
+        VsDynamicLight.getLightStorage().invalidateSection(pos.asLong());
     }
 
     @Inject(method = "replaceWithPacketData", at = @At("HEAD"), cancellable = true)

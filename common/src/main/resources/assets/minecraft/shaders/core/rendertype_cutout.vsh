@@ -22,6 +22,8 @@ out vec2 texCoord0;
 out vec4 normal;
 
 out vec3 valkyrienair_CamRelPos;
+out vec2 v_VsLightCoordRaw;
+out vec3 v_VsWorldNormal;
 
 void main() {
     vec3 pos = Position + ChunkOffset;
@@ -33,5 +35,6 @@ void main() {
     normal = ProjMat * ModelViewMat * vec4(Normal, 0.0);
 
     valkyrienair_CamRelPos = pos;
+    v_VsLightCoordRaw = clamp(vec2(UV2) / 256.0, vec2(1.0 / 32.0), vec2(31.0 / 32.0));
+    v_VsWorldNormal = Normal;
 }
-

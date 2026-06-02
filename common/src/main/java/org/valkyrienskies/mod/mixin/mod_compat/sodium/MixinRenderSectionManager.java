@@ -33,6 +33,9 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.valkyrienskies.core.api.ships.ClientShip;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
+import org.valkyrienskies.mod.common.config.ShipRendererKt;
+import org.valkyrienskies.mod.compat.LoadedMods;
+import org.valkyrienskies.mod.compat.iris.IrisCompat;
 import org.valkyrienskies.mod.compat.sodium.ShipSectionCache;
 import org.valkyrienskies.mod.compat.sodium.ShipSectionCandidate;
 import org.valkyrienskies.mod.mixinducks.mod_compat.sodium.RenderSectionManagerDuck;
@@ -120,7 +123,13 @@ public abstract class MixinRenderSectionManager implements RenderSectionManagerD
             shipRenderLists.clear();
             boolean mergedRebuilds = false;
 
+            final boolean shadersActive = LoadedMods.getIris() && IrisCompat.isIrisShaderActive();
             for (final ClientShip ship : loadedShips) {
+                final boolean useTerrainPath = ShipRendererKt.getUsesTerrainChunkRenderer(ship)
+                    || (shadersActive && ShipRendererKt.getUsesBatchedRenderer(ship));
+                if (!useTerrainPath) {
+                    continue;
+                }
                 final AABBdc shipAabb = ship.getRenderAABB();
                 if (shipAabb == null || !vs$isAabbVisible(viewport, shipAabb)) {
                     continue;

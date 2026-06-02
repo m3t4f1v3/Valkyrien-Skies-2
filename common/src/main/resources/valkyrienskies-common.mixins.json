@@ -429,6 +429,7 @@
     "feature.air_pockets.client.MixinMinecraft",
     "feature.air_pockets.client.renderer.MixinLevelRenderer",
     "feature.air_pockets.client.renderer.MixinShaderInstance",
+    "feature.ship_world_light.client.renderer.MixinShaderInstance",
     "feature.block_tint.MixinClientLevel",
     "feature.commands.ClientSuggestionProviderAccessor",
     "feature.entity_movement_packets.MixinLocalPlayer",

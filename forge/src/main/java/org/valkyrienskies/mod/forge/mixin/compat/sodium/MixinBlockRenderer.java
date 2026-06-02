@@ -22,6 +22,8 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import org.valkyrienskies.mod.common.config.VSGameConfig;
+import org.valkyrienskies.mod.compat.LoadedMods;
+import org.valkyrienskies.mod.compat.iris.IrisCompat;
 import org.valkyrienskies.mod.compat.sodium.light.VsVertexFlagPacker;
 
 /**
@@ -53,6 +55,10 @@ public class MixinBlockRenderer {
                 || VSGameConfig.CLIENT.getBetterVanillaShipShading();
         boolean worldFromShip = VSGameConfig.CLIENT.getDynamicShipToWorldLighting();
         if (!anyShipFeature && !worldFromShip) {
+            vs$shouldPack = false;
+            return;
+        }
+        if (LoadedMods.getIris() && IrisCompat.isIrisShaderActive()) {
             vs$shouldPack = false;
             return;
         }

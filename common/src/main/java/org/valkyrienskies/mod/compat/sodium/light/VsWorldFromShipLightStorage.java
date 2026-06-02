@@ -148,7 +148,7 @@ public class VsWorldFromShipLightStorage {
         populateFromShip(level, ship, null, null);
     }
 
-    public void populateFromShip(LevelAccessor level, ClientShip ship, VsShipEmitterList emitters,
+    public void markShipVoxels(LevelAccessor level, ClientShip ship, VsShipEmitterList emitters,
         VsShipOccluderList occluders) {
         AABBic shipyardAabb = ship.getShipAABB();
         if (shipyardAabb == null) return;
@@ -295,13 +295,18 @@ public class VsWorldFromShipLightStorage {
             }
         }
 
-        // Pass 2: dilate every emitter from this ship through the now-complete
-        // solid bitmap of the same ship. (Solids written by ships processed
-        // earlier this frame are also visible — we emit through the merged
-        // solid grid.) Each emitter does a vanilla-style BFS that decrements
-        // 1 per step and skips solid cells.
+    }
+
+    public void populateFromShip(LevelAccessor level, ClientShip ship, VsShipEmitterList emitters,
+        VsShipOccluderList occluders) {
+        markShipVoxels(level, ship, emitters, occluders);
+        runQueuedBfs(level);
+    }
+
+    public void runQueuedBfs(LevelAccessor level) {
         for (int i = 0; i < pendingEmitterX.size(); i++) {
             bfsLight(
+                    level,
                     pendingEmitterX.getInt(i),
                     pendingEmitterY.getInt(i),
                     pendingEmitterZ.getInt(i),
@@ -441,7 +446,7 @@ public class VsWorldFromShipLightStorage {
      * {@link #MAX_LIGHT_DILATION} so a glowstone-rich ship can't blow the
      * per-frame budget.
      */
-    private void bfsLight(int sx, int sy, int sz, int startLight) {
+    private void bfsLight(LevelAccessor level, int sx, int sy, int sz, int startLight) {
         if (startLight <= 0) return;
         // Start the BFS at the emitter's full value (so a torch shines as
         // brightly as a torch does). MAX_LIGHT_DILATION (= vanilla's 15) is
@@ -458,6 +463,10 @@ public class VsWorldFromShipLightStorage {
             int z = bfsZ.getInt(head);
             int l = bfsL.getInt(head);
             head++;
+
+            if (isWorldOccluder(level, x, y, z)) {
+                continue;
+            }
 
             int idx = ensureSection(SectionPos.asLong(x >> 4, y >> 4, z >> 4));
             int ix = (x & 15) + 1;
@@ -492,6 +501,11 @@ public class VsWorldFromShipLightStorage {
             bfsX.add(x); bfsY.add(y); bfsZ.add(z + 1); bfsL.add(nl);
             bfsX.add(x); bfsY.add(y); bfsZ.add(z - 1); bfsL.add(nl);
         }
+    }
+
+    private boolean isWorldOccluder(final LevelAccessor level, final int x, final int y, final int z) {
+        scratchBlockPos.set(x, y, z);
+        return level.getBlockState(scratchBlockPos).canOcclude();
     }
 
     /** Allocate or reuse a section for {@code sectionPos}, zeroing it on first

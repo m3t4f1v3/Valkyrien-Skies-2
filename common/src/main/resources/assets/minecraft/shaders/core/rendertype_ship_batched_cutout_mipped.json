@@ -5,7 +5,7 @@
     "dstrgb": "1-srcalpha"
   },
   "vertex": "rendertype_ship_batched_cutout_mipped",
-  "fragment": "rendertype_cutout_mipped",
+  "fragment": "rendertype_ship_batched_cutout_mipped",
   "attributes": [
     "Position",
     "Color",

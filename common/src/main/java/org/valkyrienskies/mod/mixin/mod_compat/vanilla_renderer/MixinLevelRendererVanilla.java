@@ -62,6 +62,7 @@ import org.valkyrienskies.mod.common.hooks.VSGameEvents;
 import org.valkyrienskies.mod.common.render.ShipSectionCache;
 import org.valkyrienskies.mod.common.render.ShipSectionCandidate;
 import org.valkyrienskies.mod.common.render.batched.ShipBatchRenderer;
+import org.valkyrienskies.mod.common.render.light.VsShipWorldLightRenderContext;
 import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
 import org.valkyrienskies.mod.compat.LoadedMods;
 import org.valkyrienskies.mod.compat.LoadedMods.FlywheelVersion;
@@ -487,7 +488,12 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
             ShipBatchRenderer.INSTANCE.beginFrame(level);
         }
 
-        renderChunkLayer.call(receiver, renderType, poseStack, camX, camY, camZ, matrix4f);
+        VsShipWorldLightRenderContext.beginWorldTerrainLayer(camX, camY, camZ);
+        try {
+            renderChunkLayer.call(receiver, renderType, poseStack, camX, camY, camZ, matrix4f);
+        } finally {
+            VsShipWorldLightRenderContext.endWorldTerrainLayer();
+        }
 
         ShipBatchRenderer.INSTANCE.drawLayer(renderType, poseStack, camX, camY, camZ, matrix4f,
             this.vs$lastFrustum);

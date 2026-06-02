@@ -12,10 +12,11 @@ import org.lwjgl.system.MemoryUtil;
 public final class ShipTransformStorage {
 
     private static final int FLOATS_PER_MATRIX = 16;
-    private static final int BYTES_PER_MATRIX = FLOATS_PER_MATRIX * 4; // 64 bytes = 4 RGBA32F texels
+    private static final int MATRICES_PER_ENTRY = 2;
+    private static final int BYTES_PER_ENTRY = FLOATS_PER_MATRIX * MATRICES_PER_ENTRY * 4; // 128 B = 8 texels
 
     private long arenaPtr;
-    private int capacityMatrices;
+    private int capacityEntries;
     private int count;
 
     private int buffer = 0;
@@ -25,8 +26,8 @@ public final class ShipTransformStorage {
     private final float[] scratch = new float[FLOATS_PER_MATRIX];
 
     public ShipTransformStorage() {
-        capacityMatrices = 256;
-        arenaPtr = MemoryUtil.nmemAlloc((long) capacityMatrices * BYTES_PER_MATRIX);
+        capacityEntries = 256;
+        arenaPtr = MemoryUtil.nmemAlloc((long) capacityEntries * BYTES_PER_ENTRY);
     }
 
     public void delete() {
@@ -48,32 +49,37 @@ public final class ShipTransformStorage {
         count = 0;
     }
 
-    public int append(final Matrix4f matrix) {
-        if (count >= capacityMatrices) {
+    public int append(final Matrix4f modelView, final Matrix4f localToCameraRel) {
+        if (count >= capacityEntries) {
             grow();
         }
         final int index = count;
-        matrix.get(scratch); // column-major into scratch[0..15]
-        final long offset = arenaPtr + (long) index * BYTES_PER_MATRIX;
+        final long entryOffset = arenaPtr + (long) index * BYTES_PER_ENTRY;
+        modelView.get(scratch); // column-major into scratch[0..15]
         for (int i = 0; i < FLOATS_PER_MATRIX; i++) {
-            MemoryUtil.memPutFloat(offset + (long) i * 4, scratch[i]);
+            MemoryUtil.memPutFloat(entryOffset + (long) i * 4, scratch[i]);
+        }
+        localToCameraRel.get(scratch);
+        final long secondOffset = entryOffset + (long) FLOATS_PER_MATRIX * 4;
+        for (int i = 0; i < FLOATS_PER_MATRIX; i++) {
+            MemoryUtil.memPutFloat(secondOffset + (long) i * 4, scratch[i]);
         }
         count++;
         return index;
     }
 
     private void grow() {
-        final int newCap = capacityMatrices * 2;
-        final long newPtr = MemoryUtil.nmemAlloc((long) newCap * BYTES_PER_MATRIX);
-        MemoryUtil.memCopy(arenaPtr, newPtr, (long) count * BYTES_PER_MATRIX);
+        final int newCap = capacityEntries * 2;
+        final long newPtr = MemoryUtil.nmemAlloc((long) newCap * BYTES_PER_ENTRY);
+        MemoryUtil.memCopy(arenaPtr, newPtr, (long) count * BYTES_PER_ENTRY);
         MemoryUtil.nmemFree(arenaPtr);
         arenaPtr = newPtr;
-        capacityMatrices = newCap;
+        capacityEntries = newCap;
     }
 
     public void upload() {
         ensureGlObjects();
-        final int needed = Math.max(BYTES_PER_MATRIX, count * BYTES_PER_MATRIX);
+        final int needed = Math.max(BYTES_PER_ENTRY, count * BYTES_PER_ENTRY);
         GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, buffer);
         final boolean orphaned = currentByteSize != needed;
         if (orphaned || count > 0) {
