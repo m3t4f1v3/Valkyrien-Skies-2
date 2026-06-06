@@ -12,12 +12,16 @@ import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
 import net.minecraft.world.phys.shapes.Shapes
 import net.minecraft.world.phys.shapes.VoxelShape
+import org.joml.Matrix4dc
 import org.joml.Vector3d
 import org.joml.primitives.AABBd
 import org.joml.primitives.AABBdc
 import org.joml.primitives.AABBi
+import org.valkyrienskies.core.api.bodies.VsBody
+import org.valkyrienskies.core.api.bodies.shape.BodyShapeData
 import org.valkyrienskies.core.api.ships.Ship
 import org.valkyrienskies.core.internal.collision.VsiConvexPolygonc
+import org.valkyrienskies.core.internal.collision.createPolygonsFromBodyShapeData
 import org.valkyrienskies.core.util.extend
 import org.valkyrienskies.core.util.toAABBd
 import org.valkyrienskies.core.api.ships.properties.ShipId
@@ -206,6 +210,17 @@ object EntityShipCollisionUtils {
             overlapsAnyActiveChunk(ship, aABB)
     }
 
+    @JvmStatic
+    fun mayShipIntersectLocalAabb(body: VsBody, aABB: AABBdc): Boolean {
+        val shipAabb = body.aabb ?: return false
+        return shipAabb.minX() <= aABB.maxX() &&
+            shipAabb.maxX() >= aABB.minX() &&
+            shipAabb.minY() <= aABB.maxY() &&
+            shipAabb.maxY() >= aABB.minY() &&
+            shipAabb.minZ() <= aABB.maxZ() &&
+            shipAabb.maxZ() >= aABB.minZ()
+    }
+
     /**
      * @return [movement] modified such that the entity collides with ships.
      */
@@ -254,6 +269,98 @@ object EntityShipCollisionUtils {
             }
         }
         return newMovement.toMinecraft()
+    }
+
+    /**
+     * Clips [movement] so [entityBoundingBox] collides with [shape].
+     *
+     * [shapeToWorld] transforms the VS-Core shape from its model space into Minecraft world space. Curved primitives
+     * are approximated by VS-Core's convex primitive collision polygons.
+     */
+    @JvmStatic
+    @JvmOverloads
+    fun adjustEntityMovementForPrimitiveShapeCollision(
+        entity: Entity?,
+        movement: Vec3,
+        entityBoundingBox: AABB,
+        shape: BodyShapeData,
+        shapeToWorld: Matrix4dc? = null,
+        shapeShipFrom: ShipId? = null,
+        radialSegments: Int = 12,
+        sphereRings: Int = 6
+    ): Vec3 {
+        val inflation = if (entity is Player) 0.5 else 0.1
+        val stepHeight = entity?.maxUpStep()?.toDouble() ?: 0.0
+        val queryBox = entityBoundingBox.inflate(inflation, inflation + stepHeight / 2.0, inflation)
+            .move(0.0, stepHeight / 2.0, 0.0)
+
+        val collidingPolygons = getPrimitiveShapePolygonsCollidingWithEntity(
+            movement,
+            queryBox,
+            shape,
+            shapeToWorld,
+            shapeShipFrom,
+            radialSegments,
+            sphereRings
+        )
+        if (collidingPolygons.isEmpty()) return movement
+
+        val collisionBoundingBox = if (entity == null) {
+            entityBoundingBox.inflate(PARTICLE_COLLISION_BOX_EXPANSION)
+        } else {
+            entityBoundingBox
+        }
+
+        return adjustEntityMovementForPrimitiveShapePolygons(
+            entity,
+            movement,
+            collisionBoundingBox,
+            collidingPolygons,
+            stepHeight
+        )
+    }
+
+    /**
+     * Clips [movement] against already-created primitive collision polygons.
+     */
+    @JvmStatic
+    @JvmOverloads
+    fun adjustEntityMovementForPrimitiveShapePolygons(
+        entity: Entity?,
+        movement: Vec3,
+        entityBoundingBox: AABB,
+        collidingPolygons: List<VsiConvexPolygonc>,
+        stepHeight: Double = entity?.maxUpStep()?.toDouble() ?: 0.0,
+        alreadyOnGround: Boolean = entity?.onGround() ?: false
+    ): Vec3 {
+        if (collidingPolygons.isEmpty()) return movement
+        val (newMovement, _) = collider.adjustEntityMovementForPolygonCollisions(
+            movement.toJOML(),
+            entityBoundingBox.toJOML(),
+            stepHeight,
+            collidingPolygons,
+            alreadyOnGround
+        )
+        return newMovement.toMinecraft()
+    }
+
+    /**
+     * Returns primitive shape polygons whose world-space AABBs intersect the swept [entityBoundingBox].
+     */
+    @JvmStatic
+    @JvmOverloads
+    fun getPrimitiveShapePolygonsCollidingWithEntity(
+        movement: Vec3,
+        entityBoundingBox: AABB,
+        shape: BodyShapeData,
+        shapeToWorld: Matrix4dc? = null,
+        shapeShipFrom: ShipId? = null,
+        radialSegments: Int = 12,
+        sphereRings: Int = 6
+    ): List<VsiConvexPolygonc> {
+        val sweptEntityBox = entityBoundingBox.expandTowards(movement).toJOML()
+        return collider.createPolygonsFromBodyShapeData(shape, shapeToWorld, shapeShipFrom, radialSegments, sphereRings)
+            .filter { sweptEntityBox.intersectsAABB(AABBd(it.aabb)) }
     }
 
     @JvmStatic
@@ -366,6 +473,40 @@ object EntityShipCollisionUtils {
                     collidingPolygons.add(shipPolygon)
                 }
             }
+        }
+        return collidingPolygons
+    }
+
+    fun getBodyPolygonsCollidingWithEntity(
+        entity: Entity?,
+        movement: Vec3,
+        entityBoundingBox: AABB,
+        world: Level
+    ): List<VsiConvexPolygonc> {
+        if (world.shipObjectWorld.allBodies.isEmpty()) {
+            return emptyList()
+        }
+
+        val entityBoxWithMovement = entityBoundingBox.expandTowards(movement)
+        val collidingPolygons: MutableList<VsiConvexPolygonc> = ArrayList()
+        val entityBoundingBoxExtended = entityBoundingBox.toJOML().extend(movement.toJOML())
+        val entityBoxWithMovementJoml = entityBoxWithMovement.toJOML()
+        val entityBoundingBoxInShipCoordinates = AABBd()
+        for (shipObject in world.shipObjectWorld.allBodies.getIntersecting(entityBoundingBoxExtended, world.dimensionId)) {
+            val shipTransform = shipObject.kinematics.transform
+            entityBoxWithMovementJoml.transform(shipTransform.toModel, entityBoundingBoxInShipCoordinates)
+            if (BugFixUtil.isCollisionBoxTooBig(entityBoundingBoxInShipCoordinates.toMinecraft())) {
+                // Box too large, skip it
+                continue
+            }
+            if (!mayShipIntersectLocalAabb(shipObject, entityBoundingBoxInShipCoordinates)) {
+                continue
+            }
+            val entityPolyInShipCoordinates: VsiConvexPolygonc = collider.createPolygonFromAABB(
+                entityBoxWithMovementJoml,
+                shipTransform.toModel
+            )
+            //todo: brain tired
         }
         return collidingPolygons
     }
