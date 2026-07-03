@@ -77,10 +77,15 @@ void main() {
     uint aoByte = uint(_vert_color.a * 255.0 + 0.5);
     uint aoLevel = aoByte & 7u;
     uint faceSlot = (aoByte >> 3u) & 7u;
+    // v_Color.a carries only vanilla's baked AO now. The ship-to-world seam
+    // AO correction runs PER-FRAGMENT in the FSH (ws_seamAoFrag) — evaluated
+    // at each fragment's interior world position, so floor() is stable and the
+    // darkening is a smooth field, not a 4-corner interpolation.
     float aoFloat = float(aoLevel) * 0.2;
-    v_Color = vec4(_vert_color.rgb, aoFloat);
     v_WorldNormal = vs_faceSlotToWorldNormal(faceSlot);
     v_IsShaded = (faceSlot < 6u) ? 1 : 0;
+
+    v_Color = vec4(_vert_color.rgb, aoFloat);
 
     // Sodium's _vert_tex_light_coord is an ivec2 in [0, 255] (the raw byte
     // pair from the chunk vertex). Sodium's stock _sample_lightmap divides

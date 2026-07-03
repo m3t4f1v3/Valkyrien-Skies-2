@@ -19,8 +19,9 @@ import org.valkyrienskies.mod.compat.sodium.light.GlUniformInt3v;
  * mirror what the shader was compiled with.
  */
 public class ShipThing extends ChunkShaderInterface {
-    // Ship-to-world matrix; only needed when the shader transforms the per-quad
-    // face normal to world space (i.e. when shading or world-light lookup is on).
+    // Ship-to-world matrix; needed when the shader transforms the per-quad face
+    // normal to world space (shading or world-light lookup), or when the
+    // per-vertex ship-on-ship seam-AO pass lifts this quad's local corners.
     private final GlUniformMatrix4f uniformTransformMatrix;
     // Local-to-camera-relative matrix; only needed when the VSH samples world
     // light (uses v_CameraRelWorldPos) or world biome (uses worldPosVertex).
@@ -55,7 +56,10 @@ public class ShipThing extends ChunkShaderInterface {
         boolean biome = (features & SodiumCompat.FEATURE_BIOME) != 0;
         boolean shade = (features & SodiumCompat.FEATURE_SHADE) != 0;
         boolean shipOnShip = (features & SodiumCompat.FEATURE_SHIP_ON_SHIP) != 0;
-        boolean wantTransform = light || shade;
+        // shipOnShip needs u_TransformMatrix in the VSH to lift this quad's
+        // local corners into world space for the per-vertex seam-AO pass,
+        // even when light/shade are both off.
+        boolean wantTransform = light || shade || shipOnShip;
         boolean wantLocalToCamera = light || biome || shipOnShip;
 
         this.uniformTransformMatrix = wantTransform

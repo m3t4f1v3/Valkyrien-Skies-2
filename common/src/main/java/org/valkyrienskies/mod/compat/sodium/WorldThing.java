@@ -21,14 +21,6 @@ public class WorldThing extends ChunkShaderInterface {
     private final GlUniformInt uniformShipEmitterCount;
     private final GlUniformInt uniformShipOccluders;
     private final GlUniformInt uniformShipOccluderCount;
-    // World-section storage samplers, mirroring ShipThing — let
-    // ws_shipAo read solid bits from the 3×3×3 around a world
-    // fragment so the X-X corner rule can fold ship voxels and
-    // world blocks into one SDF instead of leaving them as two
-    // independent shadow shapes (vanilla bake on the world side,
-    // SDF on the ship side).
-    private final GlUniformInt uniformLightSections;
-    private final GlUniformInt uniformLightLut;
 
     public WorldThing(ShaderBindingContext context, ChunkShaderOptions options) {
         super(context, options);
@@ -38,8 +30,6 @@ public class WorldThing extends ChunkShaderInterface {
         this.uniformShipEmitterCount = context.bindUniform("u_VsShipEmitterCount", GlUniformInt::new);
         this.uniformShipOccluders = context.bindUniform("u_VsShipOccluders", GlUniformInt::new);
         this.uniformShipOccluderCount = context.bindUniform("u_VsShipOccluderCount", GlUniformInt::new);
-        this.uniformLightSections = context.bindUniform("u_VsLightSections", GlUniformInt::new);
-        this.uniformLightLut = context.bindUniform("u_VsLightLut", GlUniformInt::new);
     }
 
     public void setRenderOrigin(int x, int y, int z) {
@@ -58,13 +48,5 @@ public class WorldThing extends ChunkShaderInterface {
     public void setShipOccluders(int textureUnit, int count) {
         this.uniformShipOccluders.setInt(textureUnit);
         this.uniformShipOccluderCount.setInt(count);
-    }
-
-    public void setLightSectionsSampler(int unit) {
-        this.uniformLightSections.setInt(unit);
-    }
-
-    public void setLightLutSampler(int unit) {
-        this.uniformLightLut.setInt(unit);
     }
 }

@@ -30,7 +30,8 @@ import org.valkyrienskies.core.api.ships.properties.ShipTransform;
  * texture. Mirrors {@link VsShipEmitterList} structurally but populates
  * from solid (full-cube opaque) voxels instead of light-emitting voxels.
  *
- * <p>Used by the world FSH for ship-to-world AO. Iterating voxel centers
+ * <p>Consumed per-vertex by the ship and world VSHs (vs_seamAoCorrection) for
+ * ship-to-world and ship-on-ship AO seam matching. Iterating voxel centers
  * directly (rather than reading from the world-grid-aligned cell strengths
  * in {@link VsWorldFromShipLightStorage}) lets the AO shadow follow the
  * ship's transform continuously — including rotation — because the world
@@ -44,14 +45,22 @@ public class VsShipOccluderList {
      *  (2 RGBA32F texels per voxel: position, quaternion). */
     public static final int MAX_OCCLUDERS = 1024;
     /** 8 floats per voxel, two vec4 texels:
-     *    [i*2 + 0] = (worldX, worldY, worldZ, shipIndex)
+     *    [i*2 + 0] = (worldX, worldY, worldZ, packedShipIndexAndFlags)
      *    [i*2 + 1] = (qx, qy, qz, qw) — ship rotation, used so each
      *                voxel's octagon stays oriented with the ship
-     *                instead of becoming a world-axis box. */
+     *                instead of becoming a world-axis box.
+     *  packedShipIndexAndFlags is raw int bits (write/read via
+     *  Float.intBitsToFloat / floatToRawIntBits, NEVER as a literal float
+     *  value): bits 0-15 = dense per-frame ship index, bit 16 = "has a
+     *  nearby seam candidate" hint set by computeSeamCandidateFlags. */
     private static final int BYTES_PER_OCCLUDER = 32;
-    private static final float CARDINAL_MIN_DISTANCE = 0.75f;
-    private static final float CARDINAL_MAX_DISTANCE = 2.10f;
-    private static final float CARDINAL_CROSS_AXIS_EPSILON = 0.18f;
+    /** Coarse radius for the seam-candidate prefilter — matches the
+     *  shader's VS_SEAM_CANDIDATE_RADIUS. Only used to prioritize which
+     *  occluders survive the per-vertex loop's cap in dense scenes; the
+     *  shader does its own exact geometric pair search regardless. */
+    private static final float SEAM_CANDIDATE_RADIUS = 2.5f;
+    private static final int SEAM_CANDIDATE_FLAG_BIT = 0x10000;
+    private static final int SHIP_INDEX_MASK = 0xFFFF;
 
     private final long arenaPtr;
     private int count = 0;
@@ -174,7 +183,11 @@ public class VsShipOccluderList {
         MemoryUtil.memPutFloat(offset,        (float) worldX);
         MemoryUtil.memPutFloat(offset + 4,    (float) worldY);
         MemoryUtil.memPutFloat(offset + 8,    (float) worldZ);
-        MemoryUtil.memPutFloat(offset + 12,   shipIndex);
+        // Packed as raw bits, NOT a literal float value — see the field
+        // comment on BYTES_PER_OCCLUDER. The seam-candidate flag bit gets
+        // OR'd in later by computeSeamCandidateFlags.
+        int shipIndexInt = Math.round(shipIndex) & SHIP_INDEX_MASK;
+        MemoryUtil.memPutFloat(offset + 12,   Float.intBitsToFloat(shipIndexInt));
         // Texel 1: quaternion
         MemoryUtil.memPutFloat(offset + 16,   qx);
         MemoryUtil.memPutFloat(offset + 20,   qy);
@@ -183,102 +196,72 @@ public class VsShipOccluderList {
         count++;
     }
 
-    /** O(N²) scan: for each occluder, check whether it has a cardinal
-     *  neighbour along each WORLD axis (X, Y, Z). A "neighbour" is
-     *  any other ship voxel (regardless of which ship) OR any solid
-     *  world block within 1-2 cells along a cardinal direction. The
-     *  detection runs in world frame (no ship-local rotation) so
-     *  ship-to-ship and ship-to-world cardinal pairs are detected
-     *  consistently. Per-axis flags are packed into bits 16/17/18 of
-     *  the float-bits of the shipIndex slot:
-     *    bit 16 = has neighbour along world X
-     *    bit 17 = has neighbour along world Y
-     *    bit 18 = has neighbour along world Z
-     *  Must be called after every populate / appendOccluder for the
-     *  frame and before {@link #upload()}. */
-    public void computeCardinalFlags(LevelAccessor level) {
+    /** O(N²) scan: for each occluder, check whether it has ANY nearby
+     *  seam candidate — another ship voxel (any ship) OR a solid world
+     *  block within {@link #SEAM_CANDIDATE_RADIUS}. This is only a coarse
+     *  prefilter (see {@link #prioritizeSeamCandidateOccluders()}) to keep
+     *  likely-relevant occluders at the front of the array ahead of the
+     *  per-vertex shader loop's cap in dense scenes — the shader itself
+     *  does an exact geometric vertex-pair match per candidate and doesn't
+     *  otherwise consume this flag. Sets bit 16 (0x10000) of the packed
+     *  shipIndex/flags slot. Must be called after every populate /
+     *  appendOccluder for the frame and before {@link #upload()}. */
+    public void computeSeamCandidateFlags(LevelAccessor level) {
+        float radiusSq = SEAM_CANDIDATE_RADIUS * SEAM_CANDIDATE_RADIUS;
         for (int i = 0; i < count; i++) {
             long iOff = arenaPtr + (long) i * BYTES_PER_OCCLUDER;
             float ix = MemoryUtil.memGetFloat(iOff);
             float iy = MemoryUtil.memGetFloat(iOff + 4);
             float iz = MemoryUtil.memGetFloat(iOff + 8);
 
-            boolean cardX = false;
-            boolean cardY = false;
-            boolean cardZ = false;
+            boolean hasCandidate = false;
 
-            // Pass 1: other ship voxels (any ship) cardinally aligned
-            // in world frame.
-            for (int j = 0; j < count; j++) {
+            // Pass 1: any other ship voxel (any ship) within radius.
+            for (int j = 0; j < count && !hasCandidate; j++) {
                 if (j == i) continue;
                 long jOff = arenaPtr + (long) j * BYTES_PER_OCCLUDER;
-                float dx = (float) Math.abs(MemoryUtil.memGetFloat(jOff)     - ix);
-                float dy = (float) Math.abs(MemoryUtil.memGetFloat(jOff + 4) - iy);
-                float dz = (float) Math.abs(MemoryUtil.memGetFloat(jOff + 8) - iz);
-
-                if (dx >= CARDINAL_MIN_DISTANCE && dx <= CARDINAL_MAX_DISTANCE
-                        && dy < CARDINAL_CROSS_AXIS_EPSILON && dz < CARDINAL_CROSS_AXIS_EPSILON) {
-                    cardX = true;
-                }
-                if (dy >= CARDINAL_MIN_DISTANCE && dy <= CARDINAL_MAX_DISTANCE
-                        && dx < CARDINAL_CROSS_AXIS_EPSILON && dz < CARDINAL_CROSS_AXIS_EPSILON) {
-                    cardY = true;
-                }
-                if (dz >= CARDINAL_MIN_DISTANCE && dz <= CARDINAL_MAX_DISTANCE
-                        && dx < CARDINAL_CROSS_AXIS_EPSILON && dy < CARDINAL_CROSS_AXIS_EPSILON) {
-                    cardZ = true;
+                float dx = MemoryUtil.memGetFloat(jOff)     - ix;
+                float dy = MemoryUtil.memGetFloat(jOff + 4) - iy;
+                float dz = MemoryUtil.memGetFloat(jOff + 8) - iz;
+                if (dx * dx + dy * dy + dz * dz <= radiusSq) {
+                    hasCandidate = true;
                 }
             }
 
-            // Pass 2: solid world blocks at cardinal offsets +/-1, +/-2.
-            if (level != null) {
+            // Pass 2: any solid world block within radius.
+            if (!hasCandidate && level != null) {
                 int bx = Math.round(ix - 0.5f);
                 int by = Math.round(iy - 0.5f);
                 int bz = Math.round(iz - 0.5f);
-                boolean nearBlockCenter = Math.abs(ix - (bx + 0.5f)) < CARDINAL_CROSS_AXIS_EPSILON
-                        && Math.abs(iy - (by + 0.5f)) < CARDINAL_CROSS_AXIS_EPSILON
-                        && Math.abs(iz - (bz + 0.5f)) < CARDINAL_CROSS_AXIS_EPSILON;
-                if (!nearBlockCenter) {
-                    int origBits = Float.floatToRawIntBits(MemoryUtil.memGetFloat(iOff + 12));
-                    int packed = origBits
-                        | (cardX ? 0x10000 : 0)
-                        | (cardY ? 0x20000 : 0)
-                        | (cardZ ? 0x40000 : 0);
-                    MemoryUtil.memPutFloat(iOff + 12, Float.intBitsToFloat(packed));
-                    continue;
-                }
-                for (int d = 1; d <= 2; d++) {
-                    if (isSolidWorldBlock(level, bx + d, by, bz)
-                            || isSolidWorldBlock(level, bx - d, by, bz)) {
-                        cardX = true;
-                    }
-                    if (isSolidWorldBlock(level, bx, by + d, bz)
-                            || isSolidWorldBlock(level, bx, by - d, bz)) {
-                        cardY = true;
-                    }
-                    if (isSolidWorldBlock(level, bx, by, bz + d)
-                            || isSolidWorldBlock(level, bx, by, bz - d)) {
-                        cardZ = true;
+                int r = Math.round(SEAM_CANDIDATE_RADIUS);
+                outer:
+                for (int dz = -r; dz <= r; dz++) {
+                    for (int dy = -r; dy <= r; dy++) {
+                        for (int dx = -r; dx <= r; dx++) {
+                            if (dx == 0 && dy == 0 && dz == 0) continue;
+                            if (isSolidWorldBlock(level, bx + dx, by + dy, bz + dz)) {
+                                hasCandidate = true;
+                                break outer;
+                            }
+                        }
                     }
                 }
             }
 
-            int origBits = Float.floatToRawIntBits(MemoryUtil.memGetFloat(iOff + 12));
-            int packed = origBits
-                | (cardX ? 0x10000 : 0)
-                | (cardY ? 0x20000 : 0)
-                | (cardZ ? 0x40000 : 0);
+            int rawBits = Float.floatToRawIntBits(MemoryUtil.memGetFloat(iOff + 12));
+            int shipIndexBits = rawBits & SHIP_INDEX_MASK;
+            int packed = shipIndexBits | (hasCandidate ? SEAM_CANDIDATE_FLAG_BIT : 0);
             MemoryUtil.memPutFloat(iOff + 12, Float.intBitsToFloat(packed));
         }
-        prioritizeCardinalOccluders();
+        prioritizeSeamCandidateOccluders();
     }
 
-    private void prioritizeCardinalOccluders() {
+    private void prioritizeSeamCandidateOccluders() {
         int write = 0;
         for (int read = 0; read < count; read++) {
             long readOff = arenaPtr + (long) read * BYTES_PER_OCCLUDER;
             int flags = Float.floatToRawIntBits(MemoryUtil.memGetFloat(readOff + 12));
-            if ((flags & 0x70000) == 0) continue;
+            if ((flags & SEAM_CANDIDATE_FLAG_BIT) == 0) continue;
             if (read != write) {
                 swapOccluders(read, write);
             }

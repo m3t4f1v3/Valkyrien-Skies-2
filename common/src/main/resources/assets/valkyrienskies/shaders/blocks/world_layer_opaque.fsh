@@ -42,15 +42,9 @@ uniform ivec3 u_VsRenderOrigin;
 uniform samplerBuffer u_VsShipEmitters;
 uniform int u_VsShipEmitterCount;
 
-// Per-frame list of solid ship voxel CENTERS in world space, paired
-// with the voxel's owning-ship rotation quaternion. Two RGBA32F
-// texels per voxel:
-//   texel 2i:   vec4(worldX, worldY, worldZ, shipIndex)
-//   texel 2i+1: vec4(qx, qy, qz, qw)   ship-to-world rotation
-// The shader applies the inverse rotation to the fragment-to-voxel
-// offset so the polygon test runs in the voxel's ship-local frame —
-// each voxel's octagonal shadow rotates with its ship instead of
-// staying world-axis-aligned.
+// Per-frame list of solid ship voxel CENTERS in world space, paired with the
+// voxel's owning-ship rotation quaternion (see VsShipOccluderList). Consumed
+// PER-FRAGMENT by ws_seamAoFrag below for ship-to-world AO seam matching.
 uniform samplerBuffer u_VsShipOccluders;
 uniform int u_VsShipOccluderCount;
 
@@ -114,80 +108,12 @@ uniform vec4 ValkyrienAir_ShipAabbMax8;
 uniform vec4 ValkyrienAir_GridSize8;
 uniform mat4 ValkyrienAir_WorldToShip8;
 uniform sampler2D ValkyrienAir_Mask8;
-// World-section storage for per-fragment world-voxel scanning inside
-// ws_shipAo. Same layout the ship FSH uses (block_layer_opaque.fsh):
-// a flat solid-bit + light-byte buffer plus an index LUT. Exposed to
-// the world shader so the X-X corner rule can fold in world blocks
-// alongside ship voxels — without it, the SDF only sees ship voxels
-// (in u_VsShipOccluders) and vanilla baked AO from sodium handles
-// the world side, producing two separate shadow shapes that don't
-// combine cleanly. Bound from WorldThing.java.
-uniform usamplerBuffer u_VsLightSections;
-uniform usamplerBuffer u_VsLightLut;
-
 // Inverse-rotate v by quaternion q (i.e., apply q^-1 = (-q.xyz, q.w) to v).
-// Used to express world-frame offsets in the owning ship's local frame so
-// the SDF / distance metrics line up with the ship's axes.
+// Used by vs_shipEmitterLight to express world-frame offsets in the
+// emitter's owning ship local frame.
 vec3 vs_quatRotateInv(vec4 q, vec3 v) {
     vec3 qNeg = -q.xyz;
     return v + 2.0 * cross(qNeg, cross(qNeg, v) + q.w * v);
-}
-
-// ===== Section-storage helpers (mirrored from ship FSH) =====
-// Layout: each section is [solid bits 732B][light bytes 5832B] = 6564B = 1641 ints.
-const uint VS_BLOCKS_PER_SECTION = 18u * 18u * 18u;
-const uint VS_LIGHT_SIZE_BYTES = VS_BLOCKS_PER_SECTION;
-const uint VS_SOLID_SIZE_BYTES = ((VS_BLOCKS_PER_SECTION + 31u) / 32u) * 4u;
-const uint VS_SOLID_START_INTS = 0u;
-const uint VS_SECTION_SIZE_INTS = (VS_SOLID_SIZE_BYTES + VS_LIGHT_SIZE_BYTES) / 4u;
-
-uint vs_indexLut(uint i) { return texelFetch(u_VsLightLut, int(i)).r; }
-uint vs_indexLight(uint i) { return texelFetch(u_VsLightSections, int(i)).r; }
-
-bool vs_nextLut(uint base, int coord, out uint next) {
-    int start = int(vs_indexLut(base));
-    uint size = vs_indexLut(base + 1u);
-    int idx = coord - start;
-    if (idx < 0 || idx >= int(size)) return true;
-    next = vs_indexLut(base + 2u + uint(idx));
-    return false;
-}
-
-bool vs_chunkCoordToSectionIndex(ivec3 sectionPos, out uint index) {
-    uint first;
-    if (vs_nextLut(0u, sectionPos.y, first) || first == 0u) return true;
-    uint second;
-    if (vs_nextLut(first, sectionPos.x, second) || second == 0u) return true;
-    uint sectionIndex;
-    if (vs_nextLut(second, sectionPos.z, sectionIndex) || sectionIndex == 0u) return true;
-    index = sectionIndex - 1u;
-    return false;
-}
-
-bool vs_isSolid(uint sectionOffset, uvec3 blockInSectionPos) {
-    uint bitOffset = blockInSectionPos.x + blockInSectionPos.z * 18u + blockInSectionPos.y * 18u * 18u;
-    uint uintOffset = bitOffset >> 5u;
-    uint bitInWordOffset = bitOffset & 31u;
-    uint word = vs_indexLight(sectionOffset + VS_SOLID_START_INTS + uintOffset);
-    return (word & (1u << bitInWordOffset)) != 0u;
-}
-
-uint vs_fetchSolid3x3x3(uint sectionOffset, ivec3 blockInSectionPos) {
-    uint ret = 0u;
-    #define VS_FETCH_SOLID(x, y, z, i) { \
-        bool flag = vs_isSolid(sectionOffset, uvec3(blockInSectionPos + ivec3(x, y, z))); \
-        ret |= uint(flag) << uint(i); \
-    }
-    VS_FETCH_SOLID(-1, -1, -1, 0)  VS_FETCH_SOLID(0, -1, -1, 1)  VS_FETCH_SOLID(1, -1, -1, 2)
-    VS_FETCH_SOLID(-1, -1,  0, 3)  VS_FETCH_SOLID(0, -1,  0, 4)  VS_FETCH_SOLID(1, -1,  0, 5)
-    VS_FETCH_SOLID(-1, -1,  1, 6)  VS_FETCH_SOLID(0, -1,  1, 7)  VS_FETCH_SOLID(1, -1,  1, 8)
-    VS_FETCH_SOLID(-1,  0, -1, 9)  VS_FETCH_SOLID(0,  0, -1,10)  VS_FETCH_SOLID(1,  0, -1,11)
-    VS_FETCH_SOLID(-1,  0,  0,12)  VS_FETCH_SOLID(0,  0,  0,13)  VS_FETCH_SOLID(1,  0,  0,14)
-    VS_FETCH_SOLID(-1,  0,  1,15)  VS_FETCH_SOLID(0,  0,  1,16)  VS_FETCH_SOLID(1,  0,  1,17)
-    VS_FETCH_SOLID(-1,  1, -1,18)  VS_FETCH_SOLID(0,  1, -1,19)  VS_FETCH_SOLID(1,  1, -1,20)
-    VS_FETCH_SOLID(-1,  1,  0,21)  VS_FETCH_SOLID(0,  1,  0,22)  VS_FETCH_SOLID(1,  1,  0,23)
-    VS_FETCH_SOLID(-1,  1,  1,24)  VS_FETCH_SOLID(0,  1,  1,25)  VS_FETCH_SOLID(1,  1,  1,26)
-    return ret;
 }
 
 out vec4 fragColor;
@@ -195,53 +121,13 @@ out vec4 fragColor;
 const float WS_UV_MIN = 1.0 / 32.0;
 const float WS_UV_MAX = 31.0 / 32.0;
 
-// Loop bound for the per-fragment ship-occluder scan. Pair detection is
-// CPU-packed into voxel.w, so this no longer does an inner fragment scan.
-// 256 keeps cross-ship cases visible without the old 1024x1024 fragment cost.
-const int VS_OCCLUDER_LOOP_CAP = 256;
+// DEBUG: when defined, replace the final color with a red tint proportional to
+// this fragment's AO loss (vanilla baked + ship-on-ship seam correction, both
+// folded into v_Color.a per-vertex in the VSH). Lets you park a ship voxel next
+// to a real solid block and check the seam AO matches vanilla's darkening
+// shape. Comment out the define to return to normal rendering.
+#define VS_DEBUG_SEAM_AO
 
-const float VS_AO_CARDINAL_MIN_DISTANCE = 0.75;
-const float VS_AO_CARDINAL_MAX_DISTANCE = 2.10;
-const float VS_AO_CARDINAL_CROSS_EPSILON = 0.18;
-const float VS_AO_MERGE_BAND_PERP = 1.50;
-const float VS_AO_MERGE_BAND_EPSILON = 0.03;
-
-bool vs_isFaceTangentCardinalOffset(ivec3 offset, vec3 absNf) {
-    if (absNf.x > 0.5) {
-        return (offset.y != 0 && offset.z == 0) || (offset.z != 0 && offset.y == 0);
-    }
-    if (absNf.y > 0.5) {
-        return (offset.x != 0 && offset.z == 0) || (offset.z != 0 && offset.x == 0);
-    }
-    return (offset.x != 0 && offset.y == 0) || (offset.y != 0 && offset.x == 0);
-}
-
-bool vs_inFlaggedPairBand(float axisDelta, float perpDelta) {
-    return axisDelta >= 0.5 - VS_AO_MERGE_BAND_EPSILON
-        && axisDelta <= VS_AO_CARDINAL_MAX_DISTANCE - 0.5 + VS_AO_MERGE_BAND_EPSILON
-        && perpDelta <= VS_AO_MERGE_BAND_PERP;
-}
-
-bool vs_hasActiveCardinalFlag(vec3 voxelPos, vec3 worldPos, int flags, vec3 absNf) {
-    vec3 d = abs(worldPos - voxelPos);
-    bool cardX = (flags & 0x10000) != 0;
-    bool cardY = (flags & 0x20000) != 0;
-    bool cardZ = (flags & 0x40000) != 0;
-
-    if (cardX && absNf.x < 0.5) {
-        float perp = absNf.y > 0.5 ? d.z : d.y;
-        if (vs_inFlaggedPairBand(d.x, perp)) return true;
-    }
-    if (cardY && absNf.y < 0.5) {
-        float perp = absNf.x > 0.5 ? d.z : d.x;
-        if (vs_inFlaggedPairBand(d.y, perp)) return true;
-    }
-    if (cardZ && absNf.z < 0.5) {
-        float perp = absNf.x > 0.5 ? d.y : d.x;
-        if (vs_inFlaggedPairBand(d.z, perp)) return true;
-    }
-    return false;
-}
 const int VA_MASK_TEX_WIDTH_SHIFT = 12;
 const int VA_MASK_TEX_WIDTH_MASK = (1 << VA_MASK_TEX_WIDTH_SHIFT) - 1;
 const int VA_SUB = 8;
@@ -311,282 +197,6 @@ bool va_shouldDiscardFluid(vec3 worldPos) {
         va_shouldDiscardForShip(worldPos, ValkyrienAir_ShipAabbMin8, ValkyrienAir_ShipAabbMax8, ValkyrienAir_GridSize8, ValkyrienAir_WorldToShip8, ValkyrienAir_Mask8);
 }
 
-// Per-fragment ship AO via voxel-position iteration.
-//
-// For each ship voxel center (in world coords, stored as a continuous
-// float — so the position smoothly tracks the ship's transform including
-// rotation), compute its contribution to this fragment's AO based on:
-//   • d_n (component along the face normal): how far the voxel is in
-//     the outward direction. Voxels in the half-space behind the face
-//     (d_n <= 0) are skipped.
-//   • d_p (length of the in-plane component): how far the voxel is
-//     laterally from the fragment's projected position. Voxels too far
-//     to one side don't shadow this fragment.>
-// Smooth falloff in both directions; sum contributions, clamp to 1.
-//
-// This replaces the cell-storage-based AO that operated on grid-aligned
-// world cells — that approach quantized voxel positions to cells and
-// the AO pattern could only morph between cell-aligned configs. With
-// the voxel list, every voxel's exact transformed position contributes,
-// so the AO shape rotates and translates continuously with the ship.
-float ws_shipAo(vec3 worldPosWorld, vec3 nf) {
-    int n = min(u_VsShipOccluderCount, VS_OCCLUDER_LOOP_CAP);
-
-    // Full-block Manhattan AO with multi-ship-aware merging.
-    //
-    // Per-voxel shape: each ship voxel computes its contribution in
-    // its OWNING ship's local frame (the per-voxel quaternion handles
-    // that), so its AO shadow rotates with its parent hull. The
-    // contribution is a linear ramp from STRENGTH at the NEAREST
-    // POINT ON THE 1×1×1 block (zero inside the block) down to 0 at
-    // REACH away, using Manhattan distance to the cube itself:
-    //   per_axis = max(0, abs(d_ship.axis) - 0.5)
-    //   manhattan = per_axis.x + per_axis.y + per_axis.z
-    // (still measured in ship-local axes, so axis-aligned w.r.t.
-    // that voxel's ship).
-    //
-    // Merging across voxels: ADDITIVE accumulation, clamped at 1.
-    //
-    //     occlusion = clamp(STRENGTH * Σ_i contrib_i, 0, 1)
-    //
-    // Why additive and not multiplicative transmittance: between
-    // two blocks one gap apart, each contributes ~0.5 at the
-    // midpoint and ~1.0 right next to itself. Beer-Lambert merging
-    // gives (1-0.5x)² ≈ 1-x+0.25x² versus (1-x) right next to a
-    // block — i.e. the midpoint is brighter than next to either
-    // block, so the two shadows look like two blobs with a bright
-    // valley between them instead of a single merged dark region.
-    // Additive gives 0.5+0.5 = 1.0 at the midpoint, matching
-    // adjacent-to-block, so the shadow is flat across the gap and
-    // the two blocks' AO merges into one continuous region.
-    //
-    // This still composes cleanly across ships at different
-    // orientations: each voxel's `contrib` is computed in its
-    // OWN ship-local frame (so the per-voxel octahedral shadow
-    // rotates with its parent hull), and the additive sum is a
-    // scalar accumulator in world space — frame- and order-
-    // independent. A `+`-rotated voxel (45° yaw) and an axis-
-    // aligned `x` voxel sitting side-by-side both deposit their
-    // own correctly-oriented contributions into the same scalar,
-    // and the shadows merge seamlessly in the middle.
-    //
-    // The clamp at 1 prevents very dense regions from overflowing,
-    // and dense overlap still tops out at the same darkness as a
-    // single voxel touching the fragment — which matches vanilla
-    // AO's behaviour (vanilla maxes out per-vertex at "fully
-    // surrounded" and never goes blacker).
-    const float REACH = 1.0;
-    const float STRENGTH = 0.25;
-
-    // Vertex-grid AO: vanilla's per-vertex bake puts AO darkness AT
-    // face vertices and linearly interpolates across the face quad.
-    // For x_x, both gap-side vertices are dark (each adjacent to one
-    // block) and the bilinear interp between them paints the gap
-    // dark — that's the "merged midline". A per-fragment SDF
-    // centered on the voxel produces a small bright spot off-center
-    // and never matches that shape, so a world `x` (vanilla per-
-    // vertex) plus a ship `+` (per-fragment SDF) showed two
-    // disconnected shadows.
-    //
-    // Fix: evaluate each ship voxel's contribution AT THE 4 FACE
-    // VERTICES the fragment sits between, then bilinearly interp
-    // those 4 darkness values to the fragment. A ship `+` adjacent
-    // to a face vertex now darkens THAT vertex (same as vanilla
-    // would for an adjacent solid neighbour), and the bilinear
-    // interp paints the merged midline against the world `x`'s
-    // dark vertex on the other side.
-    vec3 absNf = abs(nf);
-    vec3 uAxis = absNf.x > 0.5 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
-    vec3 vAxis = absNf.z > 0.5 ? vec3(0.0, 1.0, 0.0) : vec3(0.0, 0.0, 1.0);
-
-    // Tangent-plane coords of the fragment; vertices live at integer
-    // u/v on the world grid. Normal-axis coord stays continuous so
-    // the vertex pos lands on the actual face plane the fragment is
-    // on (for top face: vertex.y == fragment.y).
-    float u_frag = dot(worldPosWorld, uAxis);
-    float v_frag = dot(worldPosWorld, vAxis);
-    float u_lo = floor(u_frag);
-    float v_lo = floor(v_frag);
-    float u_t = u_frag - u_lo;
-    float v_t = v_frag - v_lo;
-    vec3 anchor = uAxis * u_lo + vAxis * v_lo + absNf * dot(worldPosWorld, nf) * sign(dot(nf, vec3(1.0)));
-    // sign(dot(nf, 1)) keeps the normal-axis coord positive for the
-    // anchor; nf is axis-aligned ±1 so this just picks the right sign.
-    vec3 v00 = anchor;
-    vec3 v01 = anchor + uAxis;
-    vec3 v10 = anchor + vAxis;
-    vec3 v11 = anchor + uAxis + vAxis;
-
-    vec4 vertAccum = vec4(0.0); // face-tangent ship-pair merge only
-    vec4 shipVertAccum = vec4(0.0); // all ship voxels, used for ship-world merge
-    float fragAccum = 0.0;
-    float cardinalFragAccum = 0.0;
-    int bilinearReachCount = 0;
-
-    for (int i = 0; i < n; i++) {
-        vec4 voxel = texelFetch(u_VsShipOccluders, i * 2);
-        vec4 q     = texelFetch(u_VsShipOccluders, i * 2 + 1);
-        int flags = floatBitsToInt(voxel.w);
-        bool hasCardinalCandidate = (flags & 0x70000) != 0;
-        bool hasActiveCardinalPair = hasCardinalCandidate
-                && vs_hasActiveCardinalFlag(voxel.xyz, worldPosWorld, flags, absNf);
-
-        vec3 nf_ship = vs_quatRotateInv(q, nf);
-        // Skip voxels behind the face plane based on fragment
-        // anchor — same hemisphere test as before, just done once
-        // per voxel instead of per vertex (vertices are within 1
-        // cell of the fragment so they share the hemisphere).
-        vec3 d_frag_ship = vs_quatRotateInv(q, voxel.xyz - worldPosWorld);
-        if (dot(d_frag_ship, nf_ship) <= 0.0) continue;
-
-        vec3 fragDist = max(vec3(0.0), abs(d_frag_ship) - vec3(0.5));
-        float fragManhattan = fragDist.x + fragDist.y + fragDist.z;
-        float fragContrib = max(0.0, 1.0 - fragManhattan / REACH);
-        fragAccum += fragContrib;
-        if (hasActiveCardinalPair) {
-            cardinalFragAccum += fragContrib;
-        }
-
-        // Rotate each of the 4 vertex offsets into ship frame and
-        // accumulate its Manhattan tent darkness. Per-vertex (not
-        // per-fragment) so a voxel adjacent to v01 fully darkens
-        // v01 even when the fragment is at v00; the bilerp at the
-        // bottom paints the gap dark from v01 → fragment.
-        float b00 = 0.0;
-        float b01 = 0.0;
-        float b10 = 0.0;
-        float b11 = 0.0;
-        #define VS_VERT_CONTRIB(totalSlot, voxelSlot, vpos) { \
-            vec3 d_v_ship = vs_quatRotateInv(q, voxel.xyz - (vpos)); \
-            vec3 vDist = max(vec3(0.0), abs(d_v_ship) - vec3(0.5)); \
-            float manhattan = vDist.x + vDist.y + vDist.z; \
-            float vertexContrib = max(0.0, 1.0 - manhattan / REACH); \
-            totalSlot += vertexContrib; \
-            shipVertAccum.voxelSlot += vertexContrib; \
-            if (hasActiveCardinalPair) { \
-                vertAccum.voxelSlot += vertexContrib; \
-            } \
-        }
-        VS_VERT_CONTRIB(b00, x, v00)
-        VS_VERT_CONTRIB(b01, y, v01)
-        VS_VERT_CONTRIB(b10, z, v10)
-        VS_VERT_CONTRIB(b11, w, v11)
-        #undef VS_VERT_CONTRIB
-        float voxelBilinearContrib = mix(mix(b00, b01, u_t),
-                                         mix(b10, b11, u_t),
-                                         v_t);
-        if (hasActiveCardinalPair && voxelBilinearContrib > 0.001) {
-            bilinearReachCount++;
-        }
-    }
-
-    // Bilinear interp of vertex accumulators to the fragment. The
-    // bilinear path is only used in the merged interior; the outer
-    // footprint comes from the per-fragment Manhattan path so the
-    // visible corners stay triangular instead of becoming rounded by
-    // vertex interpolation.
-    float bilinearAccum = mix(mix(vertAccum.x, vertAccum.y, u_t),
-                              mix(vertAccum.z, vertAccum.w, u_t),
-                              v_t);
-    float shipBilinearAccum = mix(mix(shipVertAccum.x, shipVertAccum.y, u_t),
-                                  mix(shipVertAccum.z, shipVertAccum.w, u_t),
-                                  v_t);
-
-    // Ship-to-world merge: when a ship voxel reaches this
-    // fragment (fragAccum > 0), ALSO fold in the surrounding 3×3×3
-    // world cells as axis-aligned occluders. The shipAo loss then
-    // captures both the ship voxel's own shadow AND the world
-    // blocks the ship is "reaching across", which the
-    //     combined = ao - (1 - shipAo)
-    // formula in main() applies on top of vanilla v_Color.a — the
-    // double-count is intentional: it adds the extra darkness the
-    // x_+ case needs (ship `+` rotated 45° next to world axis-
-    // aligned `x` with a 1-block gap) to look like x_x's merged
-    // shadow instead of two disconnected blobs. Vanilla world AO
-    // is otherwise preserved, because:
-    //   • Pure-world fragments (no ship voxel reaches) skip this
-    //     branch entirely — shipAo stays 1.0, combined = ao.
-    //   • Ship voxels with no nearby world blocks behave exactly
-    //     like before (the inner loop finds nothing solid).
-    //
-    // Vertex-grid intuition: a face vertex's AO is set by how many
-    // adjacent cells are solid. The rotated `+`'s corners poke
-    // ~0.207 into the cell adjacent to the gap-vertex, so the
-    // vertex grid sees BOTH `x` and `+` as solid neighbours of the
-    // gap. Reading the world cells from u_VsLightSections inside
-    // the ship-reach gate makes the SDF aware of the same neighbour
-    // pair vanilla AO would, so the merge falls out.
-    float worldFragAccum = 0.0;
-    float worldCardinalFragAccum = 0.0;
-    float worldBilinearAccum = 0.0;
-    int worldBilinearReachCount = 0;
-    if (fragAccum > 0.0) {
-        ivec3 worldBlockPos = ivec3(floor(worldPosWorld));
-        uint sectionIndex;
-        if (!vs_chunkCoordToSectionIndex(worldBlockPos >> 4, sectionIndex)) {
-            uint sectionOffset = sectionIndex * VS_SECTION_SIZE_INTS;
-            ivec3 blockInSectionPos = (worldBlockPos & 0xF) + 1;
-            for (int dy = -1; dy <= 1; dy++) {
-                for (int dz = -1; dz <= 1; dz++) {
-                    for (int dx = -1; dx <= 1; dx++) {
-                        if (!vs_isSolid(sectionOffset, uvec3(blockInSectionPos + ivec3(dx, dy, dz)))) continue;
-                        vec3 cellCenter = vec3(worldBlockPos + ivec3(dx, dy, dz)) + vec3(0.5);
-                        vec3 d = cellCenter - worldPosWorld;
-                        if (dot(d, nf) <= 0.0) continue;
-                        ivec3 worldOffset = ivec3(dx, dy, dz);
-                        bool tangentCardinal = vs_isFaceTangentCardinalOffset(worldOffset, absNf);
-                        vec3 vDistW = max(vec3(0.0), abs(d) - vec3(0.5));
-                        float manhattanW = vDistW.x + vDistW.y + vDistW.z;
-                        float fragContribW = max(0.0, 1.0 - manhattanW / REACH);
-                        worldFragAccum += fragContribW;
-                        if (tangentCardinal) {
-                            worldCardinalFragAccum += fragContribW;
-                        }
-
-                        if (!tangentCardinal) continue;
-
-                        float w00 = 0.0;
-                        float w01 = 0.0;
-                        float w10 = 0.0;
-                        float w11 = 0.0;
-                        #define VS_WORLD_VERT_SUM(slot, vpos) { \
-                            vec3 d_v_world = cellCenter - (vpos); \
-                            vec3 vDistWorld = max(vec3(0.0), abs(d_v_world) - vec3(0.5)); \
-                            float manhattanWorld = vDistWorld.x + vDistWorld.y + vDistWorld.z; \
-                            slot += max(0.0, 1.0 - manhattanWorld / REACH); \
-                        }
-                        VS_WORLD_VERT_SUM(w00, v00)
-                        VS_WORLD_VERT_SUM(w01, v01)
-                        VS_WORLD_VERT_SUM(w10, v10)
-                        VS_WORLD_VERT_SUM(w11, v11)
-                        #undef VS_WORLD_VERT_SUM
-                        float worldBilinearContrib = mix(mix(w00, w01, u_t),
-                                                         mix(w10, w11, u_t),
-                                                         v_t);
-                        worldBilinearAccum += worldBilinearContrib;
-                        if (worldBilinearContrib > 0.001) {
-                            worldBilinearReachCount++;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    float accum = fragAccum + worldFragAccum;
-    bool hasShipPairMerge = bilinearReachCount >= 2;
-    bool hasWorldMerge = worldBilinearReachCount > 0 && shipBilinearAccum > 0.001;
-    if (hasShipPairMerge || hasWorldMerge) {
-        float mergeShipBilinearAccum = hasWorldMerge ? shipBilinearAccum : bilinearAccum;
-        float mergeShipBaseAccum = hasWorldMerge ? fragAccum : cardinalFragAccum;
-        float mergeBilinearAccum = mergeShipBilinearAccum + worldBilinearAccum;
-        float mergeManhattanAccum = mergeShipBaseAccum + worldCardinalFragAccum;
-        accum += max(0.0, mergeBilinearAccum - mergeManhattanAccum);
-    }
-
-    float occlusion = clamp(accum * STRENGTH, 0.0, 1.0);
-    return mix(0.2, 1.0, 1.0 - occlusion);
-}
 // Loop bound for the per-fragment emitter scan. Should match
 // VsShipEmitterList.MAX_EMITTERS — 1024 entries fit but is excessive per
 // fragment; 128 is plenty for typical scenes (ships rarely have that many
@@ -609,6 +219,313 @@ float vs_shipEmitterLight(vec3 worldPos) {
         maxLight = max(maxLight, light);
     }
     return maxLight;
+}
+
+// ===== Ship-to-world AO seam matching (PER-FRAGMENT) =====================
+// Evaluated per-fragment, not baked at vertices: the fragment lies in the face
+// INTERIOR, so floor() finds this face's block cell without the per-vertex
+// corner knife-edge (and without the camera jitter that flickered the old
+// per-vertex path), and the darkening becomes a smooth field rather than a
+// 4-corner interpolation. The seam geometry mirrors the old VSH correction
+// (match this face's square against a nearby ship voxel's facing square, find
+// the shared seam edge, subtend it half a block inward), but the final loss is
+// keyed off THIS fragment's distance to the subtended target.
+// Occluders scanned per fragment. The buffer holds up to MAX_OCCLUDERS (1024)
+// solid voxels of every nearby ship, so a cap of 64 examined only the first
+// 64 — a given world face's real ship neighbor usually sits past that index and
+// was never even tested, so it never matched no matter the geometry. (The real
+// fix for very dense scenes is a per-fragment spatial cull; until then, scan
+// more.)
+const int WS_SEAM_OCCLUDER_LOOP_CAP = 256;
+// Falloff reach. Vanilla/sodium smooth AO bilinearly interpolates 4 per-vertex
+// values across the face (sodium AoNeighborInfo.calculateCornerWeights), so
+// one occluding neighbor produces a gradient spanning EXACTLY one block from
+// the shared edge and zero past it. Gaps are bridged by the merge lerp below
+// (moving the quad), NOT by widening the falloff. REACH is also the merge-lerp
+// range (t = pairDist / REACH): at one block of separation A's corners have
+// fully collapsed onto B's face, which is exactly where the field must have
+// died for the next cell's from-zero reconstruction to line up (cell-border
+// continuity).
+const float WS_SEAM_REACH = 1.0;
+// How far apart the two squares' nearest corners can be and still count as a
+// merge (the seam-match gate). The merge lerp has fully collapsed the quad
+// onto the occluder face well before this; the gate just bounds the scan.
+const float WS_SEAM_MATCH_REACH = 2.0;
+// Darkening at the seam edge. Vanilla samples each neighbor cell as
+// getShadeBrightness() — 0.2 for a solid block, 1.0 for air — and averages 4
+// samples per vertex (sodium AoFaceData: ao[v] = (e+e+c+ca)*0.25), so ONE
+// solid neighbor lowers the vertex multiplier by exactly 0.2.
+const float WS_SEAM_STRENGTH = 0.2;
+// Vanilla's AO floor is a 0.2 multiplier (all four samples solid), i.e. at
+// most 0.8 of the light lost. Occluder contributions SUM (that's what the
+// 4-sample average does per extra solid neighbor), then clamp to this.
+const float WS_SEAM_MAX_TOTAL = 0.8;
+// Coarse prefilter radius; matches VsShipOccluderList.SEAM_CANDIDATE_RADIUS.
+// The exact best0 <= REACH test below does the real gating, so keep this
+// generous or corner/diagonal neighbors get dropped before they're checked.
+const float WS_SEAM_CANDIDATE_RADIUS = 2.5;
+// Falloff cutoff: the raw product falloff is remapped so anything below
+// CUTOFF becomes 0 and [CUTOFF, 1] rescales to [0, 1] (continuous -- a hard
+// step would draw a visible iso-contour ring). 0.0 = identity, the
+// vanilla-matched 1-block ramp; kept as a tunable.
+const float WS_SEAM_CUTOFF = 0.0;
+// DEBUG: world-space radius of the blue dot drawn at each seam-square vertex,
+// and half-thickness of the orange outline drawn on the merge quad.
+const float WS_DBG_VERTEX_RADIUS = 0.06;
+const float WS_DBG_EDGE_RADIUS = 0.02;
+
+vec3 ws_seamQuatRotate(vec4 q, vec3 v) {
+    return v + 2.0 * cross(q.xyz, cross(q.xyz, v) + q.w * v);
+}
+
+// The 4 corners of a unit-cube face centered at c with outward normal nrm.
+void ws_seamLocalFace(vec3 c, vec3 nrm, out vec3 c00, out vec3 c01, out vec3 c10, out vec3 c11) {
+    vec3 a = abs(nrm);
+    vec3 u = a.x > 0.5 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+    vec3 v = a.z > 0.5 ? vec3(0.0, 1.0, 0.0) : vec3(0.0, 0.0, 1.0);
+    c00 = c - u * 0.5 - v * 0.5;
+    c01 = c + u * 0.5 - v * 0.5;
+    c10 = c - u * 0.5 + v * 0.5;
+    c11 = c + u * 0.5 + v * 0.5;
+}
+
+// DEBUG: distance from point p to segment ab (for the merge-quad outline).
+float ws_distToSeg(vec3 p, vec3 a, vec3 b) {
+    vec3 ab = b - a;
+    float t = clamp(dot(p - a, ab) / max(dot(ab, ab), 1e-8), 0.0, 1.0);
+    return distance(p, a + t * ab);
+}
+
+// Product falloff of the box [lo, hi], evaluated at the 4 receiving-face
+// corners. The loss field is sampled PER CORNER and interpolated at the
+// fragment by ws_seamInterp: evaluating the product directly at the fragment
+// is true bilinear (curved hyperbolic iso-contours), whereas the rasterizer
+// interpolates vanilla's per-vertex AO linearly over the face's two TRIANGLES
+// with a sharp straight crease -- corner sampling reproduces that exactly.
+vec4 ws_seamCornerFalloff(vec3 lo, vec3 hi, vec3 aLoc[4]) {
+    vec4 r;
+    for (int ci = 0; ci < 4; ci++) {
+        vec3 ex = max(max(lo - aLoc[ci], aLoc[ci] - hi), vec3(0.0));
+        vec3 w = clamp(vec3(1.0) - ex / WS_SEAM_REACH, vec3(0.0), vec3(1.0));
+        r[ci] = clamp((w.x * w.y * w.z - WS_SEAM_CUTOFF)
+                / (1.0 - WS_SEAM_CUTOFF), 0.0, 1.0);
+    }
+    return r;
+}
+
+// Vanilla-style interpolation of the 4 corner losses across the face:
+// linear over the quad's two triangles. Sodium picks the split diagonal
+// (ModelQuadOrientation.orientByBrightness, NORMAL iff br[0]+br[2] >
+// br[1]+br[3]) so the crease runs through the opposite corner pair with the
+// greater brightness -- in loss terms the SMALLER loss sum. The two splits
+// coincide identically when the sums tie, so the flip is continuous.
+// c = (L00, L10, L01, L11) matching ws_seamLocalFace's output order.
+float ws_seamInterp(vec4 c, vec2 uv) {
+    if (c.x + c.w <= c.y + c.z) {           // crease through 00-11
+        return uv.x >= uv.y
+            ? c.x + (c.y - c.x) * uv.x + (c.w - c.y) * uv.y
+            : c.x + (c.w - c.z) * uv.x + (c.z - c.x) * uv.y;
+    } else {                                // crease through 10-01
+        return uv.x + uv.y <= 1.0
+            ? c.x + (c.y - c.x) * uv.x + (c.z - c.x) * uv.y
+            : c.w + (c.z - c.w) * (1.0 - uv.x) + (c.y - c.w) * (1.0 - uv.y);
+    }
+}
+
+float ws_seamAoFrag(vec3 fragWorldPos, vec3 normal, int selfShipIndex, out float dbgVertex) {
+    dbgVertex = 0.0;
+    vec3 absN = abs(normal);
+    vec3 uAxis = absN.x > 0.5 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+    vec3 vAxis = absN.z > 0.5 ? vec3(0.0, 1.0, 0.0) : vec3(0.0, 0.0, 1.0);
+
+    // Square A = the unit block face this fragment sits on (world-axis-aligned).
+    float uCenter = floor(dot(fragWorldPos, uAxis)) + 0.5;
+    float vCenter = floor(dot(fragWorldPos, vAxis)) + 0.5;
+    float nPlane  = floor(dot(fragWorldPos, normal) + 0.5);
+    vec3 faceCenter = normal * nPlane + uAxis * uCenter + vAxis * vCenter;
+
+    vec3 A00, A01, A10, A11;
+    ws_seamLocalFace(faceCenter, normal, A00, A01, A10, A11);
+    vec3 Acorners[4] = vec3[](A00, A01, A10, A11);
+
+    // Loss accumulates PER FACE CORNER (Acorners order: 00,10,01,11) and is
+    // interpolated at the fragment with the vanilla two-triangle rule at the
+    // end -- per-fragment evaluation of exactly what the rasterizer would do
+    // with per-vertex AO, sharp diagonal creases included.
+    vec4 cornerLoss = vec4(0.0);
+    int n = min(u_VsShipOccluderCount, WS_SEAM_OCCLUDER_LOOP_CAP);
+    for (int i = 0; i < n; i++) {
+        vec4 voxel = texelFetch(u_VsShipOccluders, i * 2);
+        vec4 q     = texelFetch(u_VsShipOccluders, i * 2 + 1);
+        // voxel.w = raw packed bits: bits 0-15 dense ship index, bit 16 hint.
+        int voxelShipIndex = floatBitsToInt(voxel.w) & 0xFFFF;
+        if (voxelShipIndex == selfShipIndex) continue;
+        if (distance(voxel.xyz, faceCenter) > WS_SEAM_CANDIDATE_RADIUS) continue;
+
+        // Vanilla only samples the ONE layer of cells in FRONT of the face
+        // plane (AoFaceData offsets by the face direction before sampling):
+        // a voxel flush with or behind the plane — e.g. level with a floor
+        // block — casts no AO onto it. Gate on the occluder center being in
+        // front; the contribution below also ramps over the first quarter
+        // block so a rotating ship voxel crossing the plane fades in instead
+        // of popping.
+        float frontness = dot(normal, voxel.xyz - faceCenter);
+        if (frontness < 1e-4) continue;
+
+        // This face's square, normal and the fragment lifted into the occluder
+        // ship's LOCAL frame: square B's corners are analytic there, the
+        // subtend cardinals are the plain <0.5,0>/<0,0.5> ship axes, and the
+        // falloff box is axis-aligned. (Distances are rotation-invariant, so
+        // matching in local space picks the same pairs as world space.)
+        vec3 aLoc[4] = vec3[](
+            vs_quatRotateInv(q, Acorners[0] - voxel.xyz),
+            vs_quatRotateInv(q, Acorners[1] - voxel.xyz),
+            vs_quatRotateInv(q, Acorners[2] - voxel.xyz),
+            vs_quatRotateInv(q, Acorners[3] - voxel.xyz));
+        vec3 towardSelfLocal = vs_quatRotateInv(q, faceCenter - voxel.xyz);
+        vec3 normalALocal = vs_quatRotateInv(q, normal);
+        float frontW = clamp(frontness / 0.25, 0.0, 1.0);
+
+        // Evaluate EVERY voxel face whose outward normal points toward this
+        // fragment's cell (up to 3) and keep the MAX contribution. A hard
+        // dominant-axis pick flips between adjacent receiving cells (at yaw 45
+        // the cardinal cells match the voxel's bottom face, the diagonal cells
+        // a side face) and every flip is a visible border step; the max of the
+        // per-face fields stays continuous when the argmax switches, and in
+        // grid-aligned cases the candidate faces share the seam edge and tie
+        // exactly, keeping vanilla parity.
+        vec4 contrib = vec4(0.0);
+        for (int axisI = 0; axisI < 3; axisI++) {
+            if (abs(towardSelfLocal[axisI]) < 1e-6) continue;
+            vec3 normalB = vec3(0.0);
+            normalB[axisI] = sign(towardSelfLocal[axisI]);
+
+            // Square B: that face of the unit voxel, ship-local, offset half a
+            // voxel along normalB onto the actual surface so its corners can
+            // COINCIDE with A's at the seam ("the same vertex belongs to both
+            // squares").
+            vec3 b00, b01, b10, b11;
+            ws_seamLocalFace(normalB * 0.5, normalB, b00, b01, b10, b11);
+            vec3 bLoc[4] = vec3[](b00, b01, b10, b11);
+
+            vec4 faceLoss = vec4(0.0);
+            if (dot(normalALocal, normalB) < -0.9) {
+                // B faces this face head-on (voxel hovering over/against it):
+                // there is no seam -- every corner pair ties and the 2-pair
+                // pick below would be a loop-order artifact. The correct merge
+                // quad is B's face itself (the footprint shadow), which meets
+                // the neighboring cells' seam curtains at the borders.
+                vec3 lo = min(min(bLoc[0], bLoc[1]), min(bLoc[2], bLoc[3]));
+                vec3 hi = max(max(bLoc[0], bLoc[1]), max(bLoc[2], bLoc[3]));
+                faceLoss = WS_SEAM_STRENGTH * frontW
+                        * ws_seamCornerFalloff(lo, hi, aLoc);
+            } else {
+                // Scan the 16 corner pairs; take the two nearest that share no
+                // vertex on either square (ascending-sort by distance, first
+                // two unique pairs) -- the two endpoints of the seam.
+                // Epsilon-strict: on mathematically-equal distances the
+                // EARLIEST candidate in loop order wins deterministically,
+                // instead of FP noise deciding (which flickers frame to frame
+                // as the transforms are re-derived).
+                int bi0 = -1, bj0 = -1;
+                float best0 = 1e30;
+                for (int ai = 0; ai < 4; ai++)
+                    for (int bj = 0; bj < 4; bj++) {
+                        float dd = distance(aLoc[ai], bLoc[bj]);
+                        if (dd < best0 - 1e-6) { best0 = dd; bi0 = ai; bj0 = bj; }
+                    }
+                int bi1 = -1, bj1 = -1;
+                float best1 = 1e30;
+                for (int ai = 0; ai < 4; ai++) {
+                    if (ai == bi0) continue;
+                    for (int bj = 0; bj < 4; bj++) {
+                        if (bj == bj0) continue;
+                        float dd = distance(aLoc[ai], bLoc[bj]);
+                        if (dd < best1 - 1e-6) { best1 = dd; bi1 = ai; bj1 = bj; }
+                    }
+                }
+                if (bi1 < 0 || best0 > WS_SEAM_MATCH_REACH) continue;
+
+                // === SUBTEND (B side) ===
+                // Push the two matched B corners half a ship block along the
+                // face cardinal (<0.5,0> / <0,0.5> in ship space) that got the
+                // SMALLER |dot| with their pair vector (bigger dot -> use the
+                // other one), signed into the face interior. The midpoint M of
+                // the subtended line is the merge target.
+                vec3 bAbsN = abs(normalB);
+                vec3 bU = bAbsN.x > 0.5 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+                vec3 bV = bAbsN.z > 0.5 ? vec3(0.0, 1.0, 0.0) : vec3(0.0, 0.0, 1.0);
+                vec3 sb0 = bLoc[bj0], sb1 = bLoc[bj1];
+                vec3 pairVec = sb1 - sb0;
+                // DIAGONAL pairs tie this test exactly (|dot| equal on both
+                // axes), so prefer bU within epsilon rather than letting FP
+                // noise pick.
+                float duP = abs(dot(bU, pairVec));
+                float dvP = abs(dot(bV, pairVec));
+                vec3 axis = (duP <= dvP + 1e-6 ? bU : bV) * 0.5;
+                // Sign: into the face interior. For DIAGONAL pairs the
+                // seam midpoint IS the face center (interior ~ 0, the sign
+                // would be FP noise -> temporal flicker), so fall back to
+                // "toward the matched A corners", then to +axis.
+                vec3 interior = normalB * 0.5 - 0.5 * (sb0 + sb1);
+                float sgn = dot(axis, interior);
+                if (abs(sgn) < 1e-6) sgn = dot(axis, 0.5 * (aLoc[bi0] + aLoc[bi1]) - 0.5 * (sb0 + sb1));
+                if (abs(sgn) < 1e-6) sgn = 1.0;
+                vec3 h = sgn >= 0.0 ? axis : -axis;
+                vec3 su = sb0 + h;
+                vec3 sv = sb1 + h;
+                vec3 M = 0.5 * (su + sv);
+
+                // === MERGE: A's matched corners lerp toward M by
+                // t = pairDist / REACH. Touching corners stay put, so the quad
+                // spans the seam edge -> vanilla-exact gradient; at one block
+                // of separation they have fully collapsed onto B's face, so
+                // the field dies exactly where the next cell's reconstruction
+                // starts from zero (cell-border continuity).
+                vec3 m0 = mix(aLoc[bi0], M, clamp(best0 / WS_SEAM_REACH, 0.0, 1.0));
+                vec3 m1 = mix(aLoc[bi1], M, clamp(best1 / WS_SEAM_REACH, 0.0, 1.0));
+
+#ifdef VS_DEBUG_SEAM_AO
+                // DEBUG: blue = A corners; orange = merge-quad outline (the
+                // falloff source); green = the subtended line; pink = M.
+                {
+                    vec3 wSu = voxel.xyz + ws_seamQuatRotate(q, su);
+                    vec3 wSv = voxel.xyz + ws_seamQuatRotate(q, sv);
+                    vec3 wM0 = voxel.xyz + ws_seamQuatRotate(q, m0);
+                    vec3 wM1 = voxel.xyz + ws_seamQuatRotate(q, m1);
+                    float e = min(min(ws_distToSeg(fragWorldPos, wSu, wSv), ws_distToSeg(fragWorldPos, wSv, wM1)),
+                                  min(ws_distToSeg(fragWorldPos, wM1, wM0), ws_distToSeg(fragWorldPos, wM0, wSu)));
+                    for (int k = 0; k < 4; k++)
+                        if (distance(fragWorldPos, Acorners[k]) < WS_DBG_VERTEX_RADIUS) dbgVertex = 1.0;
+                    if (e < WS_DBG_EDGE_RADIUS) dbgVertex = 2.0;
+                    if (ws_distToSeg(fragWorldPos, wSu, wSv) < WS_DBG_EDGE_RADIUS) dbgVertex = 3.0;
+                    if (distance(fragWorldPos, voxel.xyz + ws_seamQuatRotate(q, M)) < WS_DBG_VERTEX_RADIUS) dbgVertex = 4.0;
+                }
+#endif
+
+                // === PRODUCT FALLOFF (ship-frame box) ===
+                // Per-axis exterior offsets from the merge quad's ship-local
+                // bounding box, combined MULTIPLICATIVELY. Vanilla's bilinear
+                // per-vertex AO decomposes into sums of products of axis
+                // ramps, so the product form reproduces it exactly for
+                // grid-aligned cases (summing the offsets -- L1 -- decays
+                // diagonals twice as fast as vanilla; Euclidean distance
+                // rounds the corners radially).
+                vec3 lo = min(min(su, sv), min(m0, m1));
+                vec3 hi = max(max(su, sv), max(m0, m1));
+                faceLoss = WS_SEAM_STRENGTH * frontW
+                        * ws_seamCornerFalloff(lo, hi, aLoc);
+            }
+            contrib = max(contrib, faceLoss);
+        }
+        // Vanilla SUMS per-sample losses (each solid sample subtracts 0.2 in
+        // the 4-sample vertex average), so accumulate additively across
+        // voxels; the clamp below matches vanilla's 0.2 multiplier floor.
+        cornerLoss += contrib;
+    }
+    cornerLoss = min(cornerLoss, vec4(WS_SEAM_MAX_TOTAL));
+    vec2 uv = fract(vec2(dot(fragWorldPos, uAxis), dot(fragWorldPos, vAxis)));
+    return ws_seamInterp(cornerLoss, uv);
 }
 
 void main() {
@@ -647,58 +564,40 @@ void main() {
     // independently.
     diffuseColor.rgb *= v_Color.rgb * lightSample.rgb;
 
-    // Combined AO + shade. v_Color.a is PURE vanilla AO (no shade);
-    // ship-to-world AO comes from ws_shipAo() which: (a) for pure-
-    // world fragments returns 1.0 (no ship voxels reach → vanilla
-    // baked AO is preserved verbatim by the formula below), (b) for
-    // fragments where a ship voxel reaches, folds in the 3×3×3
-    // world cells around the fragment so the resulting loss
-    // includes the merge contribution and stacks darker than the
-    // vanilla world AO alone — matching x_x's appearance for the
-    // x_+ case. Floor 0.2 matches sodium's deepest opaque AO.
+    // Combined AO + shade. v_Color.a is vanilla's baked AO; the ship-to-world
+    // seam AO is computed per-fragment here and subtracted in. Floor 0.2
+    // matches sodium's deepest opaque AO.
     float ao = v_Color.a;
-    float shipAo = (v_IsShaded == 1)
-            ? ws_shipAo(v_CameraRelWorldPos + vec3(u_VsRenderOrigin), v_WorldNormal)
-            : 1.0;
+    float dbgSeamVertex = 0.0;
     if (v_IsShaded == 1) {
-        float combined = max(0.2, ao - (1.0 - shipAo));
+        float seamVertex = 0.0;
+        float seamLoss = ws_seamAoFrag(worldPos, v_WorldNormal, -1, seamVertex);
+        ao = max(0.2, ao - seamLoss);
+        dbgSeamVertex = seamVertex;
         float shade = 1.0;
         if (v_WorldNormal.y < -0.5)       shade = 0.5; // DOWN
         else if (abs(v_WorldNormal.y) > 0.5) shade = 1.0; // UP
         else if (abs(v_WorldNormal.x) > 0.5) shade = 0.6; // EAST / WEST
         else                                  shade = 0.8; // NORTH / SOUTH
-        diffuseColor.rgb *= combined * shade;
+        diffuseColor.rgb *= ao * shade;
     } else {
         diffuseColor.rgb *= ao;
     }
 
-    // DEBUG: visualize ship AO loss vs vanilla AO loss as separate channels
-    // so a real solid block (vanilla AO baked into v_Color.a) and a ship
-    // voxel (per-fragment ws_shipAo()) can be placed side-by-side and
-    // compared.
-    //
-    // RED   — ship AO loss (1 - shipAo, scaled).
-    // GREEN — vanilla world AO loss (1 - v_Color.a, scaled).
-    //
-    // If the two formulas produce the same darkening, equivalent setups
-    // produce visually identical shapes. Where they disagree, you'll see
-    // pure red (ship darker) or pure green (vanilla darker).
-    //
-    // Tiny +lightSample.rgb keeps u_LightTex alive against GLSL dead-code
-    // elimination — without it the compiler strips the texture sample
-    // and sodium's bindUniform throws NPE at link time.
-    {
-        // DEBUG: red = total combined AO loss (ship + vanilla
-        // merged via the same formula main rendering uses). V_x,
-        // x_x, V_V, V_V_V, x_+ all show at consistent brightness
-        // when sodium would treat them equivalently.
-        float combinedDbg = (v_IsShaded == 1)
-                ? max(0.2, v_Color.a - (1.0 - shipAo))
-                : v_Color.a;
-        float dbgTotalLoss = clamp((1.0 - combinedDbg) * 1.25, 0.0, 1.0);
-        diffuseColor.rgb = vec3(dbgTotalLoss, 0.0, 0.0)
-                + lightSample.rgb * 1e-3;
-    }
+#ifdef VS_DEBUG_SEAM_AO
+    // BLUE dot = this fragment sits on a seam-square vertex (for manual
+    // checking). RED elsewhere = the AO loss applied. The tiny lightSample term
+    // keeps u_LightTex referenced so GLSL dead-code elimination doesn't strip
+    // the sampler (sodium's bindUniform NPEs at link time if an active uniform
+    // is optimized out).
+    float dbgTotalLoss = clamp((1.0 - ao) * 1.25, 0.0, 1.0);
+    vec3 dbgCol = vec3(dbgTotalLoss, 0.0, 0.0);
+    if (dbgSeamVertex > 3.5)      dbgCol = vec3(1.0, 0.4, 0.7); // pink   = half-step point
+    else if (dbgSeamVertex > 2.5) dbgCol = vec3(0.0, 1.0, 0.0); // green  = subtended line
+    else if (dbgSeamVertex > 1.5) dbgCol = vec3(1.0, 0.5, 0.0); // orange = subtended ship square
+    else if (dbgSeamVertex > 0.5) dbgCol = vec3(0.0, 0.0, 1.0); // blue   = self vertex
+    diffuseColor.rgb = dbgCol + lightSample.rgb * 1e-3;
+#endif
 
     fragColor = _linearFog(diffuseColor, v_FragDistance, u_FogColor, u_FogStart, u_FogEnd);
 }

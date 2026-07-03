@@ -196,11 +196,12 @@ public class SodiumCompat {
             storage.populateFromShip(level, cs, emitters, occluders);
         });
         storage.pruneUnused();
-        // Mark occluders that have a cardinal neighbour. The world shader uses
-        // this to run the bilinear merge path across the gap and the two
-        // adjacent rows around it, while leaving lone exterior corners on the
-        // sharper Manhattan footprint.
-        occluders.computeCardinalFlags(level);
+        // Mark occluders that have any nearby seam candidate, and reorder the
+        // array so they survive the per-vertex shader loop's cap in dense
+        // scenes. The shader itself does an exact geometric vertex-pair
+        // match per candidate (vs_seamAoCorrection) — this is only a coarse
+        // prefilter, not a correctness requirement.
+        occluders.computeSeamCandidateFlags(level);
         storage.upload();
         emitters.upload();
         occluders.upload();
@@ -585,10 +586,6 @@ public class SodiumCompat {
                 (float) (cameraPos.z - oz));
         wt.setShipEmitters(SHIP_EMITTER_LIST_TEXTURE_UNIT, getShipEmitterList().size());
         wt.setShipOccluders(SHIP_OCCLUDER_LIST_TEXTURE_UNIT, getShipOccluderList().size());
-        // Section storage so ws_shipAo can fold world blocks into the
-        // same SDF as ship voxels (X-X corner rule across world+ship).
-        wt.setLightSectionsSampler(LIGHT_SECTIONS_TEXTURE_UNIT);
-        wt.setLightLutSampler(LIGHT_LUT_TEXTURE_UNIT);
     }
 
     private static GlProgram<WorldThing> createWorldShader(String path, ChunkShaderOptions options) {

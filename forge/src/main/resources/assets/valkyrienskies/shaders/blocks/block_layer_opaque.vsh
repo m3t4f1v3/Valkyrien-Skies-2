@@ -6,14 +6,17 @@
 #import <sodium:include/chunk_material.glsl>
 
 // u_TransformMatrix: ship-to-world matrix, used to lift the per-quad face
-// normal into world space. Needed when shade is on or when world-light runs.
-#if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_SHADE)
+// normal into world space. Needed when shade is on, when world-light runs,
+// or when the per-vertex ship-on-ship seam-AO pass needs to lift this
+// quad's local corners into world space.
+#if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_SHADE) || defined(VS_SHIP_ON_SHIP)
 uniform mat4 u_TransformMatrix;
 #endif
 // u_LocalToCameraRel: maps sodium's chunk-local pos into camera-relative
-// world space. Needed by FSH light pipeline (via v_CameraRelWorldPos) or by
-// the biome lookup (worldPosVertex).
-#if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_BIOME)
+// world space. Needed by FSH light pipeline (via v_CameraRelWorldPos), by
+// the biome lookup (worldPosVertex), or (with VS_SHIP_ON_SHIP) to get this
+// vertex's absolute world position for the seam-AO candidate scan.
+#if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_BIOME) || defined(VS_SHIP_ON_SHIP)
 uniform mat4 u_LocalToCameraRel;
 uniform ivec3 u_VsRenderOrigin;
 #endif
@@ -25,11 +28,19 @@ uniform usamplerBuffer u_VsBiomeLut;
 out vec4 v_Color;
 out vec2 v_TexCoord;
 out vec2 v_BakedLightCoord;
-#ifdef VS_DYNAMIC_LIGHT
+#if defined(VS_DYNAMIC_LIGHT) || defined(VS_SHIP_ON_SHIP)
 out vec3 v_CameraRelWorldPos;
 #endif
 #if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_SHADE)
 flat out vec3 v_WorldNormal;
+#endif
+#ifdef VS_SHIP_ON_SHIP
+// This vertex's shipyard-local position and shipyard-space face normal. The
+// FSH interpolates v_ShipyardPos to each fragment and rebuilds the block face
+// it sits on in shipyard space (where floor() finds voxel boundaries), then
+// lifts it to world space via u_TransformMatrix for per-fragment seam AO.
+out vec3 v_ShipyardPos;
+flat out vec3 v_ShipyardNormal;
 #endif
 // Decoded VS vertex flags. See VsVertexFlagPacker:
 //   alpha bits 0-2: AO level (0..5 mapped to 0/0.2/0.4/0.6/0.8/1.0)
@@ -121,7 +132,12 @@ vec3 vs_faceSlotToNormal(uint slot) {
     if (slot == 5u) return vec3( 1.0, 0.0, 0.0);
     return vec3(0.0, 1.0, 0.0);
 }
-// =========================================================================
+
+// Ship-on-ship AO seam matching now runs PER-FRAGMENT in the FSH
+// (vs_seamAoFrag), evaluated at each fragment's interior position so floor()
+// is stable and the darkening is a smooth field rather than a 4-corner
+// interpolation. The VSH just forwards this vertex's shipyard-local position
+// and shipyard-space face normal (v_ShipyardPos / v_ShipyardNormal).
 
 void main() {
     _vert_init();
@@ -129,12 +145,17 @@ void main() {
     vec3 translation = u_RegionOffset + _get_draw_translation(_draw_id);
     vec3 position = _vert_position + translation;
 
-#ifdef VS_DYNAMIC_LIGHT
-    // Camera-relative world position. The fragment adds u_VsRenderOrigin to
-    // recover the absolute world block position; per-fragment interpolation
-    // means each fragment lands inside a block (not at a corner), avoiding the
-    // float-precision flicker that per-vertex lookups had at section faces.
-    v_CameraRelWorldPos = (u_LocalToCameraRel * vec4(position, 1.0)).xyz;
+#if defined(VS_DYNAMIC_LIGHT) || defined(VS_SHIP_ON_SHIP)
+    // Camera-relative world position (shared by the world-light lookup and
+    // the ship-on-ship seam-AO pass below).
+    vec3 vsCamRelPos = (u_LocalToCameraRel * vec4(position, 1.0)).xyz;
+#endif
+#if defined(VS_DYNAMIC_LIGHT) || defined(VS_SHIP_ON_SHIP)
+    // The fragment adds u_VsRenderOrigin to recover the absolute world block
+    // position; per-fragment interpolation means each fragment lands inside
+    // a block (not at a corner), avoiding the float-precision flicker that
+    // per-vertex lookups had at section faces.
+    v_CameraRelWorldPos = vsCamRelPos;
 #endif
 
 #ifdef USE_FOG
@@ -157,15 +178,29 @@ void main() {
     v_IsShaded = (faceSlot < 6u) ? 1 : 0;
     v_IsFullbright = (faceSlot == 7u) ? 1 : 0;
     float aoFloat = float(aoLevel) * 0.2;
-    v_Color = vec4(_vert_color.rgb, aoFloat);
 
+#if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_SHADE) || defined(VS_SHIP_ON_SHIP)
+    // Shipyard-space face direction — needed to lift the normal into world
+    // space (shade/light) and to build this quad's own corners for the
+    // seam-AO pass below.
+    vec3 shipyardNormal = vs_faceSlotToNormal(faceSlot);
+#endif
 #if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_SHADE)
     // World-space surface normal: shipyard-space face direction transformed by
     // the ship-to-world matrix. All four vertices of a quad share the same face
     // slot, so flat-interpolating this through the rasterizer is exact.
-    vec3 shipyardNormal = vs_faceSlotToNormal(faceSlot);
     v_WorldNormal = normalize((u_TransformMatrix * vec4(shipyardNormal, 0.0)).xyz);
 #endif
+
+#ifdef VS_SHIP_ON_SHIP
+    // Forward this vertex's shipyard-local position and shipyard-space face
+    // normal so the FSH can rebuild the block face and run the seam-AO match
+    // per-fragment (vs_seamAoFrag). No per-vertex AO darkening here anymore.
+    v_ShipyardPos = _vert_position;
+    v_ShipyardNormal = shipyardNormal;
+#endif
+
+    v_Color = vec4(_vert_color.rgb, aoFloat);
 
 #ifdef VS_DYNAMIC_BIOME
     // Per-vertex biome lookup at the absolute world position. Linear-blended

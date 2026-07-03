@@ -94,12 +94,17 @@ void main() {
     uint aoByte = uint(_vert_color.a * 255.0 + 0.5);
     uint aoLevel = aoByte & 7u;
     uint faceSlot = (aoByte >> 3u) & 7u;
-    // v_Color.a carries pure vanilla AO (no shade). The FSH combines it
-    // additively with ship-AO loss and applies face shade after.
+    // v_Color.a carries the final AO value the FSH multiplies in directly
+    // (see main() below for face shade).
     float aoFloat = float(aoLevel) * 0.2;
-    v_Color = vec4(_vert_color.rgb, aoFloat);
     v_WorldNormal = vs_faceSlotToWorldNormal(faceSlot);
     v_IsShaded = (faceSlot < 6u) ? 1 : 0;
+
+    // v_Color.a carries only vanilla's baked AO now. The ship-to-world seam
+    // AO correction runs PER-FRAGMENT in the FSH (ws_seamAoFrag) — evaluated
+    // at each fragment's interior world position, so floor() is stable and the
+    // darkening is a smooth field, not a 4-corner interpolation.
+    v_Color = vec4(_vert_color.rgb, aoFloat);
 
     // Sodium-fabric's _vert_tex_light_coord is already a vec2 normalized to
     // [0, 1] (chunk_vertex.glsl divides the byte pair by 256 in
