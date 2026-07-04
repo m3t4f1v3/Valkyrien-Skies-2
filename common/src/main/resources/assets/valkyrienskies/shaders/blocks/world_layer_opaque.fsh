@@ -221,38 +221,60 @@ float vs_shipEmitterLight(vec3 worldPos) {
     return maxLight;
 }
 
-// ===== Ship-to-world AO (PER-FRAGMENT, occluder-lattice) ==========
-// Vanilla AO evaluated in each occluder SHIP's lattice, sliced by this face,
-// per fragment. Per ship run: the fragment is lifted into ship-local lattice
-// coordinates and the 4 corner values of the ship-grid cell containing it are
-// sampled exactly like vanilla AoFaceData (edge/edge/corner with the L-rule,
-// plus the front cell) from that ship's own voxel occupancy, then interpolated
-// with the vanilla two-triangle rule (ws_seamInterp). Everything is a rigid
-// function of ship pose, so the shadow translates/yaws WITH the ship -- no
-// receiver-lattice drag -- and at grid-aligned contact it reproduces vanilla
-// bit-exactly. Per-ship corner sums happen BEFORE interpolation: summing
-// per-voxel interpolated fields would dip to 0.6 mid-cell under a big ship
-// where vanilla is a flat 0.8.
+// ===== Ship-to-world AO (PER-FRAGMENT, occluder-lattice, cross-ship merge) ==========
+// Vanilla AO evaluated in occluder-SHIP lattices, sliced by this face, per
+// fragment -- with CROSS-SHIP MERGING. One gather pass collects the voxels
+// within WS_SEAM_R_GATHER of the fragment (grouped by ship: the buffer is
+// populated one ship at a time by VsShipOccluderList.populateFromShip).
+// Every ship's lattice then acts as a HOST: its own voxels occupy their exact
+// cells, and voxels of OTHER nearby ships are soft-injected as tent-spread
+// occupancy. Each voxel carries a responsibility weight
+//     r = 1 / (1 + sum of claims by other ships)
+// (claim = proximity gate * claimant fade * lattice alignment), so its
+// material totals ~1 across every lattice that renders it: two ships parked
+// grid-aligned each carry the merged single-grid pattern at half strength and
+// their fields SUM to exactly the vanilla result -- including cross-ship
+// L-rule corners -- while ships pulled apart or rotated away separate back
+// into independent rigid fields, continuously. Isolated ships reduce to the
+// plain occluder-lattice field (rigid under translation/yaw: no drag).
 //
-// Vanilla samples the ONE layer of cells directly in front of the face; the
-// continuous generalization used here weights each voxel BAND (unit slab of
-// lattice cells along the dominant normal axis) by its overlap length with
-// the unit slab in front of the fragment plane. Flush contact = weight 1
-// (vanilla-exact); hovering above or sinking below flush both fade linearly
-// to zero at one block; bands behind the face never overlap the slab (a ship
-// behind a ceiling casts nothing); at most two bands are ever active, so
-// multi-deck ships lerp between their layers. Contributions SUM across ships
-// (vanilla sums per-sample losses), clamped to the 0.2-multiplier floor.
-//
-// The buffer holds the solid voxels of every nearby ship GROUPED BY SHIP
-// (VsShipOccluderList.populateFromShip appends one ship at a time); the
-// per-ship occupancy mask below depends on that grouping.
+// Per host lattice the field is vanilla AoFaceData, made continuous:
+//  - voxel BANDS along the dominant normal axis are weighted by overlap with
+//    the unit slab in front of the face (flush contact = 1, hover/sink fade
+//    linearly, behind-face = 0, multi-deck lerps between layers);
+//  - per face corner the count is the 4 QUADRANT occupancies around the
+//    lattice vertex plus a diagonal-pair bonus
+//        max(0, min(diag1) - max(diag2)) + max(0, min(diag2) - max(diag1))
+//    which equals vanilla's edge+edge+L-rule-corner+front on every hard
+//    front-air config but is label-symmetric -- the labeled form is only
+//    cross-cell consistent for hard air fronts and would jump when the
+//    fragment's lattice cell changes under a partially covering voxel;
+//  - the 4 corner losses are interpolated with the vanilla two-triangle rule
+//    (ws_seamInterp). Hosts SUM (vanilla sums per-sample losses), clamped to
+//    the 0.2-multiplier floor.
 const int WS_SEAM_OCCLUDER_LOOP_CAP = 256;
 // Darkening per solid sample: vanilla getShadeBrightness() is 0.2 for a solid
 // block, and each solid sample lowers the 4-sample vertex average by 0.2.
 const float WS_SEAM_STRENGTH = 0.2;
 // Vanilla's AO floor is a 0.2 multiplier: at most 0.8 of the light lost.
 const float WS_SEAM_MAX_TOTAL = 0.8;
+// Gather radius around the fragment. The ALIGNED field's support ends at 2.6
+// blocks; misaligned tent bleed reaches farther with tiny values and is cut
+// by the support fade below, which hits 0 before the gather boundary so
+// nothing pops when a voxel crosses it.
+const float WS_SEAM_R_GATHER = 3.5;
+const float WS_SEAM_FADE_LO = 2.8;
+const float WS_SEAM_FADE_HI = 3.4;
+// Merge gate on the voxel-pair distance: 1 below G_FULL so every strongly
+// interacting pair merges with FULL claims (partial claims skew the per-host
+// corner proportions, the crease flips disagree between hosts, and the
+// aligned-limit exactness breaks; the 1-block-gap pair is 2.0 apart).
+const float WS_SEAM_G_FULL = 2.2;
+const float WS_SEAM_G_ZERO = 3.0;
+// Fixed-size gather storage. 18 voxels can matter at once (3x3 window x 2
+// bands); RUNS caps how many distinct ships merge at one fragment.
+const int WS_SEAM_MAX_GATHER = 20;
+const int WS_SEAM_MAX_RUNS = 4;
 // DEBUG: world-space radius of the dot drawn at each sampled lattice corner.
 const float WS_DBG_VERTEX_RADIUS = 0.06;
 
@@ -282,24 +304,79 @@ float ws_seamInterp(vec4 c, vec2 uv) {
 float ws_seamAoFrag(vec3 fragWorldPos, vec3 normal, int selfShipIndex, out float dbgVertex) {
     dbgVertex = 0.0;
 
-    float total = 0.0;
     int n = min(u_VsShipOccluderCount, WS_SEAM_OCCLUDER_LOOP_CAP);
-    int i = 0;
-    while (i < n) {
-        vec4 anchor = texelFetch(u_VsShipOccluders, i * 2);
-        vec4 q      = texelFetch(u_VsShipOccluders, i * 2 + 1);
-        // voxel.w = raw packed bits: bits 0-15 dense ship index, bit 16 hint.
-        int shipIdx = floatBitsToInt(anchor.w) & 0xFFFF;
 
-        // Fragment in this ship's lattice coordinates, shifted so lattice
-        // VERTICES land on integers (voxel centers sit at k + 0.5).
-        vec3 fragL = vs_quatRotateInv(q, fragWorldPos - anchor.xyz) + 0.5;
+    // ---- gather: nearby voxels, grouped into per-ship runs ----------------
+    vec4 runQ[WS_SEAM_MAX_RUNS];
+    vec3 runAnchor[WS_SEAM_MAX_RUNS];
+    int runShip[WS_SEAM_MAX_RUNS];
+    int runCount = 0;
+    vec3 voxPos[WS_SEAM_MAX_GATHER];
+    int voxRun[WS_SEAM_MAX_GATHER];
+    int voxCount = 0;
+    int lastShip = 0x7FFFFFFF;
+    int lastSlot = -1;
+    for (int i = 0; i < n; i++) {
+        vec4 vox = texelFetch(u_VsShipOccluders, i * 2);
+        int shipIdx = floatBitsToInt(vox.w) & 0xFFFF;
+        if (shipIdx != lastShip) {
+            lastShip = shipIdx;
+            lastSlot = -1;
+        }
+        if (distance(vox.xyz, fragWorldPos) > WS_SEAM_R_GATHER) continue;
+        if (lastSlot < 0) {
+            if (runCount == WS_SEAM_MAX_RUNS) continue;
+            lastSlot = runCount++;
+            runQ[lastSlot] = texelFetch(u_VsShipOccluders, i * 2 + 1);
+            runAnchor[lastSlot] = vox.xyz;
+            runShip[lastSlot] = shipIdx;
+        }
+        if (voxCount == WS_SEAM_MAX_GATHER) continue;
+        voxPos[voxCount] = vox.xyz;
+        voxRun[voxCount] = lastSlot;
+        voxCount++;
+    }
+    if (runCount == 0) return 0.0;
+
+    // support fade by fragment distance
+    float fadeV[WS_SEAM_MAX_GATHER];
+    for (int vi = 0; vi < voxCount; vi++)
+        fadeV[vi] = clamp((WS_SEAM_FADE_HI - distance(voxPos[vi], fragWorldPos))
+                / (WS_SEAM_FADE_HI - WS_SEAM_FADE_LO), 0.0, 1.0);
+
+    // ---- responsibility r per voxel: 1 / (1 + sum of other ships' claims) -
+    float rv[WS_SEAM_MAX_GATHER];
+    for (int vi = 0; vi < voxCount; vi++) {
+        float csum = 0.0;
+        for (int si = 0; si < runCount; si++) {
+            if (si == voxRun[vi]) continue;
+            float gf = 0.0;
+            for (int wi = 0; wi < voxCount; wi++) {
+                if (voxRun[wi] != si) continue;
+                float g = clamp((WS_SEAM_G_ZERO - distance(voxPos[vi], voxPos[wi]))
+                        / (WS_SEAM_G_ZERO - WS_SEAM_G_FULL), 0.0, 1.0);
+                gf = max(gf, g * fadeV[wi]);
+            }
+            if (gf > 0.0) {
+                vec3 c = vs_quatRotateInv(runQ[si], voxPos[vi] - runAnchor[si]) + 0.5;
+                vec3 fr = abs(fract(c) - 0.5);
+                csum += gf * (1.0 - fr.x) * (1.0 - fr.y) * (1.0 - fr.z);
+            }
+        }
+        rv[vi] = 1.0 / (1.0 + csum);
+    }
+
+    // ---- one vanilla field per host lattice, summed -----------------------
+    float total = 0.0;
+    for (int si = 0; si < runCount; si++) {
+        vec4 q = runQ[si];
+        // fragment in this lattice, shifted so VERTICES land on integers
+        // (voxel centers sit at k + 0.5)
+        vec3 fragL = vs_quatRotateInv(q, fragWorldPos - runAnchor[si]) + 0.5;
         vec3 nL = vs_quatRotateInv(q, normal);
 
-        // Dominant slice axis, epsilon-tiebroken so exact ties pick the
-        // earliest axis deterministically instead of flickering on FP noise.
-        // (Known limitation: the pick pops when a ship pitches/rolls through
-        // 45 deg against the face; pure yaw never flips it.)
+        // dominant slice axis, epsilon-tiebroken (deterministic on exact
+        // ties; pops only if a ship pitches/rolls through 45 deg vs the face)
         vec3 absN = abs(nL);
         int a = 0;
         if (absN.y > absN.x + 1e-6) a = 1;
@@ -308,8 +385,8 @@ float ws_seamAoFrag(vec3 fragWorldPos, vec3 normal, int selfShipIndex, out float
         int v = (a + 2) % 3;
         float s = nL[a] >= 0.0 ? 1.0 : -1.0;
 
-        // The unit slab of space directly in FRONT of the face along a, and
-        // the (at most two) voxel bands overlapping it.
+        // the unit slab directly in FRONT of the face along a; the (at most
+        // two) voxel bands overlapping it, weighted by overlap length
         float pa = fragL[a];
         float slabLo = s > 0.0 ? pa : pa - 1.0;
         int b0 = int(floor(slabLo));
@@ -319,63 +396,81 @@ float ws_seamAoFrag(vec3 fragWorldPos, vec3 normal, int selfShipIndex, out float
         int cv = int(floor(fragL[v]));
         vec2 uv = vec2(fragL[u] - float(cu), fragL[v] - float(cv));
 
-        // Occupancy of the 3x3 in-plane cells around the fragment's cell in
-        // the two candidate bands: 18 bits, bit = band*9 + (dv+1)*3 + (du+1).
-        // The window is the exact support of the field, so it doubles as the
-        // spatial cull; the run is consumed to its end either way so the next
-        // ship starts at the right index.
-        int mask = 0;
-        int j = i;
-        while (j < n) {
-            vec4 vox = texelFetch(u_VsShipOccluders, j * 2);
-            if ((floatBitsToInt(vox.w) & 0xFFFF) != shipIdx) break;
-            j++;
-            ivec3 k = ivec3(round(vs_quatRotateInv(q, vox.xyz - anchor.xyz)));
-            int band = k[a] == b0 ? 0 : (k[a] == b0 + 1 ? 1 : -1);
-            if (band < 0) continue;
-            int du = k[u] - cu;
-            int dv = k[v] - cv;
-            if (abs(du) > 1 || abs(dv) > 1) continue;
-            mask |= 1 << (band * 9 + (dv + 1) * 3 + (du + 1));
-        }
-
-        // Intra-ship self-shadow is already baked into the vertex AO.
-        if (shipIdx != selfShipIndex && mask != 0) {
-            vec4 corner = vec4(0.0);
+        // soft occupancy of the 3x3-cells-by-2-bands window in this lattice:
+        // own voxels at their exact cells, foreign voxels tent-spread and
+        // scaled by their claimed share
+        float occ[18];
+        for (int k = 0; k < 18; k++) occ[k] = 0.0;
+        for (int vi = 0; vi < voxCount; vi++) {
+            int owner = voxRun[vi];
+            if (runShip[owner] == selfShipIndex) continue;  // baked already
+            float wgt;
+            if (owner == si) {
+                wgt = rv[vi] * fadeV[vi];
+            } else {
+                float gf = 0.0;
+                for (int wi = 0; wi < voxCount; wi++) {
+                    if (voxRun[wi] != si) continue;
+                    float g = clamp((WS_SEAM_G_ZERO - distance(voxPos[vi], voxPos[wi]))
+                            / (WS_SEAM_G_ZERO - WS_SEAM_G_FULL), 0.0, 1.0);
+                    gf = max(gf, g * fadeV[wi]);
+                }
+                if (gf <= 0.0) continue;
+                vec3 cc = vs_quatRotateInv(q, voxPos[vi] - runAnchor[si]) + 0.5;
+                vec3 fr = abs(fract(cc) - 0.5);
+                wgt = rv[vi] * gf * fadeV[vi]
+                        * (1.0 - fr.x) * (1.0 - fr.y) * (1.0 - fr.z);
+            }
+            if (wgt <= 0.0) continue;
+            vec3 c = vs_quatRotateInv(q, voxPos[vi] - runAnchor[si]) + 0.5;
             for (int b = 0; b < 2; b++) {
-                float w = b == 0 ? w0 : 1.0 - w0;
-                if (w <= 0.0) continue;
-                int m = mask >> (b * 9);
-                float front = float((m >> 4) & 1);          // cell (0,0)
-                for (int ci = 0; ci < 4; ci++) {
-                    int eu = ci & 1;                        // corner (eu, ev)
-                    int ev = ci >> 1;                       // 00, 10, 01, 11
-                    int su = eu == 1 ? 1 : -1;
-                    int sv = ev == 1 ? 1 : -1;
-                    int edgeU = (m >> (4 + su)) & 1;
-                    int edgeV = (m >> (4 + 3 * sv)) & 1;
-                    // L-rule: the diagonal is counted solid whenever both
-                    // edge cells are.
-                    int co = (edgeU & edgeV) != 0 ? 1
-                           : (m >> (4 + su + 3 * sv)) & 1;
-                    corner[ci] += WS_SEAM_STRENGTH
-                            * (float(edgeU + edgeV + co) + front) * w;
+                float ta = max(0.0, 1.0 - abs(c[a] - (float(b0 + b) + 0.5)));
+                if (ta <= 0.0) continue;
+                for (int dv = -1; dv <= 1; dv++) {
+                    float tv = max(0.0, 1.0 - abs(c[v] - (float(cv + dv) + 0.5)));
+                    if (tv <= 0.0) continue;
+                    for (int du = -1; du <= 1; du++) {
+                        float tu = max(0.0, 1.0 - abs(c[u] - (float(cu + du) + 0.5)));
+                        if (tu <= 0.0) continue;
+                        occ[b * 9 + (dv + 1) * 3 + (du + 1)] += wgt * ta * tu * tv;
+                    }
                 }
             }
-            total += ws_seamInterp(corner, uv);
+        }
+        for (int k = 0; k < 18; k++) occ[k] = min(occ[k], 1.0);
+
+        // per corner: 4 quadrant occupancies + the diagonal-pair bonus
+        vec4 corner = vec4(0.0);
+        for (int b = 0; b < 2; b++) {
+            float w = b == 0 ? w0 : 1.0 - w0;
+            if (w <= 0.0) continue;
+            int base = b * 9;
+            for (int ci = 0; ci < 4; ci++) {
+                int du = ci & 1;
+                int dv = ci >> 1;
+                float qA = occ[base + dv * 3 + du];
+                float qB = occ[base + dv * 3 + du + 1];
+                float qC = occ[base + (dv + 1) * 3 + du];
+                float qD = occ[base + (dv + 1) * 3 + du + 1];
+                float bonus = max(0.0, min(qA, qD) - max(qB, qC))
+                            + max(0.0, min(qB, qC) - max(qA, qD));
+                corner[ci] += WS_SEAM_STRENGTH * (qA + qB + qC + qD + bonus) * w;
+            }
+        }
+        total += ws_seamInterp(corner, uv);
 #ifdef VS_DEBUG_SEAM_AO
-            // dots at the 4 sampled ship-lattice corners on this face
+        // dots at the 4 sampled lattice corners of this host on the face
+        if (any(greaterThan(corner, vec4(0.001)))) {
             for (int ci = 0; ci < 4; ci++) {
                 vec3 lp;
                 lp[a] = pa;
                 lp[u] = float(cu + (ci & 1));
                 lp[v] = float(cv + (ci >> 1));
-                vec3 wp = anchor.xyz + ws_seamQuatRotate(q, lp - 0.5);
+                vec3 wp = runAnchor[si] + ws_seamQuatRotate(q, lp - 0.5);
                 if (distance(fragWorldPos, wp) < WS_DBG_VERTEX_RADIUS) dbgVertex = 1.0;
             }
-#endif
         }
-        i = j;
+#endif
     }
     return min(total, WS_SEAM_MAX_TOTAL);
 }
