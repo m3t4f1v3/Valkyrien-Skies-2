@@ -46,6 +46,9 @@ public abstract class MixinDefaultChunkRenderer {
             // (typically nothing on the first ship pass of the frame).
             SodiumCompat.getShipEmitterList().bind(SodiumCompat.SHIP_EMITTER_LIST_TEXTURE_UNIT);
             SodiumCompat.getShipOccluderList().bind(SodiumCompat.SHIP_OCCLUDER_LIST_TEXTURE_UNIT);
+            SodiumCompat.getShipOccluderList().bindHeaders(SodiumCompat.SEAM_RUN_HEADERS_TEXTURE_UNIT);
+            SodiumCompat.getShipOccluderList().bindShipDir(SodiumCompat.SEAM_SHIP_DIR_TEXTURE_UNIT);
+            SodiumCompat.getShipOccluderList().bindGrid(SodiumCompat.SEAM_GRID_TEXTURE_UNIT);
             return;
         }
         // World chunk path: when ship-to-world dynamic lighting is on AND
@@ -67,6 +70,9 @@ public abstract class MixinDefaultChunkRenderer {
             // Per-frame ship occluder voxel list — used by the per-fragment
             // AO loop in the world FSH for rotation-aware shadow shape.
             SodiumCompat.getShipOccluderList().bind(SodiumCompat.SHIP_OCCLUDER_LIST_TEXTURE_UNIT);
+            SodiumCompat.getShipOccluderList().bindHeaders(SodiumCompat.SEAM_RUN_HEADERS_TEXTURE_UNIT);
+            SodiumCompat.getShipOccluderList().bindShipDir(SodiumCompat.SEAM_SHIP_DIR_TEXTURE_UNIT);
+            SodiumCompat.getShipOccluderList().bindGrid(SodiumCompat.SEAM_GRID_TEXTURE_UNIT);
             if (ShipWaterPocketExternalWaterCullRenderContext.isInWorldFluidChunkLayer()) {
                 ShipWaterPocketExternalWaterCull.setupForWorldTranslucentPassProgram(
                     GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM),

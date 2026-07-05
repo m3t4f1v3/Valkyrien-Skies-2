@@ -2,6 +2,8 @@ package org.valkyrienskies.mod.compat.sodium;
 
 import org.joml.Matrix4fc;
 
+import me.jellysquid.mods.sodium.client.gl.shader.uniform.GlUniformFloat3v;
+import me.jellysquid.mods.sodium.client.gl.shader.uniform.GlUniformFloat4v;
 import me.jellysquid.mods.sodium.client.gl.shader.uniform.GlUniformInt;
 import me.jellysquid.mods.sodium.client.gl.shader.uniform.GlUniformMatrix4f;
 import me.jellysquid.mods.sodium.client.render.chunk.shader.ChunkShaderInterface;
@@ -28,7 +30,9 @@ public class ShipThing extends ChunkShaderInterface {
     private final GlUniformMatrix4f uniformLocalToCameraRel;
     // Integer camera origin; same conditions as u_LocalToCameraRel.
     private final GlUniformInt3v uniformRenderOrigin;
-    // World-light buffer textures; only when VS_DYNAMIC_LIGHT.
+    // World light/solid buffer textures. Full light data is only used when
+    // VS_DYNAMIC_LIGHT is enabled, but ship-on-ship AO also reads the solid
+    // bitmap so terrain blocks can participate in ship seam AO.
     private final GlUniformInt uniformLightSections;
     private final GlUniformInt uniformLightLut;
     // World-biome buffer textures; only when VS_DYNAMIC_BIOME.
@@ -44,6 +48,15 @@ public class ShipThing extends ChunkShaderInterface {
     // another ship's surface (and the same ship's own concave geometry).
     private final GlUniformInt uniformShipOccluders;
     private final GlUniformInt uniformShipOccluderCount;
+    // Seam-AO acceleration structures (sub-run headers, ship directory,
+    // global bounds); only when VS_SHIP_ON_SHIP.
+    private final GlUniformInt uniformSeamRuns;
+    private final GlUniformInt uniformSeamRunCount;
+    private final GlUniformInt uniformSeamShipDir;
+    private final GlUniformFloat4v uniformSeamBounds;
+    private final GlUniformInt uniformSeamGrid;
+    private final GlUniformFloat3v uniformSeamGridOrigin;
+    private final GlUniformFloat3v uniformSeamGridInvCell;
     // Per-frame index of the ship currently being rendered. The ship FSH
     // compares each occluder voxel's stored index against this and skips
     // matches — same-ship AO is already baked into v_Color.a, so counting
@@ -68,9 +81,11 @@ public class ShipThing extends ChunkShaderInterface {
                 ? context.bindUniform("u_LocalToCameraRel", GlUniformMatrix4f::new) : null;
         this.uniformRenderOrigin = wantLocalToCamera
                 ? context.bindUniform("u_VsRenderOrigin", GlUniformInt3v::new) : null;
-        this.uniformLightSections = light
+        boolean worldSolidLookup = light || shipOnShip;
+
+        this.uniformLightSections = worldSolidLookup
                 ? context.bindUniform("u_VsLightSections", GlUniformInt::new) : null;
-        this.uniformLightLut = light
+        this.uniformLightLut = worldSolidLookup
                 ? context.bindUniform("u_VsLightLut", GlUniformInt::new) : null;
         this.uniformBiomeSections = biome
                 ? context.bindUniform("u_VsBiomeSections", GlUniformInt::new) : null;
@@ -84,6 +99,20 @@ public class ShipThing extends ChunkShaderInterface {
                 ? context.bindUniform("u_VsShipOccluders", GlUniformInt::new) : null;
         this.uniformShipOccluderCount = shipOnShip
                 ? context.bindUniform("u_VsShipOccluderCount", GlUniformInt::new) : null;
+        this.uniformSeamRuns = shipOnShip
+                ? context.bindUniform("u_VsSeamRuns", GlUniformInt::new) : null;
+        this.uniformSeamRunCount = shipOnShip
+                ? context.bindUniform("u_VsSeamRunCount", GlUniformInt::new) : null;
+        this.uniformSeamShipDir = shipOnShip
+                ? context.bindUniform("u_VsSeamShipDir", GlUniformInt::new) : null;
+        this.uniformSeamBounds = shipOnShip
+                ? context.bindUniform("u_VsSeamBounds", GlUniformFloat4v::new) : null;
+        this.uniformSeamGrid = shipOnShip
+                ? context.bindUniform("u_VsSeamGrid", GlUniformInt::new) : null;
+        this.uniformSeamGridOrigin = shipOnShip
+                ? context.bindUniform("u_VsSeamGridOrigin", GlUniformFloat3v::new) : null;
+        this.uniformSeamGridInvCell = shipOnShip
+                ? context.bindUniform("u_VsSeamGridInvCell", GlUniformFloat3v::new) : null;
         this.uniformCurrentShipIndex = shipOnShip
                 ? context.bindUniform("u_VsCurrentShipIndex", GlUniformInt::new) : null;
     }
@@ -128,5 +157,22 @@ public class ShipThing extends ChunkShaderInterface {
 
     public void setCurrentShipIndex(int idx) {
         if (this.uniformCurrentShipIndex != null) this.uniformCurrentShipIndex.setInt(idx);
+    }
+
+    public void setSeamData(int runsTextureUnit, int runCount, int shipDirTextureUnit,
+            float boundsCx, float boundsCy, float boundsCz, float boundsRadius) {
+        if (this.uniformSeamRuns != null) this.uniformSeamRuns.setInt(runsTextureUnit);
+        if (this.uniformSeamRunCount != null) this.uniformSeamRunCount.setInt(runCount);
+        if (this.uniformSeamShipDir != null) this.uniformSeamShipDir.setInt(shipDirTextureUnit);
+        if (this.uniformSeamBounds != null) {
+            this.uniformSeamBounds.set(new float[] {boundsCx, boundsCy, boundsCz, boundsRadius});
+        }
+    }
+
+    public void setSeamGrid(int gridTextureUnit, float ox, float oy, float oz,
+            float icx, float icy, float icz) {
+        if (this.uniformSeamGrid != null) this.uniformSeamGrid.setInt(gridTextureUnit);
+        if (this.uniformSeamGridOrigin != null) this.uniformSeamGridOrigin.set(ox, oy, oz);
+        if (this.uniformSeamGridInvCell != null) this.uniformSeamGridInvCell.set(icx, icy, icz);
     }
 }

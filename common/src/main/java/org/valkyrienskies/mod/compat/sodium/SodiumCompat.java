@@ -122,6 +122,14 @@ public class SodiumCompat {
      *  the shadow shape follows ship rotation/translation continuously
      *  (cell-storage-based AO can only morph between cell-aligned configs). */
     public static final int SHIP_OCCLUDER_LIST_TEXTURE_UNIT = 21;
+    /** Seam-AO acceleration structures (see VsShipOccluderList.buildSeamData):
+     *  sub-run headers with bounding spheres, and the per-ship directory
+     *  (pose, responsibility r, top-4 cross-ship merge claims). */
+    public static final int SEAM_RUN_HEADERS_TEXTURE_UNIT = 22;
+    public static final int SEAM_SHIP_DIR_TEXTURE_UNIT = 23;
+    /** Coarse spatial grid binning ships to cells, so a fragment scans only
+     *  its own cell's ships in pass 1 (see VsShipOccluderList spatial grid). */
+    public static final int SEAM_GRID_TEXTURE_UNIT = 24;
 
     private static VsShipLightStorage lightStorage;
     private static VsShipBiomeColorStorage biomeStorage;
@@ -181,30 +189,35 @@ public class SodiumCompat {
 
     public static void populateWorldFromShipsForFrame(net.minecraft.client.multiplayer.ClientLevel level,
             Viewport viewport) {
-        if (!VSGameConfig.CLIENT.getDynamicShipToWorldLighting()) return;
         if (level == null) return;
+        final boolean dynamicLight = VSGameConfig.CLIENT.getDynamicShipLighting();
+        final boolean dynamicBiome = VSGameConfig.CLIENT.getDynamicShipBiomeTinting();
+        final boolean dynamicShipToWorld = VSGameConfig.CLIENT.getDynamicShipToWorldLighting();
+        final boolean betterVanillaShipShading = VSGameConfig.CLIENT.getBetterVanillaShipShading();
+        if (!dynamicLight && !dynamicBiome && !dynamicShipToWorld && !betterVanillaShipShading) return;
+
         VsWorldFromShipLightStorage storage = getWorldFromShipStorage();
         VsShipEmitterList emitters = getShipEmitterList();
         VsShipOccluderList occluders = getShipOccluderList();
-        storage.beginFrame();
-        emitters.beginFrame();
-        occluders.beginFrame();
+
+        if (storage != null) storage.beginFrame();
+        if (emitters != null) emitters.beginFrame();
+        if (occluders != null) occluders.beginFrame();
         org.valkyrienskies.mod.common.VSGameUtilsKt.getShipObjectWorld(
                 net.minecraft.client.Minecraft.getInstance()).getLoadedShips().forEach(ship -> {
             ClientShip cs = (ClientShip) ship;
             if (!isShipRelevantToWorldFromShipFrame(cs, viewport)) return;
             storage.populateFromShip(level, cs, emitters, occluders);
         });
-        storage.pruneUnused();
-        // Mark occluders that have any nearby seam candidate, and reorder the
-        // array so they survive the per-vertex shader loop's cap in dense
-        // scenes. The shader itself does an exact geometric vertex-pair
-        // match per candidate (vs_seamAoCorrection) — this is only a coarse
-        // prefilter, not a correctness requirement.
-        occluders.computeSeamCandidateFlags(level);
-        storage.upload();
-        emitters.upload();
-        occluders.upload();
+        if (storage != null) storage.pruneUnused();
+        // Build the seam-AO acceleration data: sub-run headers, the
+        // per-ship directory (pose + cross-ship merge claims), and the
+        // global bounds. One O(N) scan + O(ships²) pairs, replacing the old
+        // O(N²) candidate-flag scan.
+        if (occluders != null) occluders.buildSeamData();
+        if (storage != null) storage.upload();
+        if (emitters != null) emitters.upload();
+        if (occluders != null) occluders.upload();
     }
 
     private static boolean isShipRelevantToWorldFromShipFrame(ClientShip ship, Viewport viewport) {
@@ -250,7 +263,9 @@ public class SodiumCompat {
         if (VSGameConfig.CLIENT.getDynamicShipBiomeTinting()) bits |= FEATURE_BIOME;
         if (VSGameConfig.CLIENT.getDynamicShipLighting()) bits |= FEATURE_LIGHT;
         if (VSGameConfig.CLIENT.getBetterVanillaShipShading()) bits |= FEATURE_SHADE;
-        if (VSGameConfig.CLIENT.getDynamicShipToWorldLighting()) bits |= FEATURE_SHIP_ON_SHIP;
+        if (VSGameConfig.CLIENT.getDynamicShipLighting()
+            || VSGameConfig.CLIENT.getBetterVanillaShipShading()
+            || VSGameConfig.CLIENT.getDynamicShipToWorldLighting()) bits |= FEATURE_SHIP_ON_SHIP;
         return bits;
     }
 
@@ -289,6 +304,14 @@ public class SodiumCompat {
         shipInterface.setBiomeLutSampler(BIOME_LUT_TEXTURE_UNIT);
         shipInterface.setShipEmitters(SHIP_EMITTER_LIST_TEXTURE_UNIT, getShipEmitterList().size());
         shipInterface.setShipOccluders(SHIP_OCCLUDER_LIST_TEXTURE_UNIT, getShipOccluderList().size());
+        shipInterface.setSeamData(SEAM_RUN_HEADERS_TEXTURE_UNIT, getShipOccluderList().headerCount(),
+                SEAM_SHIP_DIR_TEXTURE_UNIT,
+                getShipOccluderList().boundsCenterX(), getShipOccluderList().boundsCenterY(),
+                getShipOccluderList().boundsCenterZ(), getShipOccluderList().boundsRadius());
+        shipInterface.setSeamGrid(SEAM_GRID_TEXTURE_UNIT,
+                getShipOccluderList().gridOriginX(), getShipOccluderList().gridOriginY(),
+                getShipOccluderList().gridOriginZ(), getShipOccluderList().gridInvCellX(),
+                getShipOccluderList().gridInvCellY(), getShipOccluderList().gridInvCellZ());
         // Tell the ship FSH which ship we're currently drawing so
         // vs_sosShipAo can skip its own ship's voxels (whose AO is
         // already in v_Color.a). Look up the per-frame index assigned by
@@ -367,16 +390,16 @@ public class SodiumCompat {
             pass, matrices, x, y, z
         ));
 
-        // Refresh the world-light + biome-color buffers for any sections occupied
-        // by the ships we are about to render. Each storage is gated by its own
-        // config — when a feature is disabled, we skip the per-frame work AND
-        // the shader was compiled without the corresponding `#define`, so it
-        // never samples the buffer either.
+        // Refresh the world-light/solid + biome-color buffers for any sections
+        // occupied by the ships we are about to render. Ship-on-ship AO needs
+        // the solid bitmap too, so it requests this storage even when the full
+        // dynamic ship-light feature is disabled.
         final ClientLevel level = net.minecraft.client.Minecraft.getInstance().level;
         final boolean dynamicLight = VSGameConfig.CLIENT.getDynamicShipLighting();
         final boolean dynamicBiome = VSGameConfig.CLIENT.getDynamicShipBiomeTinting();
         final boolean dynamicShipToWorld = VSGameConfig.CLIENT.getDynamicShipToWorldLighting();
-        final VsShipLightStorage storage = dynamicLight ? getLightStorage() : null;
+        final boolean needsWorldSolids = dynamicLight || dynamicShipToWorld;
+        final VsShipLightStorage storage = needsWorldSolids ? getLightStorage() : null;
         final VsShipBiomeColorStorage biomeStorageLocal = dynamicBiome ? getBiomeStorage() : null;
         final ArrayList<ClientShip> renderableShips = new ArrayList<>();
         final ArrayList<SortedRenderLists> renderableRenderLists = new ArrayList<>();
@@ -586,6 +609,14 @@ public class SodiumCompat {
                 (float) (cameraPos.z - oz));
         wt.setShipEmitters(SHIP_EMITTER_LIST_TEXTURE_UNIT, getShipEmitterList().size());
         wt.setShipOccluders(SHIP_OCCLUDER_LIST_TEXTURE_UNIT, getShipOccluderList().size());
+        wt.setSeamData(SEAM_RUN_HEADERS_TEXTURE_UNIT, getShipOccluderList().headerCount(),
+                SEAM_SHIP_DIR_TEXTURE_UNIT,
+                getShipOccluderList().boundsCenterX(), getShipOccluderList().boundsCenterY(),
+                getShipOccluderList().boundsCenterZ(), getShipOccluderList().boundsRadius());
+        wt.setSeamGrid(SEAM_GRID_TEXTURE_UNIT,
+                getShipOccluderList().gridOriginX(), getShipOccluderList().gridOriginY(),
+                getShipOccluderList().gridOriginZ(), getShipOccluderList().gridInvCellX(),
+                getShipOccluderList().gridInvCellY(), getShipOccluderList().gridInvCellZ());
     }
 
     private static GlProgram<WorldThing> createWorldShader(String path, ChunkShaderOptions options) {
