@@ -4,6 +4,8 @@
 #define VS_DYNAMIC_BIOME
 #define VS_DYNAMIC_SHADE
 #define VS_SHIP_ON_SHIP
+#define VS_SHIP_ON_SHIP_AO
+#define VS_WORLD_SEAM_AO
 
 
 // --- stub for sodium:include/fog.glsl ---
@@ -54,6 +56,7 @@ uniform ivec3 u_VsRenderOrigin;
 uniform samplerBuffer u_VsShipEmitters;
 uniform int u_VsShipEmitterCount;
 
+#ifdef VS_WORLD_SEAM_AO
 // Per-frame list of solid ship voxel CENTERS in world space, paired with the
 // voxel's owning-ship rotation quaternion (see VsShipOccluderList). Consumed
 // PER-FRAGMENT by ws_seamAoFrag below for ship-to-world AO seam matching.
@@ -70,6 +73,7 @@ uniform vec4 u_VsSeamBounds;
 uniform samplerBuffer u_VsSeamGrid;
 uniform vec3 u_VsSeamGridOrigin;
 uniform vec3 u_VsSeamGridInvCell;
+#endif
 
 // External-world fluid culling for ship air pockets. These uniforms are populated by
 // ShipWaterPocketExternalWaterCull when this shader is used for Sodium's translucent fluid pass.
@@ -244,7 +248,11 @@ float vs_shipEmitterLight(vec3 worldPos) {
     return maxLight;
 }
 
+#ifdef VS_WORLD_SEAM_AO
 // ===== Ship-to-world AO (PER-FRAGMENT, occluder-lattice, cross-ship merge) ==========
+// Gated by the shipToWorldAmbientOcclusion config (VS_WORLD_SEAM_AO). When off,
+// this whole pass + its seam/occluder uniforms are compiled out so the ground
+// keeps only vanilla AO (ship-emitter world lighting is unaffected).
 // Vanilla AO evaluated in occluder-SHIP lattices, sliced by this face, per
 // fragment -- with CROSS-SHIP MERGING. The CPU precomputes sub-run bounding
 // spheres plus a per-ship directory (pose, material responsibility r, top-4
@@ -571,6 +579,7 @@ float ws_seamAoFrag(vec3 fragWorldPos, vec3 normal, int selfShipIndex, out float
     }
     return min(total, WS_SEAM_MAX_TOTAL);
 }
+#endif // VS_WORLD_SEAM_AO
 
 void main() {
     vec4 diffuseColor = texture(u_BlockTex, v_TexCoord, v_MaterialMipBias);
@@ -615,9 +624,13 @@ void main() {
     float dbgSeamVertex = 0.0;
     if (v_IsShaded == 1) {
         float seamVertex = 0.0;
+#ifdef VS_WORLD_SEAM_AO
+        // Ship-to-world seam AO (gated). The vanilla directional shade below is
+        // NOT gated — it reproduces sodium's stock world-block shading.
         float seamLoss = ws_seamAoFrag(worldPos, v_WorldNormal, -1, seamVertex);
         ao = max(0.2, ao - seamLoss);
         dbgSeamVertex = seamVertex;
+#endif
         float shade = 1.0;
         if (v_WorldNormal.y < -0.5)       shade = 0.5; // DOWN
         else if (abs(v_WorldNormal.y) > 0.5) shade = 1.0; // UP

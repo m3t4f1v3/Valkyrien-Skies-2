@@ -4,6 +4,8 @@
 #define VS_DYNAMIC_BIOME
 #define VS_DYNAMIC_SHADE
 #define VS_SHIP_ON_SHIP
+#define VS_SHIP_ON_SHIP_AO
+#define VS_WORLD_SEAM_AO
 
 
 // --- stub for sodium:include/fog.glsl ---
@@ -62,6 +64,7 @@ uniform usamplerBuffer u_VsLightLut;
 // the hull.
 uniform samplerBuffer u_VsShipEmitters;
 uniform int u_VsShipEmitterCount;
+#ifdef VS_SHIP_ON_SHIP_AO
 // Per-frame list of solid ship voxel CENTERS in world space, paired with the
 // voxel's owning-ship rotation quaternion (see VsShipOccluderList). Consumed
 // PER-FRAGMENT by vs_seamAoFrag below for ship-on-ship AO seam matching.
@@ -78,14 +81,17 @@ uniform vec4 u_VsSeamBounds;
 uniform samplerBuffer u_VsSeamGrid;
 uniform vec3 u_VsSeamGridOrigin;
 uniform vec3 u_VsSeamGridInvCell;
+#endif
 // Ship-to-world matrix of the ship being rendered; mat3() lifts this quad's
 // shipyard-space half-steps and face corners into world space for the seam
 // match ("<0.5,0>*ship mat, <0,0.5>*ship mat").
 uniform mat4 u_TransformMatrix;
+#ifdef VS_SHIP_ON_SHIP_AO
 // Dense per-frame index of the ship being rendered; occluder voxels carrying
 // this index are skipped (same-ship AO is already baked into v_Color.a, so
 // counting it again would double-darken).
 uniform int u_VsCurrentShipIndex;
+#endif
 #endif
 
 out vec4 fragColor;
@@ -368,7 +374,11 @@ float vs_sosEmitterLight(vec3 worldPos) {
     return maxLight;
 }
 
+#ifdef VS_SHIP_ON_SHIP_AO
 // ===== Ship-on-ship AO (PER-FRAGMENT, occluder-lattice, cross-ship merge) ==========
+// Gated by the shipToShipAmbientOcclusion config (VS_SHIP_ON_SHIP_AO). When
+// off, this whole pass + its seam/occluder uniforms are compiled out so ship
+// faces keep only their shipyard-baked AO.
 // Vanilla AO evaluated in occluder-SHIP lattices, sliced by this face, per
 // fragment -- with CROSS-SHIP MERGING. The CPU precomputes sub-run bounding
 // spheres plus a per-ship directory (pose, material responsibility r, top-4
@@ -757,6 +767,7 @@ float vs_seamAoFrag(vec3 fragShipyardPos, vec3 fragWorldPos, vec3 shipyardNormal
     }
     return min(total, VS_SEAM_MAX_TOTAL);
 }
+#endif // VS_SHIP_ON_SHIP_AO
 
 #endif // VS_SHIP_ON_SHIP
 
@@ -878,6 +889,7 @@ void main() {
         if (sosLight > 0.0) {
             lightCoord.x = max(lightCoord.x, (sosLight + 0.5) / 16.0);
         }
+#ifdef VS_SHIP_ON_SHIP_AO
         if (isShade) {
             float seamVertex = 0.0;
             float seamLoss = vs_seamAoFrag(v_ShipyardPos, sosWorldPos, v_ShipyardNormal,
@@ -885,6 +897,7 @@ void main() {
             aoMultiplier = max(0.2, aoMultiplier - seamLoss);
             dbgSeamVertex = seamVertex;
         }
+#endif
     }
 #endif
 
