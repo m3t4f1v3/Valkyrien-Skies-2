@@ -4,11 +4,8 @@
 #import <sodium:include/chunk_vertex.glsl>
 #import <sodium:include/chunk_matrices.glsl>
 #import <sodium:include/chunk_material.glsl>
-uniform mat4 u_RotationMatrix;
-
 out vec4 v_Color;
 out vec2 v_TexCoord;
-out mat4 v_RotationMatrix;
 
 out float v_MaterialMipBias;
 #ifdef USE_FRAGMENT_DISCARD
@@ -56,7 +53,6 @@ void main() {
     v_TexCoord = _vert_tex_diffuse_coord;
 
     v_MaterialMipBias = _material_mip_bias(_material_params);
-    v_RotationMatrix = u_RotationMatrix;
 #ifdef USE_FRAGMENT_DISCARD
     v_MaterialAlphaCutoff = _material_alpha_cutoff(_material_params);
 #endif

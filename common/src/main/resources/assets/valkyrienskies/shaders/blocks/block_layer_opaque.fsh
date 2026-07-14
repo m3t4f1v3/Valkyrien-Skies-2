@@ -9,7 +9,8 @@ in float v_FragDistance; // The fragment's distance from the camera
 in float v_MaterialMipBias;
 in float v_MaterialAlphaCutoff;
 in vec3 v_WorldPos;
-in mat4 v_RotationMatrix;
+
+uniform mat4 u_RotationMatrix; // Constant for the whole draw call; read directly instead of interpolating a varying
 
 uniform sampler2D u_BlockTex; // The block texture
 
@@ -63,15 +64,17 @@ void main() {
     float dy2  = dot(fdy, fdy);
 
     float denom = dx2 * dy2 + 1e-20;
-    float quality = len2 / denom;
 
     // rawN = nan -> rawN != rawN
-    if (quality < 5e-4 || !all(equal(rawN, rawN))) {
+    // (quality < 5e-4) rearranged to avoid a division, since denom is always > 0
+    if (len2 < 5e-4 * denom || !all(equal(rawN, rawN))) {
         // Apply ambient occlusion "shade"
         diffuseColor.rgb *= v_Color.a;
     } else {
-        vec3 n = normalize(rawN);
-        n = (v_RotationMatrix * vec4(n, 0.0)).xyz;
+        // vanillaShadeFromNormal only depends on the direction of n, not its magnitude
+        // (scaling n by any positive constant leaves the shade unchanged), so we can feed
+        // it the un-normalized, rotated normal directly and skip the normalize() entirely.
+        vec3 n = mat3(u_RotationMatrix) * rawN;
 
         float shade = vanillaShadeFromNormal(n);
         diffuseColor.rgb *= shade;
