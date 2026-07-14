@@ -65,9 +65,14 @@ void main() {
 
     float denom = dx2 * dy2 + 1e-20;
 
-    // rawN = nan -> rawN != rawN
-    // (quality < 5e-4) rearranged to avoid a division, since denom is always > 0
-    if (len2 < 5e-4 * denom || !all(equal(rawN, rawN))) {
+    // Merge branch: pick the baked AO when the reconstructed normal is unreliable
+    // (near-degenerate quad), otherwise apply the reconstructed directional shade.
+    //   - quality = len2 / denom < 5e-4  is rearranged to  len2 < 5e-4 * denom
+    //     (denom is always > 0) to avoid a per-fragment division.
+    //   - The flipped comparison also subsumes the old NaN guard: if rawN is NaN then
+    //     len2 is NaN, and (NaN >= x) is false in GLSL, so !(len2 >= ...) is true and we
+    //     fall back to AO exactly as the explicit !all(equal(rawN, rawN)) test used to.
+    if (!(len2 >= 5e-4 * denom)) {
         // Apply ambient occlusion "shade"
         diffuseColor.rgb *= v_Color.a;
     } else {
