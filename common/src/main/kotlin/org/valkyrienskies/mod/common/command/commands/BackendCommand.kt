@@ -63,19 +63,6 @@ object BackendCommand {
 
                         1
                     }
-                ).then(literal("jolt")
-                    .executes {
-                        VSCoreConfig.SERVER.physics.physicsBackend = ConfigPhysicsBackendType.KRUNCH_JOLT
-                        (VSConfigUpdater.forgeConfigValuesMap.get("physicsBackend") as ForgeConfigSpec.ConfigValue<String>).set(ConfigPhysicsBackendType.KRUNCH_JOLT.name)
-
-                        it.source.sendSuccess(
-                            {
-                                translatable(BACKEND_SET_MESSAGE, VSCoreConfig.SERVER.physics.physicsBackend.name)
-                            }, true
-                        )
-
-                        1
-                    }
                 ).executes {
                     it.source.sendSuccess(
                         {

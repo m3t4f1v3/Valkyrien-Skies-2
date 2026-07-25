@@ -244,6 +244,7 @@ public final class ShipPocketWorldWaterOccluder {
                     final float wx0 = (float) x;
                     final float wy0 = (float) y;
                     final float wz0 = (float) z;
+                    final float wy1 = wy0 + 1.0f;
                     final float wx1 = wx0 + 1.0f;
                     final float wz1 = wz0 + 1.0f;
 
@@ -261,45 +262,45 @@ public final class ShipPocketWorldWaterOccluder {
                     // bb.vertex(wx1, wy1, wz0).color(dr, dg, db, da).endVertex();
                     // bb.vertex(wx1, wy0, wz0).color(dr, dg, db, da).endVertex();
                     // -Y face
-                    bb.vertex(wx0, wy0, wz0)
-                        .color(dr, dg, db, da)
-                        .uv(0.0f, 0.0f)
-                        .uv2(LightTexture.FULL_BRIGHT)
-                        .normal(0.0f, 1.0f, 0.0f)
-                        .endVertex();
-                    bb.vertex(wx0, wy0, wz1)
-                        .color(dr, dg, db, da)
-                        .uv(0.0f, 0.0f)
-                        .uv2(LightTexture.FULL_BRIGHT)
-                        .normal(0.0f, 1.0f, 0.0f)
-                        .endVertex();
-                    bb.vertex(wx1, wy0, wz1)
-                        .color(dr, dg, db, da)
-                        .uv(0.0f, 0.0f)
-                        .uv2(LightTexture.FULL_BRIGHT)
-                        .normal(0.0f, 1.0f, 0.0f)
-                        .endVertex();
-                    bb.vertex(wx1, wy0, wz0)
-                        .color(dr, dg, db, da)
-                        .uv(0.0f, 0.0f)
-                        .uv2(LightTexture.FULL_BRIGHT)
-                        .normal(0.0f, 1.0f, 0.0f)
-                        .endVertex();
-                    // // +Y face
-                    // bb.vertex(wx0, wy1, wz0).color(dr, dg, db, da).endVertex();
-                    // bb.vertex(wx1, wy1, wz0).color(dr, dg, db, da).endVertex();
-                    // bb.vertex(wx1, wy1, wz1).color(dr, dg, db, da).endVertex();
-                    // bb.vertex(wx0, wy1, wz1).color(dr, dg, db, da).endVertex();
-                    // // -Z face
-                    // bb.vertex(wx0, wy0, wz0).color(dr, dg, db, da).endVertex();
-                    // bb.vertex(wx1, wy0, wz0).color(dr, dg, db, da).endVertex();
-                    // bb.vertex(wx1, wy1, wz0).color(dr, dg, db, da).endVertex();
-                    // bb.vertex(wx0, wy1, wz0).color(dr, dg, db, da).endVertex();
-                    // // +Z face
-                    // bb.vertex(wx0, wy0, wz1).color(dr, dg, db, da).endVertex();
-                    // bb.vertex(wx0, wy1, wz1).color(dr, dg, db, da).endVertex();
-                    // bb.vertex(wx1, wy1, wz1).color(dr, dg, db, da).endVertex();
-                    // bb.vertex(wx1, wy0, wz1).color(dr, dg, db, da).endVertex();
+//                    bb.vertex(wx0, wy0, wz0)
+//                        .color(dr, dg, db, da)
+//                        .uv(0.0f, 0.0f)
+//                        .uv2(LightTexture.FULL_BRIGHT)
+//                        .normal(0.0f, 1.0f, 0.0f)
+//                        .endVertex();
+//                    bb.vertex(wx0, wy0, wz1)
+//                        .color(dr, dg, db, da)
+//                        .uv(0.0f, 0.0f)
+//                        .uv2(LightTexture.FULL_BRIGHT)
+//                        .normal(0.0f, 1.0f, 0.0f)
+//                        .endVertex();
+//                    bb.vertex(wx1, wy0, wz1)
+//                        .color(dr, dg, db, da)
+//                        .uv(0.0f, 0.0f)
+//                        .uv2(LightTexture.FULL_BRIGHT)
+//                        .normal(0.0f, 1.0f, 0.0f)
+//                        .endVertex();
+//                    bb.vertex(wx1, wy0, wz0)
+//                        .color(dr, dg, db, da)
+//                        .uv(0.0f, 0.0f)
+//                        .uv2(LightTexture.FULL_BRIGHT)
+//                        .normal(0.0f, 1.0f, 0.0f)
+//                        .endVertex();
+                     // +Y face
+                     bb.vertex(wx0, wy1, wz0).color(dr, dg, db, da).uv(0.0f, 0.0f).uv2(LightTexture.FULL_BRIGHT).normal(0.0f, 1.0f, 0.0f).endVertex();
+                     bb.vertex(wx1, wy1, wz0).color(dr, dg, db, da).uv(1.0f, 0.0f).uv2(LightTexture.FULL_BRIGHT).normal(0.0f, 1.0f, 0.0f).endVertex();
+                     bb.vertex(wx1, wy1, wz1).color(dr, dg, db, da).uv(1.0f, 1.0f).uv2(LightTexture.FULL_BRIGHT).normal(0.0f, 1.0f, 0.0f).endVertex();
+                     bb.vertex(wx0, wy1, wz1).color(dr, dg, db, da).uv(0.0f, 1.0f).uv2(LightTexture.FULL_BRIGHT).normal(0.0f, 1.0f, 0.0f).endVertex();
+                     // -Z face
+//                     bb.vertex(wx0, wy0, wz0).color(dr, dg, db, da).endVertex();
+//                     bb.vertex(wx1, wy0, wz0).color(dr, dg, db, da).endVertex();
+//                     bb.vertex(wx1, wy1, wz0).color(dr, dg, db, da).endVertex();
+//                     bb.vertex(wx0, wy1, wz0).color(dr, dg, db, da).endVertex();
+//                     // +Z face
+//                     bb.vertex(wx0, wy0, wz1).color(dr, dg, db, da).endVertex();
+//                     bb.vertex(wx0, wy1, wz1).color(dr, dg, db, da).endVertex();
+//                     bb.vertex(wx1, wy1, wz1).color(dr, dg, db, da).endVertex();
+//                     bb.vertex(wx1, wy0, wz1).color(dr, dg, db, da).endVertex();
 
                     vertCount += 4;
                 }
