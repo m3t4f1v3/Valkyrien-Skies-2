@@ -24,7 +24,6 @@
     "world.level.block.FireMixin"
   ],
   "client": [
-    "compat.replay.MixinFFmpegWriter",
     "client.render.MixinLevelRenderer",
     "client.render.MixinScreenEffectRenderer",
     "compat.connectiblechains.client.MixinChainKnotEntityRenderer",
@@ -34,6 +33,7 @@
     "compat.create.client.MixinCullingBlockEntityIterator",
     "compat.create.client.MixinSuperGlueSelectionHandler",
     "compat.emf.MixinEMFAnimationEntityContext",
+    "compat.replay.MixinEntityRendererHandler",
     "compat.sodium.MixinBlockRenderer",
     "compat.sodium.MixinFluidRenderer",
     "compat.sodium.MixinSodiumWorldRenderer",
