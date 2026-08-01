@@ -115,6 +115,10 @@ dependencies {
     // Hexcasting
     modCompileOnly("at.petra-k.hexcasting:hexcasting-fabric-${minecraft_version}:${hexcasting_version}") { transitive = false }
 
+    // ReplayMod
+    modCompileOnly("maven.modrinth:replaymod:1.20.1-2.6.23")
+    modRuntimeOnly("maven.modrinth:replaymod:1.20.1-2.6.23")
+
     // HexTweaks
     modCompileOnly("maven.modrinth:hextweaks:$hextweaks_version")
 

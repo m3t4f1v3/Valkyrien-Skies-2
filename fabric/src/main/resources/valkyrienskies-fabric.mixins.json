@@ -24,6 +24,7 @@
     "world.level.block.FireMixin"
   ],
   "client": [
+    "compat.replay.MixinFFmpegWriter",
     "client.render.MixinLevelRenderer",
     "client.render.MixinScreenEffectRenderer",
     "compat.connectiblechains.client.MixinChainKnotEntityRenderer",
