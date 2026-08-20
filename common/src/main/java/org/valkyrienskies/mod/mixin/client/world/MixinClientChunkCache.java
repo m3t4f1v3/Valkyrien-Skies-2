@@ -46,7 +46,7 @@ import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.config.VSGameConfig;
 import org.valkyrienskies.mod.common.render.light.VsDynamicLight;
 import org.valkyrienskies.mod.compat.VSRenderer;
-import org.valkyrienskies.mod.compat.sodium.SodiumCompat;
+import org.valkyrienskies.mod.compat.SodiumDispatch;
 import org.valkyrienskies.mod.mixin.ValkyrienCommonMixinConfigPlugin;
 import org.valkyrienskies.mod.mixin.accessors.client.multiplayer.ClientLevelAccessor;
 import org.valkyrienskies.mod.mixin.accessors.client.render.LevelRendererAccessor;
@@ -216,10 +216,10 @@ public abstract class MixinClientChunkCache implements ClientChunkCacheDuck {
         this.level.onChunkLoaded(pos);
         if (ValkyrienCommonMixinConfigPlugin.getVSRenderer() == VSRenderer.SODIUM) {
             // getVSRenderer() only returns SODIUM if the mod is installed.
-            // Methods of SodiumCompat check if Sodium is present but calling them
+            // Methods of SodiumDispatch check if Sodium is present but calling them
             // is not safe anyway as the class references Sodium classes so the game
             // crashes with NoClassDefFoundError.
-            SodiumCompat.onChunkAdded(this.level, x, z);
+            SodiumDispatch.onChunkAdded(this.level, x, z);
         }
         cir.setReturnValue(worldChunk);
     }
@@ -326,7 +326,7 @@ public abstract class MixinClientChunkCache implements ClientChunkCacheDuck {
             ((IVSViewAreaMethods) ((LevelRendererAccessor) ((ClientLevelAccessor) level).getLevelRenderer()).getViewArea())
                 .unloadChunk(chunkX, chunkZ);
         } else {
-            SodiumCompat.onChunkRemoved(this.level, chunkX, chunkZ);
+            SodiumDispatch.onChunkRemoved(this.level, chunkX, chunkZ);
         }
         return chunk;
     }

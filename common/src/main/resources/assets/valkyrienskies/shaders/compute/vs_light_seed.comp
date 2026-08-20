@@ -1,0 +1,61 @@
+#version 430
+
+// Seeds the world flood from a ship's EXIT CELLS: the cells of open air, just outside its hull, that
+// the ship's own light reached.
+//
+// The ship's light was flooded in shipyard space (VsShipVoxelCache.buildExitSurface), where the hull
+// is exactly one block per cell and an opening is exactly one cell wide. By the time a value arrives
+// here it has already been through the hull correctly, so this pass never needs to know the ship's
+// shape -- it only has to place light at the right world position.
+//
+// That is what replaces the old machinery. Seeding from EMITTERS meant the hull had to be resampled
+// into the world grid so the flood could be stopped by it, and resampling a rotated lattice is neither
+// one-to-one nor stable: it sealed real openings, punched holes in solid hull, and flipped cells in
+// whole steps as a ship drifted. A sealed hull now produces no exit cells at all and so cannot light
+// the world at any angle, with no gather pass, no owner test and no hand-off to arrange it.
+
+layout(local_size_x = 256) in;
+
+#include "vs_light_common.glsl"
+
+uniform mat3 u_Rot;
+uniform vec3 u_PosRel;
+uniform ivec3 u_RenderOrigin;
+uniform int u_FirstVoxel;
+uniform int u_VoxelCount;
+
+// Seeds carry sub-cell position: full strength minus the distance from the exit cell's true world
+// position to the cell centre being written, in 16ths of a level. Whole-level seeds made a cell flip
+// between full brightness and nothing at an arbitrary sub-block moment, and the flood carried that
+// jump outward as visible popping.
+void vs_seed(ivec3 cellRel, uint value) {
+    int vi = vs_voxelIndexAt(cellRel + u_RenderOrigin);
+    if (vi < 0) return;
+    atomicMax(vs_lightSrc[vi], value);
+}
+
+void main() {
+    uint gid = gl_GlobalInvocationID.x;
+    if (gid >= uint(u_VoxelCount)) return;
+
+    uvec2 entry = vs_voxels[uint(u_FirstVoxel) + gid];
+    uint light = (entry.y >> 16u) & 0xFFu;
+    if (light == 0u) return;
+
+    // Stored in expanded-box coordinates so they stay unsigned; an exit cell can sit one outside the
+    // ship's AABB. Subtract the 1 back out to get the shipyard offset the transform expects.
+    vec3 delta = vec3(float(entry.x & 0xFFFFu), float(entry.x >> 16u), float(entry.y & 0xFFFFu)) - 1.0;
+    vec3 centre = u_Rot * delta + u_PosRel;
+
+    vec3 corner = centre - 0.5;
+    ivec3 base = ivec3(floor(corner));
+
+    for (int c = 0; c < 8; c++) {
+        ivec3 cell = base + ivec3(c & 1, (c >> 1) & 1, (c >> 2) & 1);
+        vec3 toCentre = abs(centre - (vec3(cell) + 0.5));
+        float d = toCentre.x + toCentre.y + toCentre.z;
+        float value = float(light * VS_LIGHT_SCALE) - d * float(VS_LIGHT_SCALE);
+        if (value <= 0.0) continue;
+        vs_seed(cell, uint(round(value)));
+    }
+}

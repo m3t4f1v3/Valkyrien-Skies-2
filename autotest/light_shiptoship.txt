@@ -1,0 +1,52 @@
+# Ship-to-ship lighting: does one ship's light land correctly on ANOTHER ship?
+#
+# The receiver is a separate ship (a bare stone plate, no emitter of its own), because light reaching a
+# ship's own blocks goes through the self-lighting path; only light from elsewhere exercises the
+# ship-on-ship path under test. The emitter ship hovers above it, and every case is shot with the hull
+# sealed and open so the difference isolates what actually crossed between the two ships.
+#
+# Both ships sit well ABOVE the superflat surface. At y=-62 the plate was buried inside the terrain and
+# invisible, and the lit surface in frame was world ground -- which measures ship-to-WORLD light, the
+# thing this test is supposed to be distinguishing itself from.
+world autotest
+wait-level
+wait 80
+hud off
+cmd gamemode spectator
+cmd time set midnight
+cmd gamerule doDaylightCycle false
+cmd gamerule doMobSpawning false
+cmd kill @e[type=!player]
+wait 20
+
+run plate_ship 0 -40 0 8
+wait 80
+run light_ship 0 -35 0 minecraft:glowstone
+wait 120
+cmd tp @s 0 -30 -20 0 22
+wait 80
+
+run hull closed
+wait 60
+screenshot sts_rot0_closed
+run hull open
+wait 60
+screenshot sts_rot0_open
+
+run rotate_ship 45 0 0
+wait 120
+run ship_light_info
+screenshot sts_rot45_open
+run hull closed
+wait 60
+screenshot sts_rot45_closed
+
+run rotate_ship 30 25 15
+wait 120
+run hull open
+wait 60
+screenshot sts_rot3d_open
+run hull closed
+wait 60
+screenshot sts_rot3d_closed
+quit

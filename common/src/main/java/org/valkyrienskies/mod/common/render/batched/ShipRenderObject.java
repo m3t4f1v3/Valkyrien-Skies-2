@@ -13,7 +13,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 import org.valkyrienskies.core.api.ships.ClientShip;
-import org.valkyrienskies.mod.compat.sodium.light.VsShipEmitterList;
+import org.valkyrienskies.mod.compat.sodium.shader.VsShipEmitterList;
 
 public final class ShipRenderObject implements AutoCloseable {
 

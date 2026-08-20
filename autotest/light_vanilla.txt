@@ -1,0 +1,27 @@
+# Does ship light match VANILLA light? A world glowstone is placed at the same height as the ship's,
+# far enough apart that the two pools do not overlap. Paint mode 2 draws vanilla's own lightmap in RED
+# and the ship flood in GREEN, so the two fields can be compared directly: same shape and same extent
+# means the ship pipeline really is vanilla's, which is the specification.
+world autotest
+wait-level
+wait 80
+hud off
+cmd gamemode creative
+cmd time set midnight
+cmd gamerule doDaylightCycle false
+cmd kill @e[type=!player]
+wait 20
+
+run light_ship -14 -56 0 minecraft:glowstone
+wait 100
+run hull open
+wait 60
+
+# vanilla reference: a bare glowstone in the world, same height, 28 blocks away
+cmd setblock 14 -56 0 minecraft:glowstone
+wait 60
+
+cmd tp @s 0 -58 -26 0 20
+wait 100
+screenshot vanilla_vs_ship
+quit

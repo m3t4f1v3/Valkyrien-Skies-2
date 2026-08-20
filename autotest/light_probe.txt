@@ -1,0 +1,22 @@
+# Does vanilla's light engine flood light inside a ship's shipyard volume, on the client?
+# Everything in the refactor rests on this. Probed sealed, then open, so the aperture shows up as light
+# escaping downward through the hull floor in the ship's OWN grid.
+world autotest
+wait-level
+wait 80
+cmd gamemode creative
+cmd time set midnight
+cmd gamerule doDaylightCycle false
+cmd kill @e[type=!player]
+wait 20
+run light_ship 0 -56 0 minecraft:glowstone
+wait 100
+log ---- SEALED ----
+run hull closed
+wait 60
+run light_probe
+log ---- OPEN ----
+run hull open
+wait 60
+run light_probe
+quit

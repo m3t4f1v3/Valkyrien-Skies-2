@@ -9,6 +9,8 @@ import org.apache.maven.artifact.versioning.DefaultArtifactVersion;
 import org.objectweb.asm.tree.ClassNode;
 import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
 import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
+import org.valkyrienskies.mod.compat.SodiumGeneration;
+import org.valkyrienskies.mod.mixin.ValkyrienCommonMixinConfigPlugin;
 
 /**
  * Used to fix interact distance on forge 47.4.2 but also not break forge 47.4.0
@@ -38,6 +40,12 @@ public class ValkyrienForgeMixinConfigPlugin implements IMixinConfigPlugin {
 
     @Override
     public boolean shouldApplyMixin(final String s, final String mixinClassName) {
+        // These target me.jellysquid / Embeddium classes; Sodium 0.9's equivalents are handled by the
+        // common sodium09 mixins instead.
+        if (mixinClassName.contains("org.valkyrienskies.mod.forge.mixin.compat.sodium")) {
+            return ValkyrienCommonMixinConfigPlugin.getSodiumGeneration() == SodiumGeneration.LEGACY;
+        }
+
         final DefaultArtifactVersion forgeVersion = new DefaultArtifactVersion(FMLLoader.versionInfo().forgeVersion());
         final DefaultArtifactVersion forgeNewer = new DefaultArtifactVersion("47.4.2");
 

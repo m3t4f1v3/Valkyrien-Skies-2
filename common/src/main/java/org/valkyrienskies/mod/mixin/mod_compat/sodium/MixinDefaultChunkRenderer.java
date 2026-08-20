@@ -21,50 +21,73 @@ public abstract class MixinDefaultChunkRenderer {
     @Redirect(method = "render", at = @At(value = "INVOKE", target = "Lme/jellysquid/mods/sodium/client/render/chunk/ShaderChunkRenderer;begin(Lme/jellysquid/mods/sodium/client/render/chunk/terrain/TerrainRenderPass;)V"), remap = false)
     private void redirectBegin(ShaderChunkRenderer instance, TerrainRenderPass renderPass, ChunkRenderMatrices matrices) {
         Matrix4f transform = SodiumCompat.popTransform();
-        // Only swap in the VS ship shader when something actually needs it:
-        //   - we're rendering a ship pass,
-        //   - iris isn't running its own shader pack,
-        //   - and at least one of the three VS shader features is enabled.
-        // With all three off, the mesher mixin's gates fall through to sodium's
-        // native byte format, so sodium's stock shader renders ship blocks
-        // correctly. Skipping the swap also avoids compiling/binding an
-        // effectively-empty program.
+        ShaderChunkRendererAccessor accessor = (ShaderChunkRendererAccessor) instance;
+
         boolean irisActive = LoadedMods.getIris() && IrisCompat.isIrisShaderActive();
-        if (SodiumCompat.isRenderingShip() && !irisActive && SodiumCompat.anyShipShaderFeatureEnabled()) {
-            renderPass.startDrawing();
-            ChunkShaderOptions options = new ChunkShaderOptions(ChunkFogMode.SMOOTH, renderPass, ((ShaderChunkRendererAccessor) instance).getVertexType());
-            ((ShaderChunkRendererAccessor) instance).setActiveProgram(SodiumCompat.getOrCreateShipProgram(options));
-            ((ShaderChunkRendererAccessor) instance).getActiveProgram().bind();
-            SodiumCompat.setupShipShaderState(((ShaderChunkRendererAccessor) instance).getActiveProgram(), matrices, transform);
-            // Ship-on-ship: bind the per-frame voxel lists to the same units
-            // setupShipShaderState wrote into the shader's samplers. Without
-            // this the ship shader would sample whatever was last bound
-            // (typically nothing on the first ship pass of the frame).
-            SodiumCompat.getShipEmitterList().bind(SodiumCompat.SHIP_EMITTER_LIST_TEXTURE_UNIT);
-            SodiumCompat.getShipOccluderList().bind(SodiumCompat.SHIP_OCCLUDER_LIST_TEXTURE_UNIT);
-            return;
-        }
-        // World chunk path: when ship-to-world dynamic lighting is on AND
-        // ships are projecting voxels into the world's section grid, swap in
-        // the VS world shader so ground beneath ships gets shadowed and ship
-        // emitters illuminate world blocks. Same iris guard as the ship path.
-        if (!SodiumCompat.isRenderingShip() && !irisActive && SodiumCompat.shouldUseWorldFromShipShader()) {
-            renderPass.startDrawing();
-            ChunkShaderOptions options = new ChunkShaderOptions(ChunkFogMode.SMOOTH, renderPass, ((ShaderChunkRendererAccessor) instance).getVertexType());
-            ((ShaderChunkRendererAccessor) instance).setActiveProgram(SodiumCompat.getOrCreateWorldProgram(options));
-            ((ShaderChunkRendererAccessor) instance).getActiveProgram().bind();
-            SodiumCompat.setupWorldShaderState(((ShaderChunkRendererAccessor) instance).getActiveProgram(), matrices);
-            // Bind ship-voxel storage to the units the world FSH samples.
-            SodiumCompat.getShipEmitterList().bind(SodiumCompat.SHIP_EMITTER_LIST_TEXTURE_UNIT);
-            // World-from-ship storage (occluder strength) for the AO sample.
-            SodiumCompat.getWorldFromShipStorage().bind(
+        boolean wantShip = SodiumCompat.isRenderingShip() && !irisActive && SodiumCompat.anyShipShaderFeatureEnabled();
+        boolean wantWorld = !SodiumCompat.isRenderingShip() && !irisActive && SodiumCompat.shouldUseWorldFromShipShader();
+
+        if (wantShip) {
+            ChunkShaderOptions options = new ChunkShaderOptions(ChunkFogMode.SMOOTH, renderPass, accessor.getVertexType());
+            accessor.setActiveProgram(SodiumCompat.getOrCreateShipProgram(options));
+
+            if (SodiumCompat.needsShipProgramBind(renderPass)) {
+                renderPass.startDrawing();
+                accessor.getActiveProgram().bind();
+                SodiumCompat.recordShipProgramBound(renderPass);
+            }
+
+            // Per-ship uniforms — never elidable, these differ every ship.
+            SodiumCompat.setupShipShaderState(accessor.getActiveProgram(), matrices, transform);
+
+            if (SodiumCompat.needsListRebind()) {
+                SodiumCompat.getShipEmitterList().bind(SodiumCompat.SHIP_EMITTER_LIST_TEXTURE_UNIT);
+                SodiumCompat.getWorldFromShipStorage().bind(
                     SodiumCompat.WORLD_FROM_SHIP_SECTIONS_TEXTURE_UNIT,
                     SodiumCompat.WORLD_FROM_SHIP_LUT_TEXTURE_UNIT);
-            // Per-frame ship occluder voxel list — used by the per-fragment
-            // AO loop in the world FSH for rotation-aware shadow shape.
-            SodiumCompat.getShipOccluderList().bind(SodiumCompat.SHIP_OCCLUDER_LIST_TEXTURE_UNIT);
+                SodiumCompat.getShipOccluderList().bind(SodiumCompat.SHIP_OCCLUDER_LIST_TEXTURE_UNIT);
+                SodiumCompat.recordListsBound();
+            }
             return;
         }
-        ((ShaderChunkRendererAccessor) (Object) this).invokeBegin(renderPass);
+
+        if (wantWorld) {
+            ChunkShaderOptions options = new ChunkShaderOptions(ChunkFogMode.SMOOTH, renderPass, accessor.getVertexType());
+            accessor.setActiveProgram(SodiumCompat.getOrCreateWorldProgram(options));
+
+            if (SodiumCompat.needsWorldProgramBind(renderPass)) {
+                renderPass.startDrawing();
+                accessor.getActiveProgram().bind();
+                SodiumCompat.recordWorldProgramBound(renderPass);
+            }
+
+            SodiumCompat.setupWorldShaderState(accessor.getActiveProgram(), matrices);
+
+            if (SodiumCompat.needsListRebind()) {
+                SodiumCompat.getShipEmitterList().bind(SodiumCompat.SHIP_EMITTER_LIST_TEXTURE_UNIT);
+                SodiumCompat.getWorldFromShipStorage().bind(
+                    SodiumCompat.WORLD_FROM_SHIP_SECTIONS_TEXTURE_UNIT,
+                    SodiumCompat.WORLD_FROM_SHIP_LUT_TEXTURE_UNIT);
+                SodiumCompat.getShipOccluderList().bind(SodiumCompat.SHIP_OCCLUDER_LIST_TEXTURE_UNIT);
+                SodiumCompat.recordListsBound();
+            }
+            return;
+        }
+
+        SodiumCompat.recordVanillaBound(renderPass);
+        ((ShaderChunkRendererAccessor) this).invokeBegin(renderPass);
+    }
+
+    @Redirect(method = "render", at = @At(value = "INVOKE", target = "Lme/jellysquid/mods/sodium/client/render/chunk/ShaderChunkRenderer;end(Lme/jellysquid/mods/sodium/client/render/chunk/terrain/TerrainRenderPass;)V"), remap = false)
+    private void redirectEnd(ShaderChunkRenderer instance, TerrainRenderPass renderPass) {
+        if (!SodiumCompat.isLastShipInBatch()) {
+            // Another ship's render() call is coming right after this one in
+            // the same pass — skip tearing down shader state we're about to
+            // need again immediately. Mirrors the begin() elision: together
+            // these collapse a per-ship begin/end pair into one real
+            // begin/end for the whole batch.
+            return;
+        }
+        ((ShaderChunkRendererAccessor) this).invokeEnd(renderPass);
     }
 }

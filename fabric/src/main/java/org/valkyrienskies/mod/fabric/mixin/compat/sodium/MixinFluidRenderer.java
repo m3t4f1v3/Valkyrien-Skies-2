@@ -22,7 +22,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.valkyrienskies.mod.common.config.VSGameConfig;
 import org.valkyrienskies.mod.compat.LoadedMods;
 import org.valkyrienskies.mod.compat.iris.IrisCompat;
-import org.valkyrienskies.mod.compat.sodium.light.VsVertexFlagPacker;
+import org.valkyrienskies.mod.compat.sodium.shader.VsVertexFlagPacker;
 
 /**
  * Pack the vertex flag bits for fluid quads on shipyard blocks. FluidRenderer

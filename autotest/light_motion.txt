@@ -1,0 +1,33 @@
+# Flicker during CONTINUOUS motion. The ship is given a real velocity and one frame is captured per
+# tick, so the shots form a time series a player would actually see. Settled screenshots taken seconds
+# apart cannot show flicker -- an earlier version of this test did that and reported none.
+world autotest
+wait-level
+wait 80
+hud off
+cmd gamemode creative
+cmd time set midnight
+cmd gamerule doDaylightCycle false
+cmd gamerule doMobSpawning false
+cmd kill @e[type=!player]
+wait 20
+
+run light_ship 0 -56 0 minecraft:glowstone
+wait 60
+cmd tp @s 0 -58 -14 0 10
+wait 60
+run hull open
+wait 60
+
+# Static control: 30 frames of a ship that is not moving at all. Any variation here is noise in the
+# renderer, not in the lighting, and sets the floor the moving numbers are read against.
+burst 30 still
+
+# Dragged, not thrown: drift_ship hands the ship a velocity, but it is non-static by then, so gravity
+# drops it to the ground and it stops within ~6 ticks. Every measurement taken that way was of a
+# stationary ship. A per-tick position delta keeps it moving for the whole burst.
+run drag_ship 0.075 0 0
+wait 10
+burst 60 drift
+run drag_stop
+quit

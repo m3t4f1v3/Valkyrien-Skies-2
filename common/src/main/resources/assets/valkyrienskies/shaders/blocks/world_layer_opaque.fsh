@@ -39,8 +39,10 @@ uniform ivec3 u_VsRenderOrigin;
 // The quaternion's inverse rotates the world-frame fragment-to-emitter
 // offset into the emitter's owning ship local frame, so the Manhattan
 // light bubble visibly rotates with the hull.
+#ifndef VS_FLOOD_GRID
 uniform samplerBuffer u_VsShipEmitters;
 uniform int u_VsShipEmitterCount;
+#endif
 
 // Per-frame list of solid ship voxel CENTERS in world space, paired with
 // each voxel's owning-ship rotation quaternion. Two RGBA32F texels per
@@ -184,22 +186,143 @@ float ws_shipAo(vec3 worldPosWorld, vec3 nf) {
 // cap are silently ignored at fragment time.
 const int VS_EMITTER_LOOP_CAP = 128;
 
-// Distance-attenuated max ship-emitter contribution at this fragment's
-// world position. Manhattan distance in the emitter's owning-ship frame
-// so the octahedral light bubble visibly rotates with the hull.
-float vs_shipEmitterLight(vec3 worldPos) {
-    float maxLight = 0.0;
+// Distance-attenuated max ship-emitter contribution at this fragment's world position, as a Manhattan
+// falloff measured in the emitter's OWN SHIP frame, so the octahedral light bubble turns with the hull.
+//
+// It is tempting to measure this in world axes instead, on the reasoning that light which has left the
+// ship travels the world grid — and that does make the field agree with the flood, which is a world-grid
+// BFS. But it also pins the bubble to the world axes while the ship turns underneath it, which reads as
+// the lighting sliding off the ship. The bubble turning with the hull is the intended look.
+//
+// Keeping the ship frame means this field and the flood no longer agree in open air, so the gate below
+// cannot be a min() against it. See the gate for how the two are reconciled.//
+// Returns BOTH metrics. .x is the ship-frame value, the brightness actually drawn. .y is the same
+// falloff measured in world axes -- not drawn, but it is the metric the flood uses, so it is what the
+// flood's output has to be judged against. The gate below needs both.
+#ifndef VS_FLOOD_GRID
+vec2 vs_shipEmitterLight(vec3 worldPos) {
+    float maxShip = 0.0;
+    float maxWorld = 0.0;
     int n = min(u_VsShipEmitterCount, VS_EMITTER_LOOP_CAP);
     for (int i = 0; i < n; i++) {
         vec4 e = texelFetch(u_VsShipEmitters, i * 2);
         vec4 q = texelFetch(u_VsShipEmitters, i * 2 + 1);
-        vec3 offset_ship = vs_quatRotateInv(q, worldPos - e.xyz);
-        float dist = abs(offset_ship.x) + abs(offset_ship.y) + abs(offset_ship.z);
-        float light = max(0.0, e.w - dist);
-        maxLight = max(maxLight, light);
+        vec3 offset = worldPos - e.xyz;
+        vec3 offset_ship = vs_quatRotateInv(q, offset);
+        float distShip = abs(offset_ship.x) + abs(offset_ship.y) + abs(offset_ship.z);
+        float distWorld = abs(offset.x) + abs(offset.y) + abs(offset.z);
+        maxShip = max(maxShip, max(0.0, e.w - distShip));
+        maxWorld = max(maxWorld, max(0.0, e.w - distWorld));
     }
-    return maxLight;
+    return vec2(maxShip, maxWorld);
 }
+#endif
+
+#ifdef VS_FLOOD_GRID
+// ===== Flooded ship light: the occlusion gate ============================
+//
+// The emitter loop above is a pure distance falloff — it has no idea a hull or a hillside is in the
+// way, so ship light shines straight through walls. The compute passes under
+// assets/valkyrienskies/shaders/compute flood the same emitters through the world's block grid,
+// stopping at ship voxels and terrain, and write the result into the section buffer sampled here.
+//
+// The flood is used only to GATE the emitter field, not to replace it. In open air the two agree
+// (both are the light level minus a Manhattan-ish distance) so min() barely changes anything and the
+// emitter list keeps its sub-block-precise, continuously-tracking falloff — the property that made
+// the grid unusable as the primary source in the first place. Behind a wall the flood is 0 and the
+// emitter's contribution is cut, which is exactly the case the emitter list gets wrong.
+uniform usamplerBuffer u_VsWorldFromShipSections;
+uniform usamplerBuffer u_VsWorldFromShipLut;
+// 0 when the flood could not be produced this frame; the gate then stands down entirely rather
+// than reading a grid nothing refreshed.
+uniform int u_VsFloodGridValid;
+
+// (The old fixed visibility threshold is gone -- the gate is now a ratio against the unoccluded
+// reference, which is what lets a rotated ship's pool survive past the flood's Manhattan reach.)
+
+// Must match VsWorldFromShipLightStorage's packed layout.
+const uint VSF_SECTION_SIZE_INTS = 1641u;
+const uint VSF_LIGHT_START_INTS = 183u;
+
+bool vsf_nextLut(uint base, int coord, out uint next) {
+    int start = int(texelFetch(u_VsWorldFromShipLut, int(base)).r);
+    uint size = texelFetch(u_VsWorldFromShipLut, int(base) + 1).r;
+    int idx = coord - start;
+    if (idx < 0 || idx >= int(size)) return true;
+    next = texelFetch(u_VsWorldFromShipLut, int(base + 2u + uint(idx))).r;
+    return false;
+}
+
+bool vsf_section(ivec3 sectionPos, out uint sectionOffset) {
+    uint first;
+    if (vsf_nextLut(0u, sectionPos.y, first) || first == 0u) return false;
+    uint second;
+    if (vsf_nextLut(first, sectionPos.x, second) || second == 0u) return false;
+    uint index;
+    if (vsf_nextLut(second, sectionPos.z, index) || index == 0u) return false;
+    sectionOffset = (index - 1u) * VSF_SECTION_SIZE_INTS;
+    return true;
+}
+
+/** True when the packed blocker bitmap marks this voxel opaque (a ship voxel or world terrain). */
+bool vsf_solidAt(uint sectionOffset, ivec3 blockInSection) {
+    uint bitOffset = uint(blockInSection.x)
+        + uint(blockInSection.z) * 18u
+        + uint(blockInSection.y) * 324u;
+    uint word = texelFetch(u_VsWorldFromShipSections, int(sectionOffset + (bitOffset >> 5u))).r;
+    return (word & (1u << (bitOffset & 31u))) != 0u;
+}
+
+float vsf_lightAt(uint sectionOffset, ivec3 blockInSection) {
+    uint byteOffset = uint(blockInSection.x)
+        + uint(blockInSection.z) * 18u
+        + uint(blockInSection.y) * 324u;
+    uint raw = texelFetch(u_VsWorldFromShipSections,
+        int(sectionOffset + VSF_LIGHT_START_INTS + (byteOffset >> 2u))).r;
+    // The whole byte, in 16ths of a level. A 4-bit read here was the grid lock: the field could only
+    // take 16 values, so its contours snapped to cell boundaries and the lit pattern jumped a block at
+    // a time as a ship drifted.
+    return float((raw >> ((byteOffset & 3u) << 3u)) & 0xFFu) * (1.0 / 16.0);
+}
+
+// Trilinearly sampled flooded light, or -1 when this fragment sits outside every tracked section.
+// The caller must leave the emitter field alone in that case rather than gate it to zero: "no data"
+// means the flood simply never covered here, not that the spot is dark.
+float vsf_floodTrilinear(vec3 worldPos) {
+    vec3 p = worldPos - 0.5;              // grid values live at cell centres
+    ivec3 base = ivec3(floor(p));
+    vec3 f = p - vec3(base);
+
+    ivec3 baseSection = base >> 4;
+    uint baseOffset;
+    if (!vsf_section(baseSection, baseOffset)) return -1.0;
+
+    // SOLID taps are dropped and the rest renormalised. A fragment sits ON a block face, so half its
+    // taps land inside the block behind it; averaging those in would halve the value at every lit
+    // surface and the gate would then eat light that belongs there. Excluding them by the blocker
+    // bitmap — rather than by "the tap read zero", which was the earlier rule — keeps genuinely dark
+    // air taps in the average, so light still falls off and still stops at walls. Dropping zero taps
+    // instead let a single lit tap carry a shadowed fragment, which leaked light around corners.
+    float acc = 0.0;
+    float weight = 0.0;
+    for (int i = 0; i < 8; i++) {
+        ivec3 step = ivec3(i & 1, (i >> 1) & 1, (i >> 2) & 1);
+        vec3 w3 = mix(vec3(1.0) - f, f, vec3(step));
+        float w = w3.x * w3.y * w3.z;
+        if (w <= 0.0) continue;
+        ivec3 c = base + step;
+        uint offset = baseOffset;
+        // All eight taps usually land in one section; only re-walk the LUT when one doesn't.
+        if ((c >> 4) != baseSection && !vsf_section(c >> 4, offset)) continue;
+        ivec3 inSection = (c & 15) + 1;
+        if (vsf_solidAt(offset, inSection)) continue;
+        acc += w * vsf_lightAt(offset, inSection);
+        weight += w;
+    }
+    // Every tap opaque: the fragment is buried, so there is no light here.
+    return weight > 0.0 ? acc / weight : 0.0;
+}
+#endif // VS_FLOOD_GRID
 
 void main() {
     vec4 diffuseColor = texture(u_BlockTex, v_TexCoord, v_MaterialMipBias);
@@ -215,7 +338,34 @@ void main() {
 
     // Ship emitters: max-merge their distance-attenuated contribution into the
     // block-light UV. Sub-block-precise because the emitter coords are floats.
-    float shipLight = vs_shipEmitterLight(worldPos);
+    // Ship light on world terrain, straight out of the flood.
+    //
+    // This used to be a hybrid: a per-fragment distance falloff evaluated from a list of emitters,
+    // clamped or gated by the flood. That existed only because the flood was quantised to whole light
+    // levels and so moved in block steps, and every attempt to reconcile the two metrics traded one
+    // artefact for another -- the emitter falloff is Manhattan in the SHIP's frame while the flood
+    // counts in world axes, so a gate either cut a rotated ship's pool along a straight line or leaked
+    // unoccluded light past the radius where the two disagreed.
+    //
+    // With the field carrying 16ths of a level there is nothing left to reconcile. The flood is the
+    // light: propagation exactly as vanilla does it -- a 6-neighbour BFS, one level per block, hard
+    // occlusion -- sampled with sub-block precision so it slides with the ship instead of snapping to
+    // the world grid. Occlusion and falloff now come from one field that agrees with itself.
+#ifdef VS_FLOOD_GRID
+    float shipFlood = vsf_floodTrilinear(worldPos);
+    // u_VsFloodGridValid still guards the one case the grid cannot speak for: a frame where the flood
+    // did not run at all. With the flood now the sole source of ship light, "no data" has to mean no
+    // light rather than falling back to something else.
+    float shipLight = u_VsFloodGridValid != 0 ? max(shipFlood, 0.0) : 0.0;
+#else
+    // No compute support: the CPU path still supplies only the emitter list, so fall back to the
+    // distance falloff. Unoccluded, as it always was on this path.
+    float shipLight = vs_shipEmitterLight(worldPos).x;
+#endif
+#ifdef VS_DEBUG_FLOOD
+    float vsf_debugApplied = shipLight;
+    float vsf_debugFlood = shipFlood;
+#endif
     if (shipLight > 0.0) {
         // MC packs block-light at U = (lightLevel + 0.5) / 16.
         float shipLightUv = (shipLight + 0.5) / 16.0;
@@ -278,5 +428,34 @@ void main() {
     //             + lightSample.rgb * 1e-3;
     // }
 
+
     fragColor = _linearFog(diffuseColor, v_FragDistance, u_FogColor, u_FogStart, u_FogEnd);
+
+#ifdef VS_DEBUG_FLOOD
+    // ===== Debug paint =====================================================================
+    // Written OVER the finished fragColor rather than returning early: an early return lets the compiler
+    // dead-code-eliminate the earlier texture reads, and sodium's bindUniform then throws
+    // "No uniform exists with name: u_BlockTex" at link time. The 1e-4 term keeps them all live.
+    {
+        float dbgFlood = max(vsf_debugFlood, 0.0);
+#if VS_DEBUG_FLOOD == 2
+        // Mode 2 — accuracy against vanilla. RED = the vanilla block-light level already baked into this
+        // fragment's lightmap UV, GREEN = the flooded ship light. Put a world glowstone beside a ship one at the
+        // same height and the two fields should have the same shape and magnitude: agreement reads yellow,
+        // red-only is light the flood failed to reproduce, green-only is light it invented.
+        float dbgVanilla = max(0.0, v_LightCoord.x * 16.0 - 0.5);
+        fragColor = vec4(clamp(dbgVanilla / 15.0, 0.0, 1.0),
+                         clamp(dbgFlood / 15.0, 0.0, 1.0),
+                         0.0, 1.0) + fragColor * 1.0e-4;
+#else
+        // Mode 1 — leak hunt. GREEN = light the flood justifies, RED = light applied on top of that
+        // (the leak), BLUE = fragment outside every tracked section so the gate cannot act at all.
+        float dbgLeak = max(0.0, vsf_debugApplied - dbgFlood);
+        fragColor = vec4(clamp(dbgLeak / 8.0, 0.0, 1.0),
+                         clamp(dbgFlood / 15.0, 0.0, 1.0),
+                         (vsf_debugFlood < 0.0 && vsf_debugApplied > 0.0) ? 1.0 : 0.0,
+                         1.0) + fragColor * 1.0e-4;
+#endif
+    }
+#endif
 }

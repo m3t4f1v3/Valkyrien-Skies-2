@@ -1,0 +1,14 @@
+# Reproduce the reported ship-to-ship flicker in the ACTUAL world it was seen in, rather than in a
+# synthetic box: the ships, their shapes and their placement are the report.
+load-world lightingslop
+wait-level
+wait 200
+hud off
+cmd gamemode spectator
+cmd time set midnight
+cmd gamerule doDaylightCycle false
+wait 60
+run ship_light_info
+screenshot slop_overview
+burst 40 slopstill
+quit

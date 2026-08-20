@@ -1,4 +1,4 @@
-package org.valkyrienskies.mod.mixin.mod_compat.sodium;
+package org.valkyrienskies.mod.mixin.mod_compat.sodium_common;
 
 import java.util.function.Supplier;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -22,7 +22,7 @@ import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.config.ShipRendererKt;
 import org.valkyrienskies.mod.common.config.VSGameConfig;
 import org.valkyrienskies.mod.common.render.batched.ShipBatchRenderer;
-import org.valkyrienskies.mod.compat.sodium.SodiumCompat;
+import org.valkyrienskies.mod.common.render.light.VsDynamicLight;
 
 @Mixin(ClientLevel.class)
 public abstract class MixinClientLevel extends Level {
@@ -53,7 +53,7 @@ public abstract class MixinClientLevel extends Level {
             if (!VSGameConfig.CLIENT.getDynamicShipToWorldLighting()) {
                 return worldToShipCombined;
             } else {
-                int shipToWorld = SodiumCompat.getWorldFromShipStorage().getBlockLightAt(worldPos);
+                int shipToWorld = VsDynamicLight.shipToWorldBlockLightAt(worldPos);
                 return Math.max(worldToShipCombined, shipToWorld);
             }
         }
@@ -66,8 +66,13 @@ public abstract class MixinClientLevel extends Level {
         final int sectionY = pos.getY() >> 4;
         final int sectionZ = pos.getZ() >> 4;
         if (VSGameUtilsKt.getShipManagingPos((ClientLevel) (Object) this, sectionX, sectionZ)
-                instanceof final ClientShip ship && ShipRendererKt.getUsesBatchedRenderer(ship)) {
-            ShipBatchRenderer.INSTANCE.markSectionDirty(ship.getId(), sectionX, sectionY, sectionZ);
+                instanceof final ClientShip ship) {
+            if (ShipRendererKt.getUsesBatchedRenderer(ship)) {
+                ShipBatchRenderer.INSTANCE.markSectionDirty(ship.getId(), sectionX, sectionY, sectionZ);
+            }
+            // The GPU light flood works off a cached per-ship voxel list; a block change is the only
+            // thing that can invalidate it. Applies to every ship, not just batched-renderer ones.
+            VsDynamicLight.getShipVoxelCache().invalidate(ship.getId());
         }
     }
 }

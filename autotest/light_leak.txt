@@ -1,0 +1,49 @@
+# Ship-to-world light leakage diagnosis.
+#
+# Two emitters 4 blocks above flat ground (y=-56 over ground at -60), 14 blocks apart:
+#   x=0    ship whose glowstone is sealed inside a 3x3x3 stone hull
+#   x=14   plain world glowstone, fully exposed   <- vanilla ground truth for paint mode 2
+#
+# The paint mode comes from debugFloodPaint in the client config:
+#   1 = leak hunt        GREEN light the flood justifies, RED light applied beyond it, BLUE ungated
+#   2 = vanilla accuracy RED vanilla's own block light, GREEN the flood; agreement reads yellow
+world autotest
+wait-level
+wait 80
+hud off
+cmd gamemode creative
+cmd time set midnight
+cmd gamerule doDaylightCycle false
+cmd gamerule doMobSpawning false
+cmd kill @e[type=!player]
+wait 20
+
+run light_ship 0 -56 0 minecraft:glowstone
+wait 60
+run ship_light_info
+cmd setblock 14 -56 0 minecraft:glowstone
+wait 40
+
+# Camera low and close, looking along the row so both ground pools fill the frame.
+cmd tp @s 7 -58 -14 0 10
+look 0 10
+wait 60
+screenshot leak_sealed
+
+run hull open
+wait 60
+screenshot leak_open
+
+run hull closed
+wait 60
+screenshot leak_resealed
+
+# Overhead of the ship alone: the clearest view of light escaping sideways through the hull.
+cmd tp @s 0 -52 -7 0 35
+look 0 35
+wait 40
+screenshot leak_ship_closed
+run hull open
+wait 60
+screenshot leak_ship_open
+quit

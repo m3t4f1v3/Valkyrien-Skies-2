@@ -1,0 +1,34 @@
+# Does a ship's own hull glow from an emitter sealed inside it?
+#
+# debugFloodPaint 3 paints SHIP chunks: RED = the shipyard-baked lightmap (baked at mesh-compile time),
+# GREEN = the world-sampled light. Any RED on the outside of a hull, away from the shaft mouth, is the
+# ship's own lamp shining through solid stone.
+#
+# Viewed close and from the SIDE as well as from above: an overhead shot only sees the top face, and
+# the sides are exactly where a lamp buried at mid-height would show through.
+world autotest
+wait-level
+wait 80
+hud off
+cmd gamemode spectator
+cmd time set midnight
+cmd gamerule doDaylightCycle false
+cmd kill @e[type=!player]
+wait 20
+
+run light_shaft 0 -60 0 14 minecraft:glowstone
+wait 140
+run light_probe
+
+cmd tp @s -12 -58 0 -90 0
+wait 80
+screenshot self_side_emitter
+
+cmd tp @s 28 -58 0 90 0
+wait 80
+screenshot self_side_mouth
+
+cmd tp @s 8 -30 0 0 90
+wait 80
+screenshot self_top
+quit

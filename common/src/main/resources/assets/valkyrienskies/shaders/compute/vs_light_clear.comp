@@ -1,0 +1,33 @@
+#version 430
+
+// Zeroes the working buffers for the sections that are LIVE this frame.
+//
+// It used to clear the whole arena, `capacity` sections' worth, every frame. Capacity only ever grows,
+// so once a scene had briefly needed 48 sections every later frame paid to clear 48 -- including
+// frames with four live sections and nothing to do. Measured at 0.28 ms/frame of pure waste on a
+// sealed ship. Slots are handed out from a free list and so are not contiguous, which is why this
+// walks vs_slotPos rather than a flat range.
+
+layout(local_size_x = 256) in;
+
+#include "vs_light_common.glsl"
+
+uniform int u_ActiveCount;
+
+void main() {
+    uint gid = gl_GlobalInvocationID.x;
+    if (gid >= uint(u_ActiveCount) * VS_CORE_VOXELS) return;
+
+    uint si = gid >> 12u;
+    uint v = gid & (VS_CORE_VOXELS - 1u);
+    uint slot = uint(vs_slotPos[si].x);
+
+    uint idx = slot * VS_CORE_VOXELS + v;
+    vs_lightSrc[idx] = 0u;
+    vs_occl[idx] = 0u;
+    // 4096 voxels per section but only 128 solid ints, so the first 128 threads of each section carry
+    // the bitmap as well.
+    if (v < VS_CORE_SOLID_INTS) {
+        vs_solid[slot * VS_CORE_SOLID_INTS + v] = 0u;
+    }
+}

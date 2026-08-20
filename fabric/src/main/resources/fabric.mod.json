@@ -22,6 +22,9 @@
     ],
     "client": [
       "org.valkyrienskies.mod.fabric.client.ValkyrienSkiesModFabricClient"
+    ],
+    "sodium:config_api_user": [
+      "org.valkyrienskies.mod.compat.sodium09.VsSodiumConfigEntryPoint"
     ]
   },
   "mixins": [

@@ -35,7 +35,7 @@ import org.valkyrienskies.mod.common.VSRenderTypes;
 import org.valkyrienskies.mod.common.config.ShipRendererKt;
 import org.valkyrienskies.mod.common.render.light.VsDynamicLight;
 import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
-import org.valkyrienskies.mod.compat.sodium.light.VsShipEmitterList;
+import org.valkyrienskies.mod.compat.sodium.shader.VsShipEmitterList;
 
 public final class ShipBatchRenderer {
 

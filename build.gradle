@@ -93,6 +93,14 @@ subprojects {
         } catch (UnknownDomainObjectException ignore) {}
 
         mavenCentral()
+
+        // The Sodium 1.20.1 backport is only published locally; see sodium_backport_version.
+        mavenLocal {
+            content {
+                includeGroup("net.caffeinemc")
+            }
+        }
+
         if (!project.block_external_repositories) {
             maven {
                 name = "Robotix's Public Maven"

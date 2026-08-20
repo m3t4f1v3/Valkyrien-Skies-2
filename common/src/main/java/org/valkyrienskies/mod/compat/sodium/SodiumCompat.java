@@ -10,7 +10,6 @@ import me.jellysquid.mods.sodium.client.gl.shader.ShaderType;
 import me.jellysquid.mods.sodium.client.render.chunk.ChunkRenderMatrices;
 import me.jellysquid.mods.sodium.client.render.chunk.DefaultChunkRenderer;
 import me.jellysquid.mods.sodium.client.render.chunk.RenderSectionManager;
-import me.jellysquid.mods.sodium.client.render.SodiumWorldRenderer;
 import me.jellysquid.mods.sodium.client.render.chunk.data.SectionRenderDataStorage;
 import me.jellysquid.mods.sodium.client.render.chunk.data.SectionRenderDataUnsafe;
 import me.jellysquid.mods.sodium.client.render.chunk.lists.ChunkRenderList;
@@ -25,6 +24,7 @@ import me.jellysquid.mods.sodium.client.render.chunk.terrain.TerrainRenderPass;
 import me.jellysquid.mods.sodium.client.render.viewport.CameraTransform;
 import me.jellysquid.mods.sodium.client.render.viewport.Viewport;
 import me.jellysquid.mods.sodium.client.util.iterator.ByteIterator;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.resources.ResourceLocation;
@@ -39,7 +39,6 @@ import org.joml.Matrix4dc;
 import org.joml.Matrix4f;
 import org.joml.Matrix4fc;
 import org.joml.Vector3d;
-import org.joml.Vector3dc;
 import org.valkyrienskies.core.api.ships.properties.ShipTransform;
 import org.valkyrienskies.mod.common.config.ShipRendererKt;
 import org.valkyrienskies.mod.common.config.VSGameConfig;
@@ -50,17 +49,18 @@ import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.hooks.VSGameEvents;
 import org.valkyrienskies.mod.common.hooks.VSGameEvents.ShipRenderEventSodium;
 import org.valkyrienskies.mod.compat.LoadedMods;
+import org.valkyrienskies.mod.compat.LoadedMods.FlywheelVersion;
 import org.valkyrienskies.mod.compat.VSRenderer;
+import org.valkyrienskies.mod.compat.flywheel.FlywheelDynLightCompat;
 import org.valkyrienskies.mod.compat.iris.IrisCompat;
-import org.valkyrienskies.mod.compat.sodium.light.VsShipBiomeColorStorage;
-import org.valkyrienskies.mod.compat.sodium.light.VsShipEmitterList;
-import org.valkyrienskies.mod.compat.sodium.light.VsShipOccluderList;
-import org.valkyrienskies.mod.compat.sodium.light.VsShipLightStorage;
-import org.valkyrienskies.mod.compat.sodium.light.VsWorldFromShipLightStorage;
+import org.valkyrienskies.mod.compat.sodium.shader.VsShipBiomeColorStorage;
+import org.valkyrienskies.mod.compat.sodium.shader.VsShipEmitterList;
+import org.valkyrienskies.mod.compat.sodium.shader.VsShipOccluderList;
+import org.valkyrienskies.mod.compat.sodium.shader.VsShipLightStorage;
+import org.valkyrienskies.mod.compat.sodium.shader.VsWorldFromShipLightStorage;
 import org.valkyrienskies.mod.mixin.ValkyrienCommonMixinConfigPlugin;
 import org.valkyrienskies.mod.mixin.mod_compat.sodium.RenderSectionManagerAccessor;
 import org.valkyrienskies.mod.mixinducks.mod_compat.sodium.RenderSectionManagerDuck;
-import org.valkyrienskies.mod.mixinducks.mod_compat.sodium.SodiumWorldRendererDuck;
 import org.valkyrienskies.core.api.ships.ClientShip;
 import org.joml.primitives.AABBdc;
 
@@ -84,11 +84,20 @@ public class SodiumCompat {
     /** Ship FSH also queries the world-from-ship storage (populated for the
      *  world chunk shader) so ship-A voxels can shadow / illuminate ship-B. */
     static final int FEATURE_SHIP_ON_SHIP = 8;
+    /** Gate the emitter falloff by the compute-flooded light grid, so hulls and terrain block it. */
+    static final int FEATURE_FLOOD_GRID = 16;
+    /** Diagnostic paint that visualises the flood gate instead of shading terrain (mode in these two bits). */
+    static final int FEATURE_DEBUG_FLOOD_1 = 32;
+    static final int FEATURE_DEBUG_FLOOD_2 = 64;
+    /** debugFloodPaint 3: paint SHIP chunks with where their own block light comes from. */
+    static final int FEATURE_DEBUG_SHIP_LIGHT = 128;
 
     static Map<ShaderCacheKey, GlProgram<ShipThing>> cachedPrograms = new HashMap<>();
     private static final ThreadLocal<Matrix4f> CURRENT_TRANSFORM = new ThreadLocal<>();
     private static final ThreadLocal<Matrix4f> CURRENT_LOCAL_TO_WORLD = new ThreadLocal<>();
     private static final ThreadLocal<int[]> CURRENT_RENDER_ORIGIN = new ThreadLocal<>();
+    /** Per-frame occluder-list index of the ship currently being drawn; -1 when drawing anything else. */
+    private static final ThreadLocal<Integer> CURRENT_SELF_SHIP_INDEX = ThreadLocal.withInitial(() -> -1);
     private static final ThreadLocal<Boolean> IS_RENDERING_SHIP = ThreadLocal.withInitial(() -> false);
 
     // Texture units used for the ship light buffer textures.
@@ -116,22 +125,20 @@ public class SodiumCompat {
      *  (cell-storage-based AO can only morph between cell-aligned configs). */
     public static final int SHIP_OCCLUDER_LIST_TEXTURE_UNIT = 13;
 
-    private static VsShipBiomeColorStorage biomeStorage;
-
     private static final double WORLD_FROM_SHIP_VISIBILITY_PADDING = 32.0;
 
     /** Cached VS world chunk programs, keyed by sodium's render-pass options. */
-    private static final Map<ChunkShaderOptions, GlProgram<WorldThing>> cachedWorldPrograms = new HashMap<>();
+    private static final Map<ShaderCacheKey, GlProgram<WorldThing>> cachedWorldPrograms = new HashMap<>();
+
+    // The storages themselves know nothing about Sodium, so they live in VsDynamicLight and are shared
+    // with the 0.9 compat layer; only the frustum test below is generation-specific.
 
     public static VsShipLightStorage getLightStorage() {
         return VsDynamicLight.getLightStorage();
     }
 
     public static VsShipBiomeColorStorage getBiomeStorage() {
-        if (biomeStorage == null) {
-            biomeStorage = new VsShipBiomeColorStorage();
-        }
-        return biomeStorage;
+        return VsDynamicLight.getBiomeStorage();
     }
 
     public static VsWorldFromShipLightStorage getWorldFromShipStorage() {
@@ -147,69 +154,28 @@ public class SodiumCompat {
     }
 
     public static void deleteStorages() {
-        if (biomeStorage != null) {
-            biomeStorage.delete();
-            biomeStorage = null;
-        }
         VsDynamicLight.deleteStorages();
     }
 
-    /**
-     * Populate the world-from-ship storage AND the ship-emitter list,
-     * called from {@code MixinLevelRenderer.updateDynamicLight} so the data updates every game tick.
-     */
-    public static void populateWorldFromShipsForFrame(net.minecraft.client.multiplayer.ClientLevel level) {
+    public static void populateWorldFromShipsForFrame(final ClientLevel level) {
         populateWorldFromShipsForFrame(level, null);
     }
 
-    public static void populateWorldFromShipsForFrame(net.minecraft.client.multiplayer.ClientLevel level,
-            Viewport viewport) {
-        if (!VSGameConfig.CLIENT.getDynamicShipToWorldLighting()) return;
-        if (level == null) return;
-        VsWorldFromShipLightStorage storage = getWorldFromShipStorage();
-        VsShipEmitterList emitters = getShipEmitterList();
-        VsShipOccluderList occluders = getShipOccluderList();
-        storage.beginFrame();
-        emitters.beginFrame();
-        occluders.beginFrame();
-        org.valkyrienskies.mod.common.VSGameUtilsKt.getShipObjectWorld(
-                net.minecraft.client.Minecraft.getInstance()).getLoadedShips().forEach(ship -> {
-            ClientShip cs = ship;
-            if (!isShipRelevantToWorldFromShipFrame(cs, viewport)) return;
-            storage.populateFromShip(level, cs, emitters, occluders);
-        });
-        storage.pruneUnused();
-        storage.upload();
-        emitters.upload();
-        occluders.upload();
+    public static void populateWorldFromShipsForFrame(final ClientLevel level, final Viewport viewport) {
+        VsDynamicLight.populateWorldFromShipsForFrame(level,
+            ship -> isShipRelevantToWorldFromShipFrame(ship, viewport));
     }
 
-    public static void populateLightSectionStorage(ClientLevel level) {
-        if (!VSGameConfig.CLIENT.getDynamicShipLighting()) return;
-        final VsShipLightStorage storage = getLightStorage();
-        storage.beginFrame();
-        for (ClientShip clientShip : VSGameUtilsKt.getShipObjectWorld(level).getLoadedShips()) {
-            final AABBdc aabb = clientShip.getRenderAABB();
-            storage.requestSectionsInAabb(level,
-                aabb.minX(), aabb.minY(), aabb.minZ(),
-                aabb.maxX(), aabb.maxY(), aabb.maxZ());
-        }
-        storage.pruneUnused();
-        storage.upload();
+    public static void populateLightSectionStorage(final ClientLevel level) {
+        VsDynamicLight.populateLightSectionStorage(level);
     }
 
-    public static void populateBiomeSectionStorage(ClientLevel level) {
-        if (!VSGameConfig.CLIENT.getDynamicShipBiomeTinting()) return;
-        final VsShipBiomeColorStorage biomeStorageLocal = getBiomeStorage();
-        biomeStorageLocal.beginFrame();
-        for (ClientShip clientShip : VSGameUtilsKt.getShipObjectWorld(level).getLoadedShips()) {
-            final AABBdc aabb = clientShip.getRenderAABB();
-            biomeStorageLocal.requestSectionsInAabb(level,
-                aabb.minX(), aabb.minY(), aabb.minZ(),
-                aabb.maxX(), aabb.maxY(), aabb.maxZ());
-        }
-        biomeStorageLocal.pruneUnused();
-        biomeStorageLocal.upload();
+    public static void populateBiomeSectionStorage(final ClientLevel level) {
+        VsDynamicLight.populateBiomeSectionStorage(level);
+    }
+
+    public static void dispatchGpuLightFlood() {
+        VsDynamicLight.dispatchGpuLightFlood();
     }
 
     private static boolean isShipRelevantToWorldFromShipFrame(ClientShip ship, Viewport viewport) {
@@ -240,6 +206,9 @@ public class SodiumCompat {
 
     public static GlProgram<ChunkShaderInterface> getOrCreateShipProgram(ChunkShaderOptions options) {
         int features = computeFeatureBits();
+        if (VSGameConfig.CLIENT.getDebugFloodPaint() >= 3) {
+            features |= FEATURE_DEBUG_SHIP_LIGHT;
+        }
         ShaderCacheKey key = new ShaderCacheKey(options, features);
         GlProgram<ShipThing> program = cachedPrograms.get(key);
         if (program == null) {
@@ -255,7 +224,11 @@ public class SodiumCompat {
         if (VSGameConfig.CLIENT.getDynamicShipBiomeTinting()) bits |= FEATURE_BIOME;
         if (VSGameConfig.CLIENT.getDynamicShipLighting()) bits |= FEATURE_LIGHT;
         if (VSGameConfig.CLIENT.getBetterVanillaShipShading()) bits |= FEATURE_SHADE;
-        if (VSGameConfig.CLIENT.getDynamicShipToWorldLighting()) bits |= FEATURE_SHIP_ON_SHIP;
+        if (VSGameConfig.CLIENT.getDynamicShipToWorldLighting()) {
+            bits |= FEATURE_SHIP_ON_SHIP;
+            // The flood grid only ever gates ship-on-ship light, so it rides along with that bit.
+            if (VsDynamicLight.isGpuFloodActive()) bits |= FEATURE_FLOOD_GRID;
+        }
         return bits;
     }
 
@@ -294,6 +267,10 @@ public class SodiumCompat {
         shipInterface.setBiomeLutSampler(BIOME_LUT_TEXTURE_UNIT);
         shipInterface.setShipEmitters(SHIP_EMITTER_LIST_TEXTURE_UNIT, getShipEmitterList().size());
         shipInterface.setShipOccluders(SHIP_OCCLUDER_LIST_TEXTURE_UNIT, getShipOccluderList().size());
+        shipInterface.setWorldFromShipSamplers(
+            WORLD_FROM_SHIP_SECTIONS_TEXTURE_UNIT, WORLD_FROM_SHIP_LUT_TEXTURE_UNIT);
+        shipInterface.setFloodGridValid(VsDynamicLight.isFloodGridValid());
+        shipInterface.setSelfShipIndex(CURRENT_SELF_SHIP_INDEX.get());
     }
 
     /** Stores transform for the next render() call on the current thread. */
@@ -310,6 +287,10 @@ public class SodiumCompat {
 
     public static void pushLocalToWorld(Matrix4f m) {
         CURRENT_LOCAL_TO_WORLD.set(m);
+    }
+
+    public static void pushSelfShipIndex(final int index) {
+        CURRENT_SELF_SHIP_INDEX.set(index);
     }
 
     public static void pushRenderOrigin(int x, int y, int z) {
@@ -341,25 +322,98 @@ public class SodiumCompat {
     }
 
     public static void markShipRenderListsDirty() {
-        final SodiumWorldRenderer renderer = SodiumWorldRenderer.instanceNullable();
-        if (renderer instanceof SodiumWorldRendererDuck duck) {
-            duck.vs$markShipRenderListsDirty();
-        }
+//        final SodiumWorldRenderer renderer = SodiumWorldRenderer.instanceNullable();
+//        if (renderer instanceof SodiumWorldRendererDuck duck) {
+//            duck.vs$markShipRenderListsDirty();
+//        }
+        return;
     }
 
     public static void markShipSectionCacheDirty(final ClientShip ship) {
-        final SodiumWorldRenderer renderer = SodiumWorldRenderer.instanceNullable();
-        if (renderer instanceof SodiumWorldRendererDuck duck) {
-            duck.vs$invalidateShipSectionCache(ship);
-        }
+//        final SodiumWorldRenderer renderer = SodiumWorldRenderer.instanceNullable();
+//        if (renderer instanceof SodiumWorldRendererDuck duck) {
+//            duck.vs$invalidateShipSectionCache(ship);
+//        }
+        return;
     }
 
     public static void markShipSectionCacheDirty(final ClientLevel level, final int x, final int z) {
-        if (VSGameUtilsKt.getShipManagingPos(level, x, z) instanceof ClientShip ship) {
-            markShipSectionCacheDirty(ship);
-        } else {
-            markShipRenderListsDirty();
-        }
+        return;
+    }
+
+    // --- Redundant-bind elision -------------------------------------------
+// Sodium calls DefaultChunkRenderer.render() once per ship (and once for
+// the world pass), each of which triggers begin() via the mixin. Within a
+// single frame+pass, consecutive ships hitting the same shader path don't
+// need glUseProgram / renderPass.startDrawing() / texture-buffer rebinds
+// repeated — only the per-ship uniforms (transform, localToWorld, origin)
+// actually change ship-to-ship. This state tracks what's already bound so
+// MixinDefaultChunkRenderer and vsRenderLayer can skip redundant GL calls.
+    private enum BoundPath { UNSET, SHIP, WORLD, VANILLA }
+    private static BoundPath lastBoundPath = BoundPath.UNSET;
+    private static TerrainRenderPass lastBoundPass = null;
+    private static long lastBoundListsFrame = -1;
+    private static long frameToken = 0;
+
+    public static boolean needsShipProgramBind(TerrainRenderPass pass) {
+        return lastBoundPath != BoundPath.SHIP || lastBoundPass != pass;
+    }
+
+    public static void recordShipProgramBound(TerrainRenderPass pass) {
+        lastBoundPath = BoundPath.SHIP;
+        lastBoundPass = pass;
+    }
+
+    public static boolean needsWorldProgramBind(TerrainRenderPass pass) {
+        return lastBoundPath != BoundPath.WORLD || lastBoundPass != pass;
+    }
+
+    public static void recordWorldProgramBound(TerrainRenderPass pass) {
+        lastBoundPath = BoundPath.WORLD;
+        lastBoundPass = pass;
+    }
+
+    public static void recordVanillaBound(TerrainRenderPass pass) {
+        lastBoundPath = BoundPath.VANILLA;
+        lastBoundPass = pass;
+    }
+
+    /** True once per frame — the light/biome/emitter/occluder buffer textures
+     *  are only re-populated once per frame (see populateWorldFromShipsForFrame,
+     *  populateLightSectionStorage, populateBiomeSectionStorage), so rebinding
+     *  them per-ship or per-pass is pure waste. */
+    public static boolean needsListRebind() {
+        return lastBoundListsFrame != frameToken;
+    }
+
+    public static void recordListsBound() {
+        lastBoundListsFrame = frameToken;
+    }
+
+    /** Bumps the frame token and resets the "what's bound" tracking. Must run
+     *  once per real frame — placed at the top of populateWorldFromShipsForFrame
+     *  (called every tick from MixinLevelRenderer.updateDynamicLight) rather
+     *  than inside vsRenderLayer, since vsRenderLayer runs 3x per frame (once
+     *  per terrain pass) and would otherwise reset elision state mid-frame. */
+    private static void advanceFrameToken() {
+        frameToken++;
+        lastBoundPath = BoundPath.UNSET;
+        lastBoundPass = null;
+    }
+
+    private static final ThreadLocal<Boolean> IS_LAST_SHIP_IN_BATCH = ThreadLocal.withInitial(() -> true);
+
+    /** Set false for every ship except the last one in vsRenderLayer's loop, so
+     *  the end() redirect can defer teardown until the pass is actually done
+     *  rendering ships — instead of tearing down and rebuilding shader state
+     *  between every consecutive ship. Defaults to true so the world pass's
+     *  single, non-batched render() call always tears down normally. */
+    public static void setLastShipInBatch(boolean isLast) {
+        IS_LAST_SHIP_IN_BATCH.set(isLast);
+    }
+
+    public static boolean isLastShipInBatch() {
+        return IS_LAST_SHIP_IN_BATCH.get();
     }
 
     public static void vsRenderLayer(RenderSectionManager renderSectionManager, ChunkRenderMatrices matrices, TerrainRenderPass pass, double x, double y, double z,
@@ -384,6 +438,16 @@ public class SodiumCompat {
             return;
         }
 
+        Vector3d cameraWorldScratch = new Vector3d();
+        Vector3d cameraShipSpaceScratch = new Vector3d();
+
+        Matrix4d newModelViewScratch = new Matrix4d();
+        Matrix4d localToCameraRelScratch = new Matrix4d();
+
+        Matrix4f modelViewScratch = new Matrix4f();
+        Matrix4f transformScratch = new Matrix4f();
+        Matrix4f localToWorldScratch = new Matrix4f();
+
         for (int i = 0; i < renderableShips.size(); i++) {
             final ClientShip ship = renderableShips.get(i);
             final SortedRenderLists renderList = renderableRenderLists.get(i);
@@ -398,13 +462,15 @@ public class SodiumCompat {
                 RenderSystem.setShaderFogStart(initialFogStart * distanceScaling);
                 RenderSystem.setShaderFogEnd(initialFogEnd * distanceScaling);
             }
-
-            final Vector3dc cameraShipSpace = shipTransform.getWorldToShip().transformPosition(new Vector3d(x, y, z));
+            cameraWorldScratch.set(x, y, z);
+            shipTransform.getWorldToShip().transformPosition(cameraWorldScratch, cameraShipSpaceScratch);
             final Matrix4dc s = ship.getRenderTransform().getShipToWorld();
-            final Matrix4d newModelView = new Matrix4d(matrices.modelView())
+            newModelViewScratch
+                .set(matrices.modelView())
                 .translate(-x, -y, -z)
                 .mul(s)
-                .translate(cameraShipSpace);
+                .translate(cameraShipSpaceScratch);
+            modelViewScratch.set(newModelViewScratch);
 
             // Build a precision-friendly matrix that maps a sodium-chunk-local vertex
             // pos to (worldPos - renderOrigin), where renderOrigin is the integer
@@ -421,37 +487,53 @@ public class SodiumCompat {
             final int originX = (int) Math.floor(x);
             final int originY = (int) Math.floor(y);
             final int originZ = (int) Math.floor(z);
-            final Matrix4d localToCameraRel = new Matrix4d()
-                .translate(x - originX, y - originY, z - originZ)
-                .translate(-x, -y, -z)
+            localToCameraRelScratch
+                .identity()
+                .translate(-originX, -originY, -originZ)
                 .mul(s)
-                .translate(cameraShipSpace);
+                .translate(cameraShipSpaceScratch);
 
-            final ChunkRenderMatrices newMatrices =
-                new ChunkRenderMatrices(matrices.projection(), new Matrix4f(newModelView));
+            final ChunkRenderMatrices newMatrices = new ChunkRenderMatrices(matrices.projection(), modelViewScratch.set(newModelViewScratch));
             DefaultChunkRenderer chunkRenderer = (DefaultChunkRenderer) ((RenderSectionManagerAccessor) renderSectionManager).getChunkRenderer();
 
             // Stash uniforms for the mixin's redirected begin() to consume
-            pushTransform(new Matrix4f(s));
-            pushLocalToWorld(new Matrix4f(localToCameraRel));
+            transformScratch.set(s);
+            pushTransform(transformScratch);
+            localToWorldScratch.set(localToCameraRelScratch);
+            pushLocalToWorld(localToWorldScratch);
             pushRenderOrigin(originX, originY, originZ);
+            pushSelfShipIndex(getShipOccluderList().indexOfShip(ship.getId()));
             IS_RENDERING_SHIP.set(true);
 
             // Bind the world-light + biome-color buffer textures so the ship
             // shader can sample them. Bound only when the corresponding feature
-            // is enabled; the shaders' #ifdef gates ensure the matching sampler
-            // is never read when its feature is off.
-            if (storage != null) storage.bind(LIGHT_SECTIONS_TEXTURE_UNIT, LIGHT_LUT_TEXTURE_UNIT);
-            if (biomeStorageLocal != null) biomeStorageLocal.bind(BIOME_SECTIONS_TEXTURE_UNIT, BIOME_LUT_TEXTURE_UNIT);
-            // Same world-from-ship storage the world chunk shader queries —
-            // bound here so the ship shader can read it for ship-on-ship.
-            if (VSGameConfig.CLIENT.getDynamicShipToWorldLighting()) {
-                getShipEmitterList().bind(SHIP_EMITTER_LIST_TEXTURE_UNIT);
+            // is enabled, and only once per frame — these are the same GL
+            // buffer textures for every ship this frame, so N ships shouldn't
+            // pay for N redundant rebinds. (Shares recordListsBound() state
+            // with MixinDefaultChunkRenderer's ship/world branches, which
+            // bind the same emitter/occluder units — whichever runs first
+            // in a frame satisfies both.)
+            if (needsListRebind()) {
+                if (storage != null) storage.bind(LIGHT_SECTIONS_TEXTURE_UNIT, LIGHT_LUT_TEXTURE_UNIT);
+                if (biomeStorageLocal != null) biomeStorageLocal.bind(BIOME_SECTIONS_TEXTURE_UNIT, BIOME_LUT_TEXTURE_UNIT);
+                if (VSGameConfig.CLIENT.getDynamicShipToWorldLighting()) {
+                    // Must bind the same set as MixinDefaultChunkRenderer's branches: they share
+                    // recordListsBound() state, so whichever runs first in a frame is the only one
+                    // that binds, and anything missing here would be left unbound for both.
+                    getShipEmitterList().bind(SHIP_EMITTER_LIST_TEXTURE_UNIT);
+                    getShipOccluderList().bind(SHIP_OCCLUDER_LIST_TEXTURE_UNIT);
+                    getWorldFromShipStorage().bind(
+                        WORLD_FROM_SHIP_SECTIONS_TEXTURE_UNIT, WORLD_FROM_SHIP_LUT_TEXTURE_UNIT);
+                }
+                recordListsBound();
             }
 
+            SodiumCompat.setLastShipInBatch(i == renderableShips.size() - 1);
+
             chunkRenderer.render(newMatrices, commandList, renderList, pass,
-                new CameraTransform(cameraShipSpace.x(), cameraShipSpace.y(), cameraShipSpace.z()));
+                new CameraTransform(cameraShipSpaceScratch.x(), cameraShipSpaceScratch.y(), cameraShipSpaceScratch.z()));
             IS_RENDERING_SHIP.set(false);
+            pushSelfShipIndex(-1);
 
              if (distanceScaling != 1f) {
                 RenderSystem.setShaderFogStart(initialFogStart);
@@ -495,6 +577,26 @@ public class SodiumCompat {
 
 
     public static void renderShips(RenderSectionManager renderSectionManager, RenderType renderLayer, ChunkRenderMatrices matrices, double x, double y, double z) {
+        SodiumCompat.advanceFrameToken();
+        Minecraft.getInstance().getProfiler().push("vs_dynamic_lighting");
+        ClientLevel level = Minecraft.getInstance().level;
+        // The CPU BFS is expensive enough that it only runs every 15th frame — visible as ship
+        // lights lagging the hull. The compute flood is cheap enough to run every frame, so it
+        // isn't throttled.
+        // (be aware this is frames, not ticks)
+        try {
+            if (VsDynamicLight.isGpuFloodActive() || frameToken % 15 == 0) {
+                SodiumCompat.populateWorldFromShipsForFrame(level);
+                SodiumCompat.populateLightSectionStorage(level);
+                SodiumCompat.populateBiomeSectionStorage(level);
+                SodiumCompat.dispatchGpuLightFlood();
+                if (LoadedMods.getFlywheel() != FlywheelVersion.NONE) {
+                    FlywheelDynLightCompat.updateDynamicLightingForFlywheel(level);
+                }
+            }
+        } finally {
+            Minecraft.getInstance().getProfiler().pop();
+        }
         if (renderLayer == RenderType.solid()) {
             renderShipsForPass(renderSectionManager, matrices, DefaultTerrainRenderPasses.SOLID, x, y, z);
             renderShipsForPass(renderSectionManager, matrices, DefaultTerrainRenderPasses.CUTOUT, x, y, z);
@@ -534,14 +636,24 @@ public class SodiumCompat {
         } finally {
             commandList.close();
             IS_RENDERING_SHIP.set(false);
+            pushSelfShipIndex(-1);
         }
     }
 
     public static GlProgram<ChunkShaderInterface> getOrCreateWorldProgram(ChunkShaderOptions options) {
-        GlProgram<WorldThing> program = cachedWorldPrograms.get(options);
+        // The world shader has one VS feature of its own — the flood-grid gate — so it needs the same
+        // (options, features) cache key the ship shader uses, not options alone.
+        int features = VsDynamicLight.isGpuFloodActive() ? FEATURE_FLOOD_GRID : 0;
+        if (features != 0) {
+            int paint = VSGameConfig.CLIENT.getDebugFloodPaint();
+            if (paint == 1) features |= FEATURE_DEBUG_FLOOD_1;
+            else if (paint >= 2) features |= FEATURE_DEBUG_FLOOD_2;
+        }
+        ShaderCacheKey key = new ShaderCacheKey(options, features);
+        GlProgram<WorldThing> program = cachedWorldPrograms.get(key);
         if (program == null) {
-            program = createWorldShader("blocks/world_layer_opaque", options);
-            cachedWorldPrograms.put(options, program);
+            program = createWorldShader("blocks/world_layer_opaque", options, features);
+            cachedWorldPrograms.put(key, program);
         }
         return (GlProgram<ChunkShaderInterface>) (Object) program;
     }
@@ -570,10 +682,14 @@ public class SodiumCompat {
                 (float) (cameraPos.z - oz));
         wt.setShipEmitters(SHIP_EMITTER_LIST_TEXTURE_UNIT, getShipEmitterList().size());
         wt.setShipOccluders(SHIP_OCCLUDER_LIST_TEXTURE_UNIT, getShipOccluderList().size());
+        wt.setWorldFromShipSamplers(
+            WORLD_FROM_SHIP_SECTIONS_TEXTURE_UNIT, WORLD_FROM_SHIP_LUT_TEXTURE_UNIT);
+        wt.setFloodGridValid(VsDynamicLight.isFloodGridValid());
     }
 
-    private static GlProgram<WorldThing> createWorldShader(String path, ChunkShaderOptions options) {
-        ShaderConstants constants = createWorldShaderConstants(options);
+    private static GlProgram<WorldThing> createWorldShader(String path, ChunkShaderOptions options,
+            int features) {
+        ShaderConstants constants = createWorldShaderConstants(options, features);
 
         GlShader vertShader = ShaderLoader.loadShader(ShaderType.VERTEX,
                 new ResourceLocation("valkyrienskies", path + ".vsh"), constants);
@@ -589,14 +705,15 @@ public class SodiumCompat {
                     .bindAttribute("a_TexCoord", ChunkShaderBindingPoints.ATTRIBUTE_TEXTURE)
                     .bindAttribute("a_LightAndData", ChunkShaderBindingPoints.ATTRIBUTE_LIGHT_MATERIAL_INDEX)
                     .bindFragmentData("fragColor", ChunkShaderBindingPoints.FRAG_COLOR)
-                    .link((shader) -> new WorldThing(shader, options));
+                    .link((shader) -> new WorldThing(shader, options, features));
         } finally {
             vertShader.delete();
             fragShader.delete();
         }
     }
 
-    private static ShaderConstants createWorldShaderConstants(ChunkShaderOptions options) {
+    private static ShaderConstants createWorldShaderConstants(ChunkShaderOptions options,
+            int features) {
         // Sodium's stock chunk shader uses USE_FRAGMENT_DISCARD / USE_FOG /
         // USE_VANILLA_COLOR_FORMAT defines from the pass options. We want the
         // same set so the world shader handles cutout / translucent passes
@@ -611,6 +728,10 @@ public class SodiumCompat {
             if (parts.length == 2) builder.add(name);
             else builder.add(name, parts[2]);
         }
+        if ((features & FEATURE_FLOOD_GRID) != 0) builder.add("VS_FLOOD_GRID");
+        if ((features & FEATURE_DEBUG_FLOOD_1) != 0) builder.add("VS_DEBUG_FLOOD", "1");
+        if ((features & FEATURE_DEBUG_FLOOD_2) != 0) builder.add("VS_DEBUG_FLOOD", "2");
+        if ((features & FEATURE_DEBUG_SHIP_LIGHT) != 0) builder.add("VS_DEBUG_SHIP_LIGHT", VSGameConfig.CLIENT.getDebugFloodPaint() == 4 ? "4" : "3");
         return builder.build();
     }
 
@@ -679,6 +800,7 @@ public class SodiumCompat {
         if ((features & FEATURE_LIGHT) != 0) builder.add("VS_DYNAMIC_LIGHT");
         if ((features & FEATURE_SHADE) != 0) builder.add("VS_DYNAMIC_SHADE");
         if ((features & FEATURE_SHIP_ON_SHIP) != 0) builder.add("VS_SHIP_ON_SHIP");
+        if ((features & FEATURE_FLOOD_GRID) != 0) builder.add("VS_FLOOD_GRID");
 
         return builder.build();
     }
