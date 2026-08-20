@@ -588,30 +588,37 @@ public class SodiumCompat {
 
     private static BoundPath lastBoundPath = BoundPath.UNSET;
     private static TerrainRenderPass lastBoundPass = null;
+    // The program object itself: a config change (ship AO, debug paint, the flood) yields a DIFFERENT
+    // program for the same path+pass, and comparing only path+pass leaves the old one bound, so the
+    // setting appears to do nothing until the next world reload.
+    private static Object lastBoundProgram = null;
     private static long lastBoundListsFrame = -1;
     private static long frameToken = 0;
 
-    public static boolean needsShipProgramBind(final TerrainRenderPass pass) {
-        return lastBoundPath != BoundPath.SHIP || lastBoundPass != pass;
+    public static boolean needsShipProgramBind(final TerrainRenderPass pass, final Object program) {
+        return lastBoundPath != BoundPath.SHIP || lastBoundPass != pass || lastBoundProgram != program;
     }
 
-    public static void recordShipProgramBound(final TerrainRenderPass pass) {
+    public static void recordShipProgramBound(final TerrainRenderPass pass, final Object program) {
         lastBoundPath = BoundPath.SHIP;
         lastBoundPass = pass;
+        lastBoundProgram = program;
     }
 
-    public static boolean needsWorldProgramBind(final TerrainRenderPass pass) {
-        return lastBoundPath != BoundPath.WORLD || lastBoundPass != pass;
+    public static boolean needsWorldProgramBind(final TerrainRenderPass pass, final Object program) {
+        return lastBoundPath != BoundPath.WORLD || lastBoundPass != pass || lastBoundProgram != program;
     }
 
-    public static void recordWorldProgramBound(final TerrainRenderPass pass) {
+    public static void recordWorldProgramBound(final TerrainRenderPass pass, final Object program) {
         lastBoundPath = BoundPath.WORLD;
         lastBoundPass = pass;
+        lastBoundProgram = program;
     }
 
     public static void recordVanillaBound(final TerrainRenderPass pass) {
         lastBoundPath = BoundPath.VANILLA;
         lastBoundPass = pass;
+        lastBoundProgram = null;
     }
 
     /**
@@ -630,6 +637,7 @@ public class SodiumCompat {
         frameToken++;
         lastBoundPath = BoundPath.UNSET;
         lastBoundPass = null;
+        lastBoundProgram = null;
     }
 
     // --- Rendering ---------------------------------------------------------

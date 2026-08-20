@@ -1,0 +1,24 @@
+# Seam-AO debug paint (debugFloodPaint=5): red = AO loss applied to this fragment. If the ground
+# under the ship paints pure black with the AO config on, the shader is computing zero loss and the
+# problem is shader-side, not in the Java plumbing.
+world autotest
+wait-level
+wait 100
+hud off
+cmd gamemode spectator
+cmd time set noon
+cmd gamerule doDaylightCycle false
+cmd kill @e[type=!player]
+wait 20
+
+run light_ship 0 -58 0 minecraft:stone
+wait 120
+cmd tp @s 7 -55 7 135 30
+wait 100
+
+ao on
+wait 80
+aoinfo
+screenshot ao_paint_on
+wait 20
+quit

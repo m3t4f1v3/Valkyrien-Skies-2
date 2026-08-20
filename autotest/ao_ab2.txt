@@ -1,0 +1,37 @@
+# A/B for the seam-run AO merged from upstream-shader-core: the SAME frame with
+# shipAmbientOcclusion off and on. Both shots come from one client because two clients in parallel
+# get one OOM-killed on this machine, and because an A/B across two launches compares two different
+# worlds' terrain generation as much as it compares the AO.
+#
+# The ship sits one block above the superflat surface (grass top at y=-60) so its underside is
+# within the seam field's 3.7-block support; a ship hovering higher casts nothing and the
+# comparison is vacuous.
+world autotest
+wait-level
+wait 100
+hud off
+cmd gamemode spectator
+cmd time set noon
+cmd gamerule doDaylightCycle false
+cmd kill @e[type=!player]
+wait 20
+
+run light_ship 0 -58 0 minecraft:stone
+wait 120
+cmd tp @s 7 -55 7 135 30
+wait 100
+
+screenshot ao_ab_boot
+wait 20
+ao off
+wait 60
+aoinfo
+screenshot ao_ab_off
+wait 20
+
+ao on
+wait 60
+aoinfo
+screenshot ao_ab_on
+wait 20
+quit

@@ -219,7 +219,8 @@ const float VS_UV_MAX = 31.0 / 32.0;
 // per-fragment ship-on-ship seam correction). Park a ship voxel next to
 // another ship's face and check the seam AO matches. Comment out to render
 // normally.
-#define VS_DEBUG_SEAM_AO
+// Left ON upstream, which paints every terrain fragment black: uncomment to use it.
+// #define VS_DEBUG_SEAM_AO
 
 #if defined(VS_DYNAMIC_LIGHT) || defined(VS_SHIP_ON_SHIP)
 // ===== Flywheel-style smooth light + AO ======================================
@@ -995,6 +996,7 @@ void main() {
     // Ship-fragment lighting from ship emitters, plus per-fragment ship-on-ship
     // AO seam matching (nearby, possibly differently-rotated ship voxels
     // darkening this face across a seam).
+    float vsDbgSosLight = 0.0;
     if (!isFullbright) {
         vec3 sosWorldPos = v_CameraRelWorldPos + vec3(u_VsRenderOrigin);
 #ifdef VS_FLOOD_GRID
@@ -1008,6 +1010,7 @@ void main() {
         // No compute support: fall back to the unoccluded emitter falloff, as this path always was.
         float sosLight = vs_sosEmitterLight(sosWorldPos);
 #endif
+        vsDbgSosLight = sosLight;
         if (sosLight > 0.0) {
             lightCoord.x = max(lightCoord.x, (sosLight + 0.5) / 16.0);
         }
@@ -1058,4 +1061,45 @@ void main() {
 #endif
 
     fragColor = _linearFog(diffuseColor, v_FragDistance, u_FogColor, u_FogStart, u_FogEnd);
+
+#ifdef VS_DEBUG_SHIP_LIGHT
+    // ===== Ship-chunk light source paint =========================================================
+    // Which of the two block-light sources is lighting this ship fragment?
+    //
+    //   RED   = v_BakedLightCoord.x, the SHIPYARD-baked lightmap, baked at mesh-compile time.
+    //   GREEN = the world-sampled light at the ship's rendered position.
+    //
+    // The shipyard lightmap is not occlusion-aware -- probed on the client it is a plain
+    // 15-minus-manhattan falloff, with solid stone reading 13 and 14 -- so if a ship's outer hull shows
+    // RED far from an enclosed emitter, its own lamp is shining through solid blocks.
+    //
+    // Written OVER the finished fragColor, never as an early return: returning early lets the compiler
+    // drop the texture reads above and sodium's bindUniform then throws on the missing sampler. The
+    // 1e-4 term keeps them all live.
+    {
+        float dbgBaked = max(0.0, v_BakedLightCoord.x * 16.0 - 0.5);
+#ifdef VS_DYNAMIC_LIGHT
+        float dbgWorld = max(0.0, vsLight.light.x * 16.0 - 0.5);
+#else
+        float dbgWorld = 0.0;
+#endif
+        // Constant blue marks "this fragment is a ship chunk". Without it an unlit hull paints pure
+        // black and is indistinguishable from the night sky behind it, so a shot showing no leak and a
+        // shot with the ship out of frame look identical -- which is exactly how the first attempt at
+        // this measurement went.
+#if VS_DEBUG_SHIP_LIGHT == 4
+#ifdef VS_SHIP_ON_SHIP
+        fragColor = vec4(clamp(vsDbgSosLight / 15.0, 0.0, 1.0),
+                         clamp(aoMultiplier, 0.0, 1.0),
+                         0.20, 1.0) + fragColor * 1.0e-4;
+#else
+        fragColor = vec4(0.0, 0.0, 0.20, 1.0) + fragColor * 1.0e-4;
+#endif
+#else
+        fragColor = vec4(clamp(dbgBaked / 15.0, 0.0, 1.0),
+                         clamp(dbgWorld / 15.0, 0.0, 1.0),
+                         0.20, 1.0) + fragColor * 1.0e-4;
+#endif
+    }
+#endif
 }

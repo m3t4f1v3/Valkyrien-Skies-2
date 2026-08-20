@@ -213,11 +213,17 @@ public final class VsAutoTestHarness {
             // Flipping the config in game rather than relaunching: the shader programs are cached by
             // feature bits, so the next draw compiles the variant for the new setting.
             case "aoinfo" -> LOGGER.info(
-                "[autotest] aoinfo: config={} occluderListSize={} emitterListSize={} floodActive={}",
+                "[autotest] aoinfo: config={} occluderListSize={} emitterListSize={} floodActive={}"
+                    + " seamRuns={} boundsCenter=({},{},{}) boundsRadius={}",
                 org.valkyrienskies.mod.common.config.VSGameConfig.CLIENT.getShipAmbientOcclusion(),
                 org.valkyrienskies.mod.common.render.light.VsDynamicLight.getShipOccluderList().size(),
                 org.valkyrienskies.mod.common.render.light.VsDynamicLight.getShipEmitterList().size(),
-                org.valkyrienskies.mod.common.render.light.VsDynamicLight.isGpuFloodActive());
+                org.valkyrienskies.mod.common.render.light.VsDynamicLight.isGpuFloodActive(),
+                org.valkyrienskies.mod.common.render.light.VsDynamicLight.getShipOccluderList().headerCount(),
+                org.valkyrienskies.mod.common.render.light.VsDynamicLight.getShipOccluderList().boundsCenterX(),
+                org.valkyrienskies.mod.common.render.light.VsDynamicLight.getShipOccluderList().boundsCenterY(),
+                org.valkyrienskies.mod.common.render.light.VsDynamicLight.getShipOccluderList().boundsCenterZ(),
+                org.valkyrienskies.mod.common.render.light.VsDynamicLight.getShipOccluderList().boundsRadius());
             case "ao" -> {
                 org.valkyrienskies.mod.common.config.VSGameConfig.CLIENT
                     .setShipAmbientOcclusion("on".equalsIgnoreCase(inst[1]));

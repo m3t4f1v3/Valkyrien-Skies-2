@@ -245,7 +245,8 @@ const float WS_UV_MAX = 31.0 / 32.0;
 // folded into v_Color.a per-vertex in the VSH). Lets you park a ship voxel next
 // to a real solid block and check the seam AO matches vanilla's darkening
 // shape. Comment out the define to return to normal rendering.
-#define VS_DEBUG_SEAM_AO
+// Left ON upstream, which paints every terrain fragment black: uncomment to use it.
+// #define VS_DEBUG_SEAM_AO
 
 const int VA_MASK_TEX_WIDTH_SHIFT = 12;
 const int VA_MASK_TEX_WIDTH_MASK = (1 << VA_MASK_TEX_WIDTH_SHIFT) - 1;

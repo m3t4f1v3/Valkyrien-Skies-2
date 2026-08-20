@@ -93,6 +93,9 @@ public class SodiumCompat {
     static final int FEATURE_DEBUG_SHIP_LIGHT = 128;
     /** Ship-cast ambient occlusion. Off by default -- the per-fragment occluder scan dominates. */
     static final int FEATURE_SHIP_AO = 512;
+    // debugFloodPaint = 5: paint the seam-AO loss instead of the shaded color, in both the
+    // world and ship shaders. Red = loss applied; the coloured dots mark sampled corners.
+    static final int FEATURE_DEBUG_SEAM_AO = 1024;
 
     static Map<ShaderCacheKey, GlProgram<ShipThing>> cachedPrograms = new HashMap<>();
     private static final ThreadLocal<Matrix4f> CURRENT_TRANSFORM = new ThreadLocal<>();
@@ -230,8 +233,11 @@ public class SodiumCompat {
 
     public static GlProgram<ChunkShaderInterface> getOrCreateShipProgram(ChunkShaderOptions options) {
         int features = computeFeatureBits();
-        if (VSGameConfig.CLIENT.getDebugFloodPaint() >= 3) {
+        if (VSGameConfig.CLIENT.getDebugFloodPaint() == 3 || VSGameConfig.CLIENT.getDebugFloodPaint() == 4) {
             features |= FEATURE_DEBUG_SHIP_LIGHT;
+        }
+        if (VSGameConfig.CLIENT.getDebugFloodPaint() == 5) {
+            features |= FEATURE_DEBUG_SEAM_AO;
         }
         ShaderCacheKey key = new ShaderCacheKey(options, features);
         GlProgram<ShipThing> program = cachedPrograms.get(key);
@@ -401,30 +407,38 @@ public class SodiumCompat {
     private enum BoundPath { UNSET, SHIP, WORLD, VANILLA }
     private static BoundPath lastBoundPath = BoundPath.UNSET;
     private static TerrainRenderPass lastBoundPass = null;
+    // The program object itself, not just which path it belongs to. A config change (ship AO, debug
+    // paint, the flood) produces a DIFFERENT program for the same path+pass, and comparing only
+    // path+pass left the old program bound -- the setting then appears to do nothing at all until
+    // the next world reload.
+    private static Object lastBoundProgram = null;
     private static long lastBoundListsFrame = -1;
     private static long frameToken = 0;
 
-    public static boolean needsShipProgramBind(TerrainRenderPass pass) {
-        return lastBoundPath != BoundPath.SHIP || lastBoundPass != pass;
+    public static boolean needsShipProgramBind(TerrainRenderPass pass, Object program) {
+        return lastBoundPath != BoundPath.SHIP || lastBoundPass != pass || lastBoundProgram != program;
     }
 
-    public static void recordShipProgramBound(TerrainRenderPass pass) {
+    public static void recordShipProgramBound(TerrainRenderPass pass, Object program) {
         lastBoundPath = BoundPath.SHIP;
         lastBoundPass = pass;
+        lastBoundProgram = program;
     }
 
-    public static boolean needsWorldProgramBind(TerrainRenderPass pass) {
-        return lastBoundPath != BoundPath.WORLD || lastBoundPass != pass;
+    public static boolean needsWorldProgramBind(TerrainRenderPass pass, Object program) {
+        return lastBoundPath != BoundPath.WORLD || lastBoundPass != pass || lastBoundProgram != program;
     }
 
-    public static void recordWorldProgramBound(TerrainRenderPass pass) {
+    public static void recordWorldProgramBound(TerrainRenderPass pass, Object program) {
         lastBoundPath = BoundPath.WORLD;
         lastBoundPass = pass;
+        lastBoundProgram = program;
     }
 
     public static void recordVanillaBound(TerrainRenderPass pass) {
         lastBoundPath = BoundPath.VANILLA;
         lastBoundPass = pass;
+        lastBoundProgram = null;
     }
 
     /** True once per frame — the light/biome/emitter/occluder buffer textures
@@ -448,6 +462,7 @@ public class SodiumCompat {
         frameToken++;
         lastBoundPath = BoundPath.UNSET;
         lastBoundPass = null;
+        lastBoundProgram = null;
     }
 
     private static final ThreadLocal<Boolean> IS_LAST_SHIP_IN_BATCH = ThreadLocal.withInitial(() -> true);
@@ -711,6 +726,7 @@ public class SodiumCompat {
         if (features != 0) {
             int paint = VSGameConfig.CLIENT.getDebugFloodPaint();
             if (paint == 1) features |= FEATURE_DEBUG_FLOOD_1;
+            else if (paint == 5) features |= FEATURE_DEBUG_SEAM_AO;
             else if (paint >= 2) features |= FEATURE_DEBUG_FLOOD_2;
         }
         ShaderCacheKey key = new ShaderCacheKey(options, features);
@@ -807,6 +823,7 @@ public class SodiumCompat {
         if ((features & FEATURE_DEBUG_FLOOD_1) != 0) builder.add("VS_DEBUG_FLOOD", "1");
         if ((features & FEATURE_DEBUG_FLOOD_2) != 0) builder.add("VS_DEBUG_FLOOD", "2");
         if ((features & FEATURE_SHIP_AO) != 0) builder.add("VS_SHIP_AO");
+        if ((features & FEATURE_DEBUG_SEAM_AO) != 0) builder.add("VS_DEBUG_SEAM_AO");
         if ((features & FEATURE_DEBUG_SHIP_LIGHT) != 0) builder.add("VS_DEBUG_SHIP_LIGHT", VSGameConfig.CLIENT.getDebugFloodPaint() == 4 ? "4" : "3");
         return builder.build();
     }
@@ -877,6 +894,15 @@ public class SodiumCompat {
         if ((features & FEATURE_SHADE) != 0) builder.add("VS_DYNAMIC_SHADE");
         if ((features & FEATURE_SHIP_ON_SHIP) != 0) builder.add("VS_SHIP_ON_SHIP");
         if ((features & FEATURE_FLOOD_GRID) != 0) builder.add("VS_FLOOD_GRID");
+        // Every feature bit ShipThing gates a uniform binding on has to be emitted as a define here,
+        // or the FSH compiles without the reader, GLSL drops the uniform, and bindUniform NPEs.
+        if ((features & FEATURE_SHIP_AO) != 0) builder.add("VS_SHIP_AO");
+        if ((features & FEATURE_DEBUG_SEAM_AO) != 0) builder.add("VS_DEBUG_SEAM_AO");
+        // getOrCreateShipProgram sets this bit from debugFloodPaint, so it has to be emitted here too
+        // -- without it the debug paint is silently a no-op on ship chunks.
+        if ((features & FEATURE_DEBUG_SHIP_LIGHT) != 0) {
+            builder.add("VS_DEBUG_SHIP_LIGHT", VSGameConfig.CLIENT.getDebugFloodPaint() == 4 ? "4" : "3");
+        }
 
         return builder.build();
     }

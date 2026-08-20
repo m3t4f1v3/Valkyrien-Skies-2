@@ -53,10 +53,10 @@ public abstract class MixinDefaultChunkRenderer {
                 new ChunkShaderOptions(ChunkFogMode.SMOOTH, renderPass, accessor.getVertexType());
             accessor.setActiveProgram(SodiumCompat.getOrCreateShipProgram(options));
 
-            if (SodiumCompat.needsShipProgramBind(renderPass)) {
+            if (SodiumCompat.needsShipProgramBind(renderPass, accessor.getActiveProgram())) {
                 renderPass.startDrawing();
                 accessor.getActiveProgram().bind();
-                SodiumCompat.recordShipProgramBound(renderPass);
+                SodiumCompat.recordShipProgramBound(renderPass, accessor.getActiveProgram());
             }
 
             // Stock per-pass state: samplers, the section-time buffer texture and the globals block.
@@ -81,10 +81,10 @@ public abstract class MixinDefaultChunkRenderer {
                 new ChunkShaderOptions(ChunkFogMode.SMOOTH, renderPass, accessor.getVertexType());
             accessor.setActiveProgram(SodiumCompat.getOrCreateWorldProgram(options));
 
-            if (SodiumCompat.needsWorldProgramBind(renderPass)) {
+            if (SodiumCompat.needsWorldProgramBind(renderPass, accessor.getActiveProgram())) {
                 renderPass.startDrawing();
                 accessor.getActiveProgram().bind();
-                SodiumCompat.recordWorldProgramBound(renderPass);
+                SodiumCompat.recordWorldProgramBound(renderPass, accessor.getActiveProgram());
             }
 
             accessor.getActiveProgram().getInterface()

@@ -31,10 +31,10 @@ public abstract class MixinDefaultChunkRenderer {
             ChunkShaderOptions options = new ChunkShaderOptions(ChunkFogMode.SMOOTH, renderPass, accessor.getVertexType());
             accessor.setActiveProgram(SodiumCompat.getOrCreateShipProgram(options));
 
-            if (SodiumCompat.needsShipProgramBind(renderPass)) {
+            if (SodiumCompat.needsShipProgramBind(renderPass, accessor.getActiveProgram())) {
                 renderPass.startDrawing();
                 accessor.getActiveProgram().bind();
-                SodiumCompat.recordShipProgramBound(renderPass);
+                SodiumCompat.recordShipProgramBound(renderPass, accessor.getActiveProgram());
             }
 
             // Per-ship uniforms — never elidable, these differ every ship.
@@ -58,10 +58,10 @@ public abstract class MixinDefaultChunkRenderer {
             ChunkShaderOptions options = new ChunkShaderOptions(ChunkFogMode.SMOOTH, renderPass, accessor.getVertexType());
             accessor.setActiveProgram(SodiumCompat.getOrCreateWorldProgram(options));
 
-            if (SodiumCompat.needsWorldProgramBind(renderPass)) {
+            if (SodiumCompat.needsWorldProgramBind(renderPass, accessor.getActiveProgram())) {
                 renderPass.startDrawing();
                 accessor.getActiveProgram().bind();
-                SodiumCompat.recordWorldProgramBound(renderPass);
+                SodiumCompat.recordWorldProgramBound(renderPass, accessor.getActiveProgram());
             }
 
             SodiumCompat.setupWorldShaderState(accessor.getActiveProgram(), matrices);
