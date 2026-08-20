@@ -46,15 +46,11 @@ public abstract class MixinDefaultChunkRenderer {
                     SodiumCompat.WORLD_FROM_SHIP_SECTIONS_TEXTURE_UNIT,
                     SodiumCompat.WORLD_FROM_SHIP_LUT_TEXTURE_UNIT);
                 SodiumCompat.getShipOccluderList().bind(SodiumCompat.SHIP_OCCLUDER_LIST_TEXTURE_UNIT);
+                SodiumCompat.getShipOccluderList().bindHeaders(SodiumCompat.SEAM_RUN_HEADERS_TEXTURE_UNIT);
+                SodiumCompat.getShipOccluderList().bindShipDir(SodiumCompat.SEAM_SHIP_DIR_TEXTURE_UNIT);
+                SodiumCompat.getShipOccluderList().bindGrid(SodiumCompat.SEAM_GRID_TEXTURE_UNIT);
                 SodiumCompat.recordListsBound();
             }
-            // World-section storage so ws_shipAo can scan world voxels in
-            // the 3×3×3 around a world fragment. Bound to texture units
-            // past the ValkyrienAir mask range (2..11) — see comment on
-            // LIGHT_SECTIONS_TEXTURE_UNIT in SodiumCompat for the reason.
-            SodiumCompat.getLightStorage().bind(
-                    SodiumCompat.LIGHT_SECTIONS_TEXTURE_UNIT,
-                    SodiumCompat.LIGHT_LUT_TEXTURE_UNIT);
             return;
         }
 
@@ -76,6 +72,9 @@ public abstract class MixinDefaultChunkRenderer {
                     SodiumCompat.WORLD_FROM_SHIP_SECTIONS_TEXTURE_UNIT,
                     SodiumCompat.WORLD_FROM_SHIP_LUT_TEXTURE_UNIT);
                 SodiumCompat.getShipOccluderList().bind(SodiumCompat.SHIP_OCCLUDER_LIST_TEXTURE_UNIT);
+                SodiumCompat.getShipOccluderList().bindHeaders(SodiumCompat.SEAM_RUN_HEADERS_TEXTURE_UNIT);
+                SodiumCompat.getShipOccluderList().bindShipDir(SodiumCompat.SEAM_SHIP_DIR_TEXTURE_UNIT);
+                SodiumCompat.getShipOccluderList().bindGrid(SodiumCompat.SEAM_GRID_TEXTURE_UNIT);
                 SodiumCompat.recordListsBound();
             }
             // ws_shipAo reads the world-section storage in the WORLD shader too, so this branch has to

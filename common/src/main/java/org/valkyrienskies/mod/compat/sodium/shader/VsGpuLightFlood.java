@@ -359,7 +359,7 @@ public final class VsGpuLightFlood {
         final float qz = (float) rotation.z();
         final float qw = (float) rotation.w();
 
-        final int shipIndex = occluders.indexForShip(ship.getId());
+        final float shipIndex = occluders.assignShipIndex(ship.getId());
         final Matrix3f m = dispatch.rotation;
         final double originX = dispatch.originX;
         final double originY = dispatch.originY;

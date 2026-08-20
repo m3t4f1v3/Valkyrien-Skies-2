@@ -1,6 +1,7 @@
 package org.valkyrienskies.mod.compat.sodium;
 
 import me.jellysquid.mods.sodium.client.gl.shader.uniform.GlUniformFloat3v;
+import me.jellysquid.mods.sodium.client.gl.shader.uniform.GlUniformFloat4v;
 import me.jellysquid.mods.sodium.client.gl.shader.uniform.GlUniformInt;
 import me.jellysquid.mods.sodium.client.render.chunk.shader.ChunkShaderInterface;
 import me.jellysquid.mods.sodium.client.render.chunk.shader.ChunkShaderOptions;
@@ -21,61 +22,49 @@ public class WorldThing extends ChunkShaderInterface {
     private final GlUniformInt uniformShipEmitterCount;
     private final GlUniformInt uniformShipOccluders;
     private final GlUniformInt uniformShipOccluderCount;
-    // Compute-flooded ship light; only bound under VS_FLOOD_GRID, because sodium's bindUniform throws
-    // on a name the linked program doesn't declare.
+    // Compute-flooded ship light. Only bound under VS_FLOOD_GRID: the shader declares these only
+    // there, and sodium's bindUniform throws on a name the linked program does not have.
     private final GlUniformInt uniformWorldFromShipSections;
     private final GlUniformInt uniformWorldFromShipLut;
     private final GlUniformInt uniformFloodGridValid;
-    // World-section storage samplers, mirroring ShipThing — let ws_shipAo read solid bits from the
-    // 3x3x3 around a world fragment so the X-X corner rule can fold ship voxels and world blocks into
-    // one SDF instead of leaving them as two independent shadow shapes.
-    private final GlUniformInt uniformLightSections;
-    private final GlUniformInt uniformLightLut;
+    private final GlUniformInt uniformSeamRuns;
+    private final GlUniformInt uniformSeamRunCount;
+    private final GlUniformInt uniformSeamShipDir;
+    private final GlUniformFloat4v uniformSeamBounds;
+    private final GlUniformInt uniformSeamGrid;
+    private final GlUniformFloat3v uniformSeamGridOrigin;
+    private final GlUniformFloat3v uniformSeamGridInvCell;
 
     public WorldThing(ShaderBindingContext context, ChunkShaderOptions options, int features) {
         super(context, options);
-        final boolean floodGrid = (features & SodiumCompat.FEATURE_FLOOD_GRID) != 0;
         this.uniformRenderOrigin = context.bindUniform("u_VsRenderOrigin", GlUniformInt3v::new);
         this.uniformCameraFrac = context.bindUniform("u_VsCameraFrac", GlUniformFloat3v::new);
-        // Under VS_FLOOD_GRID the world shader takes ship light entirely from the flood, so it does
-        // not declare these at all and sodium's bindUniform would throw on the missing names. They
-        // remain for the non-compute fallback, which still evaluates the emitter list per fragment.
+        // Under VS_FLOOD_GRID the world shader takes ship light entirely from the flood and never
+        // reads the emitter list, so GLSL drops it and binding the name would throw. It remains for
+        // the no-compute fallback.
+        final boolean floodGrid = (features & SodiumCompat.FEATURE_FLOOD_GRID) != 0;
+        // Seam AO is compiled out when the config is off, so its uniforms are not in the linked
+        // program and binding them by name would throw.
+        final boolean shipAo = (features & SodiumCompat.FEATURE_SHIP_AO) != 0;
         this.uniformShipEmitters = floodGrid
             ? null : context.bindUniform("u_VsShipEmitters", GlUniformInt::new);
         this.uniformShipEmitterCount = floodGrid
             ? null : context.bindUniform("u_VsShipEmitterCount", GlUniformInt::new);
-        // AO-only in the world shader, and the shader does not declare these unless AO is compiled in.
-        final boolean shipAo = (features & SodiumCompat.FEATURE_SHIP_AO) != 0;
-        this.uniformShipOccluders = shipAo
-            ? context.bindUniform("u_VsShipOccluders", GlUniformInt::new) : null;
-        this.uniformShipOccluderCount = shipAo
-            ? context.bindUniform("u_VsShipOccluderCount", GlUniformInt::new) : null;
         this.uniformWorldFromShipSections = floodGrid
             ? context.bindUniform("u_VsWorldFromShipSections", GlUniformInt::new) : null;
         this.uniformWorldFromShipLut = floodGrid
             ? context.bindUniform("u_VsWorldFromShipLut", GlUniformInt::new) : null;
         this.uniformFloodGridValid = floodGrid
             ? context.bindUniform("u_VsFloodGridValid", GlUniformInt::new) : null;
-        // Read only by ws_shipAo, which is compiled out unless VS_SHIP_AO.
-        this.uniformLightSections = shipAo
-            ? context.bindUniform("u_VsLightSections", GlUniformInt::new) : null;
-        this.uniformLightLut = shipAo
-            ? context.bindUniform("u_VsLightLut", GlUniformInt::new) : null;
-    }
-
-    public void setFloodGridValid(final boolean valid) {
-        if (this.uniformFloodGridValid != null) {
-            this.uniformFloodGridValid.setInt(valid ? 1 : 0);
-        }
-    }
-
-    public void setWorldFromShipSamplers(int sectionsUnit, int lutUnit) {
-        if (this.uniformWorldFromShipSections != null) {
-            this.uniformWorldFromShipSections.setInt(sectionsUnit);
-        }
-        if (this.uniformWorldFromShipLut != null) {
-            this.uniformWorldFromShipLut.setInt(lutUnit);
-        }
+        this.uniformShipOccluders = shipAo ? context.bindUniform("u_VsShipOccluders", GlUniformInt::new) : null;
+        this.uniformShipOccluderCount = shipAo ? context.bindUniform("u_VsShipOccluderCount", GlUniformInt::new) : null;
+        this.uniformSeamRuns = shipAo ? context.bindUniform("u_VsSeamRuns", GlUniformInt::new) : null;
+        this.uniformSeamRunCount = shipAo ? context.bindUniform("u_VsSeamRunCount", GlUniformInt::new) : null;
+        this.uniformSeamShipDir = shipAo ? context.bindUniform("u_VsSeamShipDir", GlUniformInt::new) : null;
+        this.uniformSeamBounds = shipAo ? context.bindUniform("u_VsSeamBounds", GlUniformFloat4v::new) : null;
+        this.uniformSeamGrid = shipAo ? context.bindUniform("u_VsSeamGrid", GlUniformInt::new) : null;
+        this.uniformSeamGridOrigin = shipAo ? context.bindUniform("u_VsSeamGridOrigin", GlUniformFloat3v::new) : null;
+        this.uniformSeamGridInvCell = shipAo ? context.bindUniform("u_VsSeamGridInvCell", GlUniformFloat3v::new) : null;
     }
 
     public void setRenderOrigin(int x, int y, int z) {
@@ -86,9 +75,24 @@ public class WorldThing extends ChunkShaderInterface {
         this.uniformCameraFrac.set(fx, fy, fz);
     }
 
+    public void setFloodGridValid(boolean valid) {
+        if (this.uniformFloodGridValid != null) {
+            this.uniformFloodGridValid.setInt(valid ? 1 : 0);
+        }
+    }
+
+    public void setWorldFromShipSamplers(int sectionsUnit, int lutUnit) {
+        if (this.uniformWorldFromShipSections != null) {
+            this.uniformWorldFromShipSections.setInt(sectionsUnit);
+            this.uniformWorldFromShipLut.setInt(lutUnit);
+        }
+    }
+
+    public void setLightSectionsSampler(int unit) { }
+
+    public void setLightLutSampler(int unit) { }
+
     public void setShipEmitters(int textureUnit, int count) {
-        // Null under VS_FLOOD_GRID, where the world shader does not declare the emitter uniforms at
-        // all. The caller sets this unconditionally for both paths, so the check belongs here.
         if (this.uniformShipEmitters == null) {
             return;
         }
@@ -97,22 +101,25 @@ public class WorldThing extends ChunkShaderInterface {
     }
 
     public void setShipOccluders(int textureUnit, int count) {
-        if (this.uniformShipOccluders == null) {
-            return;
-        }
+        if (this.uniformShipOccluders == null) return;
         this.uniformShipOccluders.setInt(textureUnit);
         this.uniformShipOccluderCount.setInt(count);
     }
 
-    public void setLightSectionsSampler(int unit) {
-        if (this.uniformLightSections != null) {
-            this.uniformLightSections.setInt(unit);
-        }
+    public void setSeamData(int runsTextureUnit, int runCount, int shipDirTextureUnit,
+            float boundsCx, float boundsCy, float boundsCz, float boundsRadius) {
+        if (this.uniformSeamRuns == null) return;
+        this.uniformSeamRuns.setInt(runsTextureUnit);
+        this.uniformSeamRunCount.setInt(runCount);
+        this.uniformSeamShipDir.setInt(shipDirTextureUnit);
+        this.uniformSeamBounds.set(new float[] {boundsCx, boundsCy, boundsCz, boundsRadius});
     }
 
-    public void setLightLutSampler(int unit) {
-        if (this.uniformLightLut != null) {
-            this.uniformLightLut.setInt(unit);
-        }
+    public void setSeamGrid(int gridTextureUnit, float ox, float oy, float oz,
+            float icx, float icy, float icz) {
+        if (this.uniformSeamGrid == null) return;
+        this.uniformSeamGrid.setInt(gridTextureUnit);
+        this.uniformSeamGridOrigin.set(ox, oy, oz);
+        this.uniformSeamGridInvCell.set(icx, icy, icz);
     }
 }

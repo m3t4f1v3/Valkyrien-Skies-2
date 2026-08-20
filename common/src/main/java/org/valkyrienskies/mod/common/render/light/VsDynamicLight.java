@@ -236,6 +236,9 @@ public final class VsDynamicLight {
             getGpuLightFlood().prepare(level,
                 VSGameUtilsKt.getShipObjectWorld(level).getLoadedShips(), filter,
                 getShipVoxelCache(), storage, emitters, occluders);
+            // Seam-AO acceleration data (sub-run headers, per-ship directory, global bounds) has to
+            // be built after the last appendOccluder and before upload, on every path that uploads.
+            occluders.buildSeamData();
             emitters.upload();
             occluders.upload();
             return;
@@ -255,6 +258,7 @@ public final class VsDynamicLight {
         }
         cache.pruneUnused();
         storage.pruneUnused();
+        occluders.buildSeamData();
         storage.upload();
         emitters.upload();
         occluders.upload();

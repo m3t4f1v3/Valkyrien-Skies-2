@@ -166,7 +166,7 @@ public class VsWorldFromShipLightStorage {
         final float qz = (float) scratchQuat.z;
         final float qw = (float) scratchQuat.w;
 
-        final int shipIndex = occluders != null ? occluders.indexForShip(ship.getId()) : 0;
+        final int shipIndex = occluders != null ? occluders.assignShipIndex(ship.getId()) : 0;
         final long base = voxels.pointer();
         for (int i = 0; i < voxels.count(); i++) {
             final long entry = base + (long) i * VsShipVoxelCache.BYTES_PER_VOXEL;

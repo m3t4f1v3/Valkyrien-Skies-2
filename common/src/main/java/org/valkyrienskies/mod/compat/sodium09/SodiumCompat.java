@@ -805,7 +805,7 @@ public class SodiumCompat {
             localToWorldScratch.set(localToCameraRelScratch);
             pushLocalToWorld(localToWorldScratch);
             pushRenderOrigin(originX, originY, originZ);
-            pushSelfShipIndex(getShipOccluderList().indexOfShip(ship.getId()));
+            pushSelfShipIndex(getShipOccluderList().getShipIndex(ship.getId()));
             IS_RENDERING_SHIP.set(true);
 
             // Bind the world-light + biome-color buffer textures so the ship shader can sample them.
