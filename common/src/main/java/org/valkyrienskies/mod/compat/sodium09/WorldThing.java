@@ -38,8 +38,12 @@ public class WorldThing extends DefaultShaderInterface {
             ? null : context.bindUniform("u_VsShipEmitters", GlUniformInt::new);
         this.uniformShipEmitterCount = floodGrid
             ? null : context.bindUniform("u_VsShipEmitterCount", GlUniformInt::new);
-        this.uniformShipOccluders = context.bindUniform("u_VsShipOccluders", GlUniformInt::new);
-        this.uniformShipOccluderCount = context.bindUniform("u_VsShipOccluderCount", GlUniformInt::new);
+        // AO-only in the world shader, and the shader does not declare these unless AO is compiled in.
+        final boolean shipAo = (features & SodiumCompat.FEATURE_SHIP_AO) != 0;
+        this.uniformShipOccluders = shipAo
+            ? context.bindUniform("u_VsShipOccluders", GlUniformInt::new) : null;
+        this.uniformShipOccluderCount = shipAo
+            ? context.bindUniform("u_VsShipOccluderCount", GlUniformInt::new) : null;
         this.uniformWorldFromShipSections = floodGrid
             ? context.bindUniform("u_VsWorldFromShipSections", GlUniformInt::new) : null;
         this.uniformWorldFromShipLut = floodGrid
@@ -80,6 +84,9 @@ public class WorldThing extends DefaultShaderInterface {
     }
 
     public void setShipOccluders(final int textureUnit, final int count) {
+        if (this.uniformShipOccluders == null) {
+            return;
+        }
         this.uniformShipOccluders.setInt(textureUnit);
         this.uniformShipOccluderCount.setInt(count);
     }

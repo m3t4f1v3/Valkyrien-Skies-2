@@ -54,6 +54,10 @@ layout(std430, binding = 7) readonly buffer VsWorldSections { uint vs_worldSecti
 // One entry per section live this frame: (arenaSlot, sectionX, sectionY, sectionZ).
 layout(std430, binding = 8) readonly buffer VsSlotPos { ivec4 vs_slotPos[]; };
 layout(std430, binding = 9) readonly buffer VsVoxels  { uvec2 vs_voxels[]; };
+// Slot index of each active section's six face neighbours, -1 where absent; six ints per section, in
+// the direction order the flood uses. Lets a sweep resolve a cross-section neighbour with one lookup
+// instead of a three-level LUT walk.
+layout(std430, binding = 10) readonly buffer VsSlotNeighbours { int vs_slotNeighbours[]; };
 
 // ---------------------------------------------------------------------------
 // LUT traversal. Same 3-level (Y -> X -> Z) coordinate-span walk as LightLut /

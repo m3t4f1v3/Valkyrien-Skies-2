@@ -1,0 +1,38 @@
+# A scene with enough ship voxels to be worth profiling: several hulls in view, each with a lamp, so
+# the occluder list is near its 1024 cap and the flood covers many sections -- the conditions a real
+# build produces, which a single 3x3x3 box does not.
+world autotest
+wait-level
+wait 80
+hud off
+cmd gamemode spectator
+cmd time set midnight
+cmd gamerule doDaylightCycle false
+cmd gamerule doMobSpawning false
+cmd kill @e[type=!player]
+wait 20
+
+run plate_ship -20 -50 0 12 0 0
+wait 60
+run plate_ship 20 -50 0 12 23 0.37
+wait 60
+run light_shaft -20 -46 -6 4 minecraft:glowstone
+wait 60
+run light_shaft 6 -46 6 4 minecraft:glowstone
+wait 60
+run light_ship 0 -44 0 minecraft:glowstone
+wait 100
+run hull open
+wait 120
+
+cmd tp @s 0 -34 -34 0 18
+wait 100
+run fps SETTLED
+wait 40
+run fps SETTLED
+wait 40
+run fps SETTLED
+wait 40
+run fps SETTLED
+screenshot perfscene
+quit

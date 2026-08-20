@@ -236,7 +236,7 @@ public final class VsAutoTestHarness {
             case "light_shaft" -> spawnShaftShip(minecraft, Integer.parseInt(inst[2]),
                 Integer.parseInt(inst[3]), Integer.parseInt(inst[4]), Integer.parseInt(inst[5]),
                 blockByName(inst[6]));
-            case "fps" -> LOGGER.info("[autotest] fps {}: {}", inst.length > 1 ? inst[1] : "", minecraft.getFps());
+            case "fps" -> LOGGER.info("[autotest] fps {}: {}", inst.length > 2 ? inst[2] : "", minecraft.getFps());
             case "drag_ship" -> dragDelta = new org.joml.Vector3d(
                 Double.parseDouble(inst[2]), Double.parseDouble(inst[3]), Double.parseDouble(inst[4]));
             case "drag_stop" -> dragDelta = null;

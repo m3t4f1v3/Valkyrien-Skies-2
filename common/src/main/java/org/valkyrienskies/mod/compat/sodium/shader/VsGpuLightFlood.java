@@ -67,7 +67,8 @@ public final class VsGpuLightFlood {
     private static final int BIND_WORLD_SECTIONS = 7;
     private static final int BIND_SLOT_POS = 8;
     private static final int BIND_VOXELS = 9;
-    private static final int BIND_COUNT = 10;
+    private static final int BIND_SLOT_NEIGHBOURS = 10;
+    private static final int BIND_COUNT = 11;
 
     private static final int CORE_VOXELS = 4096;      // 16^3
     private static final int CORE_SOLID_INTS = 128;   // 4096 bits
@@ -108,6 +109,7 @@ public final class VsGpuLightFlood {
     private int occlBuffer = 0;
     private int solidBuffer = 0;
     private int slotPosBuffer = 0;
+    private int slotNeighbourBuffer = 0;
     private int voxelBuffer = 0;
 
     private int lightABytes = 0;
@@ -115,6 +117,7 @@ public final class VsGpuLightFlood {
     private int occlBytes = 0;
     private int solidBytes = 0;
     private int slotPosBytes = 0;
+    private int slotNeighbourBytes = 0;
     private int voxelBytes = 0;
 
     private long stagingPtr = 0L;
@@ -124,6 +127,7 @@ public final class VsGpuLightFlood {
 
     private final List<ShipDispatch> dispatches = new ArrayList<>();
     private final IntArrayList slotPositions = new IntArrayList();
+    private final IntArrayList slotNeighbours = new IntArrayList();
     private final DoubleArrayList floodRegions = new DoubleArrayList();
     private final Vector3d scratchCorner = new Vector3d();
 
@@ -166,6 +170,22 @@ public final class VsGpuLightFlood {
      * so {@link VsShipLightStorage} can be asked for terrain opacity over the same volume before
      * {@link #dispatch} runs.
      */
+    /** Union of this frame's flood regions, as {minX,minY,minZ,maxX,maxY,maxZ}; empty when none. */
+    public double[] floodBounds() {
+        if (floodRegions.isEmpty()) {
+            return null;
+        }
+        final double[] b = {Double.MAX_VALUE, Double.MAX_VALUE, Double.MAX_VALUE,
+            -Double.MAX_VALUE, -Double.MAX_VALUE, -Double.MAX_VALUE};
+        for (int i = 0; i < floodRegions.size(); i += 6) {
+            for (int k = 0; k < 3; k++) {
+                b[k] = Math.min(b[k], floodRegions.getDouble(i + k));
+                b[k + 3] = Math.max(b[k + 3], floodRegions.getDouble(i + k + 3));
+            }
+        }
+        return b;
+    }
+
     public DoubleArrayList floodRegions() {
         return floodRegions;
     }
@@ -270,6 +290,7 @@ public final class VsGpuLightFlood {
         voxelCache.pruneUnused();
         storage.pruneUnused();
         activeSections = storage.fillActiveSlotPositions(slotPositions);
+        storage.fillActiveSlotNeighbours(slotNeighbours);
 
         if (activeSections > MAX_ACTIVE_SECTIONS) {
             // Degenerate scene (an enormous ship, or many lit ships at once). Clearing rather than
@@ -316,6 +337,7 @@ public final class VsGpuLightFlood {
         }
         uploadVoxels(totalVoxels, totalExits, signature);
         uploadSlotPositions();
+        uploadSlotNeighbours();
         ensureWorkingBuffers(storage.capacity());
         readyToDispatch = true;
     }
@@ -442,6 +464,7 @@ public final class VsGpuLightFlood {
         bind(BIND_WORLD_LUT, worldLight.lutBufferId());
         bind(BIND_WORLD_SECTIONS, worldLight.sectionsBufferId());
         bind(BIND_SLOT_POS, slotPosBuffer);
+        bind(BIND_SLOT_NEIGHBOURS, slotNeighbourBuffer);
         bind(BIND_VOXELS, voxelBuffer);
         bind(BIND_LIGHT_SRC, lightABuffer);
         bind(BIND_LIGHT_DST, lightBBuffer);
@@ -593,6 +616,25 @@ public final class VsGpuLightFlood {
         GL15.glBindBuffer(GL43.GL_SHADER_STORAGE_BUFFER, 0);
     }
 
+    private void uploadSlotNeighbours() {
+        final int bytes = slotNeighbours.size() * 4;
+        final long staging = ensureStaging(bytes);
+        for (int i = 0; i < slotNeighbours.size(); i++) {
+            MemoryUtil.memPutInt(staging + (long) i * 4, slotNeighbours.getInt(i));
+        }
+        if (slotNeighbourBuffer == 0) {
+            slotNeighbourBuffer = GL15.glGenBuffers();
+        }
+        GL15.glBindBuffer(GL43.GL_SHADER_STORAGE_BUFFER, slotNeighbourBuffer);
+        if (slotNeighbourBytes != bytes) {
+            GL15.nglBufferData(GL43.GL_SHADER_STORAGE_BUFFER, bytes, staging, GL15.GL_DYNAMIC_DRAW);
+            slotNeighbourBytes = bytes;
+        } else {
+            GL15.nglBufferSubData(GL43.GL_SHADER_STORAGE_BUFFER, 0L, bytes, staging);
+        }
+        GL15.glBindBuffer(GL43.GL_SHADER_STORAGE_BUFFER, 0);
+    }
+
     /**
      * Repacks and re-uploads the concatenated ship voxel arena. Ship voxel lists are static, so this
      * only runs when the contributing ship set or one of their block layouts changed — the signature
@@ -653,7 +695,7 @@ public final class VsGpuLightFlood {
         gridValid = false;
         deletePrograms();
         for (final int buffer : new int[] {lightABuffer, lightBBuffer, occlBuffer, solidBuffer,
-            slotPosBuffer, voxelBuffer}) {
+            slotPosBuffer, slotNeighbourBuffer, voxelBuffer}) {
             if (buffer != 0) {
                 GL15.glDeleteBuffers(buffer);
             }

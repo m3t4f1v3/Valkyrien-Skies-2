@@ -52,6 +52,14 @@ fi
 # Frame rate has to be uncapped for a perf run to mean anything: with vsync on, every configuration
 # reads exactly 60 and the "does this lag?" question cannot be answered at all.
 MC_OPTS="$RUN_DIR/options.txt"
+# Fragment-shader cost scales with pixels, and the client window defaults to 854x480 inside the
+# virtual display -- about a ninth of 1920x1080. Any per-fragment measurement taken at the default is
+# therefore not comparable to what a player sees.
+if [ -f "$MC_OPTS" ] && [ -n "${AUTOTEST_RES_W:-}" ]; then
+    sed -i "s/^overrideWidth:.*/overrideWidth:${AUTOTEST_RES_W}/" "$MC_OPTS"
+    sed -i "s/^overrideHeight:.*/overrideHeight:${AUTOTEST_RES_H}/" "$MC_OPTS"
+    echo "autotest: render resolution forced to ${AUTOTEST_RES_W}x${AUTOTEST_RES_H}"
+fi
 if [ -f "$MC_OPTS" ] && [ -n "${AUTOTEST_UNCAP_FPS:-}" ]; then
     sed -i 's/^enableVsync:.*/enableVsync:false/' "$MC_OPTS"
     sed -i 's/^maxFps:.*/maxFps:260/' "$MC_OPTS"
@@ -75,7 +83,7 @@ kill_client() {
     pkill -9 -f "$CLIENT_PATTERN" 2>/dev/null || true
 }
 
-setsid gamescope -W 1600 -H 900 --backend headless -- \
+setsid gamescope -W "${AUTOTEST_W:-1600}" -H "${AUTOTEST_H:-900}" --backend headless -- \
     ./gradlew ":forge:runClient" -Pvs_autotest="$SCRIPT" ${AUTOTEST_GRADLE_ARGS:-} \
     --console=plain &
 LAUNCHER_PID=$!

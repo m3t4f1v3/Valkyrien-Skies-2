@@ -117,6 +117,8 @@ public class SodiumCompat {
     static final int FEATURE_DEBUG_FLOOD_2 = 64;
     /** debugFloodPaint 3: paint SHIP chunks with where their own block light comes from. */
     static final int FEATURE_DEBUG_SHIP_LIGHT = 128;
+    /** Ship-cast ambient occlusion. Off by default -- the per-fragment occluder scan dominates. */
+    static final int FEATURE_SHIP_AO = 512;
 
     private static final Map<ShaderCacheKey, GlProgram<ShipThing>> cachedPrograms = new HashMap<>();
     private static final Map<ShaderCacheKey, GlProgram<WorldThing>> cachedWorldPrograms = new HashMap<>();
@@ -241,6 +243,9 @@ public class SodiumCompat {
         }
         if (VSGameConfig.CLIENT.getBetterVanillaShipShading()) {
             bits |= FEATURE_SHADE;
+        }
+        if (VSGameConfig.CLIENT.getShipAmbientOcclusion()) {
+            bits |= FEATURE_SHIP_AO;
         }
         if (VSGameConfig.CLIENT.getDynamicShipToWorldLighting()) {
             bits |= FEATURE_SHIP_ON_SHIP;
@@ -422,6 +427,9 @@ public class SodiumCompat {
         }
         if ((features & FEATURE_DEBUG_FLOOD_2) != 0) {
             builder.add("VS_DEBUG_FLOOD", "2");
+        }
+        if ((features & FEATURE_SHIP_AO) != 0) {
+            builder.add("VS_SHIP_AO");
         }
         if ((features & FEATURE_DEBUG_SHIP_LIGHT) != 0) {
             builder.add("VS_DEBUG_SHIP_LIGHT", VSGameConfig.CLIENT.getDebugFloodPaint() == 4 ? "4" : "3");

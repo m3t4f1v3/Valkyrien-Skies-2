@@ -51,11 +51,15 @@ uniform int u_VsShipEmitterCount;
 // Per-frame solid ship voxel list (same 2-texel layout, position .w = 0). Used for ship-to-ship AO so
 // one ship's voxels can cast smooth-tracking octagonal shadows on another ship's surface (and on the
 // same ship's own concave faces).
+#ifdef VS_SHIP_AO
 uniform samplerBuffer u_VsShipOccluders;
 uniform int u_VsShipOccluderCount;
+#endif
 // Per-frame index of the ship being drawn, matched against each occluder's .w so a ship never
 // applies its own AO on top of what the mesher already baked. -1 while drawing anything else.
+#ifdef VS_SHIP_AO
 uniform int u_VsSelfShipIndex;
+#endif
 
 // Inverse-rotate v by quaternion q (apply q^-1 = (-q.xyz, q.w) to v) so the SDF / distance metrics line
 // up with the owning ship's axes.
@@ -411,6 +415,7 @@ float vs_sosEmitterLight(vec3 worldPos) {
 // rotates with the hull. Diagonal corner cells get the bilinear-vs-Manhattan extra (cornerExtra) gated
 // by >=2 contributors so isolated and adjacent voxels keep their clean octagonal shadow but X-X gaps and
 // rows fill in to vanilla brightness.
+#ifdef VS_SHIP_AO
 float vs_sosShipAo(vec3 worldPosWorld, vec3 nf) {
     int n = min(u_VsShipOccluderCount, VS_SOS_OCCLUDER_LOOP_CAP);
 
@@ -462,6 +467,7 @@ float vs_sosShipAo(vec3 worldPosWorld, vec3 nf) {
     occlusion = clamp(occlusion, 0.0, 1.0);
     return mix(0.2, 1.0, 1.0 - occlusion);
 }
+#endif // VS_SHIP_AO
 #ifdef VS_FLOOD_GRID
 // ===== Flooded ship light: the occlusion gate ============================
 //
@@ -703,7 +709,9 @@ void main() {
         // Ship-to-ship AO: own ship's voxels casting shadows on this ship's concave faces, plus any
         // other ship's voxels that happen to be adjacent in world space. Both run through the same SDF,
         // in each contributing voxel's ship-frame, so shadows track each hull's rotation independently.
+#ifdef VS_SHIP_AO
         sosShipAo = vs_sosShipAo(sosWorldPos, worldN);
+#endif
     }
 #endif
 

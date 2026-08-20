@@ -141,6 +141,9 @@ object VSGameConfig {
         @ConfigEntry(description = "Project ships into the world's lighting at render time so ships occlude sunlight on the ground beneath them and ship-internal torches illuminate nearby world blocks (sodium/embeddium only). Experimental — overrides sodium's stock world-chunk shader. Disable for the default vanilla behavior where ships don't affect world lighting.")
         var dynamicShipToWorldLighting = false
 
+        @ConfigEntry(description = "Ambient occlusion cast by ship blocks onto the world. Off by default: it is evaluated per fragment against a list of ship voxels, which is by far the most expensive part of ship rendering, and it is independent of the lighting itself.")
+        var shipAmbientOcclusion = false
+
         @ConfigEntry(description = "Flood ship-to-world light on the GPU with compute shaders instead of on the CPU. Runs every frame instead of every 15th, and lets hulls and terrain actually block ship light. Requires OpenGL 4.3; falls back to the CPU flood automatically when unavailable.")
         var gpuDynamicLightFlood = true
 

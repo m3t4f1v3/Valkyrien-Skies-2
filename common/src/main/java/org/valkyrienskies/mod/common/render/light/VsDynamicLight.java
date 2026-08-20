@@ -124,6 +124,17 @@ public final class VsDynamicLight {
      * Whether the flood grid is authoritative this frame, i.e. whether the shaders may treat "no section
      * here" as "no ship light here". False on the CPU path and whenever the compute passes were skipped.
      */
+    /**
+     * Union of the flood's tracked region in world coordinates, or null when nothing is tracked.
+     *
+     * <p>The fragment shaders use it to skip the flood sample outright. At 1920x1080 the vast majority
+     * of pixels are nowhere near a ship, and without this each one still walks the section LUT only to
+     * be told there is no section here.
+     */
+    public static double[] floodBounds() {
+        return gpuLightFlood == null ? null : gpuLightFlood.floodBounds();
+    }
+
     public static boolean isFloodGridValid() {
         return isGpuFloodActive() && getGpuLightFlood().isGridValid();
     }

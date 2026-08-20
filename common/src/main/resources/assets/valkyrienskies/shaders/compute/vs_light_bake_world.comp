@@ -13,19 +13,31 @@ layout(local_size_x = 256) in;
 
 uniform int u_ActiveCount;
 
+// One LUT walk per WORKGROUP, not per voxel.
+//
+// vs_findWorldSection depends only on the section, and a section is 4096 voxels while a workgroup is
+// 256 -- and 4096 is a whole multiple of 256, so a workgroup never straddles two sections. Resolving
+// it per voxel was 4096 identical three-level LUT walks per section, every frame.
+shared int s_worldSlot;
+
 void main() {
     uint gid = gl_GlobalInvocationID.x;
-    if (gid >= uint(u_ActiveCount) * VS_CORE_VOXELS) return;
+    // NOTE: no early return before the barrier below -- every thread in the group must reach it.
+    bool inRange = gid < uint(u_ActiveCount) * VS_CORE_VOXELS;
 
     uint si = gid >> 12u;
     uint v = gid & (VS_CORE_VOXELS - 1u);
 
-    ivec4 slotPos = vs_slotPos[si];
+    ivec4 slotPos = vs_slotPos[min(si, uint(max(u_ActiveCount - 1, 0)))];
     int slot = slotPos.x;
     ivec3 sectionPos = slotPos.yzw;
 
-    int worldSlot = vs_findWorldSection(sectionPos);
-    if (worldSlot < 0) return;
+    if (gl_LocalInvocationID.x == 0u) {
+        s_worldSlot = vs_findWorldSection(sectionPos);
+    }
+    barrier();
+    int worldSlot = s_worldSlot;
+    if (!inRange || worldSlot < 0) return;
 
     ivec3 c = vs_coreCoords(v);
     // +1 on each axis skips the packed layout's leading border row.

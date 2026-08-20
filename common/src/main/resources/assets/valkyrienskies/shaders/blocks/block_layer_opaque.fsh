@@ -46,8 +46,7 @@ uniform int u_VsShipEmitterCount;
 // Used for ship-to-ship AO so one ship's voxels can cast smooth-tracking
 // octagonal shadows on another ship's surface (and on the same ship's
 // own concave faces).
-uniform samplerBuffer u_VsShipOccluders;
-uniform int u_VsShipOccluderCount;
+// (No occluder list here: ship-fragment SDF AO was removed, so nothing reads it.)
 // (No self-ship index here: with ship-fragment SDF AO removed, nothing in this shader reads it, and
 // a declared-but-unused uniform is eliminated by GLSL and then throws in sodium's bindUniform.)
 

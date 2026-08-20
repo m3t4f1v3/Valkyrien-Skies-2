@@ -1,0 +1,17 @@
+# Frame rate in the reported world, with real ships. Uncapped (AUTOTEST_UNCAP_FPS=1) or every
+# configuration reads exactly 60 and nothing can be told apart.
+load-world lightingslop
+wait-level
+wait 260
+hud off
+cmd gamemode spectator
+wait 60
+run fps SETTLED
+wait 40
+run fps SETTLED
+wait 40
+run fps SETTLED
+wait 40
+run fps SETTLED
+screenshot slop_view
+quit

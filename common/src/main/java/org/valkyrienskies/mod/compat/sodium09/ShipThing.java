@@ -85,10 +85,14 @@ public class ShipThing extends DefaultShaderInterface {
             sosEmitterList ? context.bindUniform("u_VsShipEmitters", GlUniformInt::new) : null;
         this.uniformShipEmitterCount =
             sosEmitterList ? context.bindUniform("u_VsShipEmitterCount", GlUniformInt::new) : null;
-        this.uniformShipOccluders = shipOnShip ? context.bindUniform("u_VsShipOccluders", GlUniformInt::new) : null;
+        // Declared only inside VS_SHIP_AO now; binding a name GLSL eliminated throws.
+        final boolean shipAo = (features & SodiumCompat.FEATURE_SHIP_AO) != 0;
+        this.uniformShipOccluders = (shipOnShip && shipAo)
+            ? context.bindUniform("u_VsShipOccluders", GlUniformInt::new) : null;
         this.uniformShipOccluderCount =
-            shipOnShip ? context.bindUniform("u_VsShipOccluderCount", GlUniformInt::new) : null;
-        this.uniformSelfShipIndex = shipOnShip
+            (shipOnShip && shipAo) ? context.bindUniform("u_VsShipOccluderCount", GlUniformInt::new) : null;
+        // Read only by the AO loop, which is compiled out unless VS_SHIP_AO.
+        this.uniformSelfShipIndex = (shipOnShip && shipAo)
             ? context.bindUniform("u_VsSelfShipIndex", GlUniformInt::new) : null;
         this.uniformWorldFromShipSections =
             floodGrid ? context.bindUniform("u_VsWorldFromShipSections", GlUniformInt::new) : null;

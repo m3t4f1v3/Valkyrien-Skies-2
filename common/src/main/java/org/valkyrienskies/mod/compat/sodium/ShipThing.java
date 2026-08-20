@@ -81,12 +81,12 @@ public class ShipThing extends ChunkShaderInterface {
                 ? context.bindUniform("u_VsShipEmitters", GlUniformInt::new) : null;
         this.uniformShipEmitterCount = sosEmitterList
                 ? context.bindUniform("u_VsShipEmitterCount", GlUniformInt::new) : null;
-        this.uniformShipOccluders = shipOnShip
-                ? context.bindUniform("u_VsShipOccluders", GlUniformInt::new) : null;
-        this.uniformShipOccluderCount = shipOnShip
-                ? context.bindUniform("u_VsShipOccluderCount", GlUniformInt::new) : null;
-        this.uniformSelfShipIndex = shipOnShip
-            ? context.bindUniform("u_VsSelfShipIndex", GlUniformInt::new) : null;
+        // Ship-fragment SDF AO was removed on this generation, so the shader has no reader.
+        this.uniformShipOccluders = null;
+        this.uniformShipOccluderCount = null;
+        // Not bound on this generation: ship-fragment SDF AO was removed, so the 0.5 ship shader has
+        // no reader for it and GLSL drops the uniform. setSelfShipIndex null-guards.
+        this.uniformSelfShipIndex = null;
         this.uniformWorldFromShipSections = floodGrid
                 ? context.bindUniform("u_VsWorldFromShipSections", GlUniformInt::new) : null;
         this.uniformWorldFromShipLut = floodGrid

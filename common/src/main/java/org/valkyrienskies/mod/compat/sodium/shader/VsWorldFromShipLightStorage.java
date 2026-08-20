@@ -543,6 +543,34 @@ public class VsWorldFromShipLightStorage {
      * {@code out}, returning how many were written. The compute dispatches are sized against this
      * count, so free arena slots cost nothing.
      */
+    /**
+     * Slot index of each active section's six face neighbours, or -1 where there is none, written as
+     * six ints per active section in the same order the slot-position list uses.
+     *
+     * <p>Exists so the flood sweep never walks the LUT. Every voxel leaving a section through a given
+     * face lands in the SAME neighbouring section, so that walk is one lookup per section per
+     * direction, not one per voxel per neighbour -- and about a third of a section's voxels sit on a
+     * boundary, each testing six neighbours.
+     */
+    public void fillActiveSlotNeighbours(final IntArrayList out) {
+        out.clear();
+        final ObjectIterator<Long2IntMap.Entry> it = section2Index.long2IntEntrySet().iterator();
+        while (it.hasNext()) {
+            final Long2IntMap.Entry entry = it.next();
+            final long sectionPos = entry.getLongKey();
+            final int sx = SectionPos.x(sectionPos);
+            final int sy = SectionPos.y(sectionPos);
+            final int sz = SectionPos.z(sectionPos);
+            // Order must match vs_light_flood.comp's direction indices.
+            out.add(section2Index.getOrDefault(SectionPos.asLong(sx + 1, sy, sz), INVALID));
+            out.add(section2Index.getOrDefault(SectionPos.asLong(sx - 1, sy, sz), INVALID));
+            out.add(section2Index.getOrDefault(SectionPos.asLong(sx, sy + 1, sz), INVALID));
+            out.add(section2Index.getOrDefault(SectionPos.asLong(sx, sy - 1, sz), INVALID));
+            out.add(section2Index.getOrDefault(SectionPos.asLong(sx, sy, sz + 1), INVALID));
+            out.add(section2Index.getOrDefault(SectionPos.asLong(sx, sy, sz - 1), INVALID));
+        }
+    }
+
     public int fillActiveSlotPositions(final IntArrayList out) {
         out.clear();
         final ObjectIterator<Long2IntMap.Entry> it = section2Index.long2IntEntrySet().iterator();

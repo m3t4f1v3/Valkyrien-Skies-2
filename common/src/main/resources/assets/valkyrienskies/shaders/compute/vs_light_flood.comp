@@ -25,13 +25,17 @@ layout(local_size_x = 256) in;
 
 uniform int u_ActiveCount;
 
-uint vs_neighbourLight(ivec3 sectionPos, int slot, ivec3 c, uint cost) {
+uint vs_neighbourLight(uint si, int slot, ivec3 c, uint cost, int dir) {
     int vi;
     if (all(greaterThanEqual(c, ivec3(0))) && all(lessThan(c, ivec3(16)))) {
         vi = slot * int(VS_CORE_VOXELS) + int(vs_coreIndex(c));
     } else {
-        vi = vs_voxelIndexAt((sectionPos << 4) + c);
-        if (vi < 0) return 0u;
+        // Left the section. Every voxel leaving through this face lands in the same neighbouring
+        // section, so the answer is a table lookup rather than a three-level LUT walk -- and roughly a
+        // third of a section's voxels are on a boundary, each testing six neighbours.
+        int nslot = vs_slotNeighbours[si * 6u + uint(dir)];
+        if (nslot < 0) return 0u;
+        vi = nslot * int(VS_CORE_VOXELS) + int(vs_coreIndex((c + 16) & 15));
     }
     // No solid check on the SOURCE. An opaque cell blocks light by never gaining any — its dst is
     // pinned to its own seed below, so a plain wall sits at 0 forever and can never pass anything on.
@@ -62,12 +66,12 @@ void main() {
         uint over = coverage > VS_COVERAGE_SOLID ? coverage - VS_COVERAGE_SOLID : 0u;
         uint cost = VS_LIGHT_SCALE + over * VS_COVERAGE_COST;
         ivec3 c = vs_coreCoords(v);
-        uint in0 = vs_neighbourLight(sectionPos, slot, c + ivec3(1, 0, 0), cost);
-        uint in1 = vs_neighbourLight(sectionPos, slot, c - ivec3(1, 0, 0), cost);
-        uint in2 = vs_neighbourLight(sectionPos, slot, c + ivec3(0, 1, 0), cost);
-        uint in3 = vs_neighbourLight(sectionPos, slot, c - ivec3(0, 1, 0), cost);
-        uint in4 = vs_neighbourLight(sectionPos, slot, c + ivec3(0, 0, 1), cost);
-        uint in5 = vs_neighbourLight(sectionPos, slot, c - ivec3(0, 0, 1), cost);
+        uint in0 = vs_neighbourLight(si, slot, c + ivec3(1, 0, 0), cost, 0);
+        uint in1 = vs_neighbourLight(si, slot, c - ivec3(1, 0, 0), cost, 1);
+        uint in2 = vs_neighbourLight(si, slot, c + ivec3(0, 1, 0), cost, 2);
+        uint in3 = vs_neighbourLight(si, slot, c - ivec3(0, 1, 0), cost, 3);
+        uint in4 = vs_neighbourLight(si, slot, c + ivec3(0, 0, 1), cost, 4);
+        uint in5 = vs_neighbourLight(si, slot, c - ivec3(0, 0, 1), cost, 5);
         best = max(best, max(max(max(in0, in1), max(in2, in3)), max(in4, in5)));
     }
 

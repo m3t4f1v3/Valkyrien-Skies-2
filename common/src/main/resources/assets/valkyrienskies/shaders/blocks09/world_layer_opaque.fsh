@@ -50,8 +50,10 @@ uniform int u_VsShipEmitterCount;
 // The shader applies the inverse rotation to the fragment-to-voxel offset so the Manhattan SDF runs in
 // the voxel's ship-local frame. That makes each voxel's octagonal shadow rotate with its ship instead of
 // staying world-axis-aligned.
+#ifdef VS_SHIP_AO
 uniform samplerBuffer u_VsShipOccluders;
 uniform int u_VsShipOccluderCount;
+#endif
 
 // Inverse-rotate v by quaternion q (i.e., apply q^-1 = (-q.xyz, q.w) to v). Used to express world-frame
 // offsets in the owning ship's local frame so the SDF / distance metrics line up with the ship's axes.
@@ -128,6 +130,7 @@ vec4 ws_sampleRGSS(sampler2D source, vec2 uv, vec2 pixelSize) {
 
     return mix(nearestColor, rgssColor, blendFactor);
 }
+#ifdef VS_SHIP_AO
 
 // Loop bound for the per-fragment ship-occluder scan. Should match VsShipOccluderList.MAX_OCCLUDERS —
 // 1024 fits but is excessive per fragment; 128 covers typical scenes (a single mid-size ship's solid
@@ -224,6 +227,7 @@ float ws_shipAo(vec3 worldPosWorld, vec3 nf) {
     occlusion = clamp(occlusion, 0.0, 1.0);
     return mix(0.2, 1.0, 1.0 - occlusion);
 }
+#endif // VS_SHIP_AO
 
 // Loop bound for the per-fragment emitter scan. Should match VsShipEmitterList.MAX_EMITTERS — 1024
 // entries fit but is excessive per fragment; 128 is plenty for typical scenes (ships rarely have that
@@ -399,6 +403,10 @@ void main() {
     // occlusion -- sampled with sub-block precision so it slides with the ship instead of snapping to
     // the world grid. Occlusion and falloff now come from one field that agrees with itself.
 #ifdef VS_FLOOD_GRID
+    // NOTE: an early-out here that skips the sample for fragments outside the flood's bounds was
+    // measured and REVERTED -- it cost 2.7x (495 -> 180 fps at 1080p). The branch is divergent across a
+    // warp, and the register pressure and lost occupancy outweigh the LUT walk it avoids. The walk is
+    // cheap; branching around it is not.
     float shipFlood = vsf_floodTrilinear(worldPos);
     // u_VsFloodGridValid still guards the one case the grid cannot speak for: a frame where the flood
     // did not run at all. With the flood now the sole source of ship light, "no data" has to mean no
@@ -434,7 +442,11 @@ void main() {
     // (unshaded/fullbright) skip both AO and shade via v_IsShaded.
     float ao = v_Color.a;
     if (v_IsShaded == 1) {
+#ifdef VS_SHIP_AO
         float shipAo = ws_shipAo(worldPos, v_WorldNormal);
+#else
+        float shipAo = 1.0;   // ship AO compiled out; see VSGameConfig.shipAmbientOcclusion
+#endif
         float combined = max(0.2, ao - (1.0 - shipAo));
         float shade = 1.0;
         if (v_WorldNormal.y < -0.5)          shade = 0.5; // DOWN
