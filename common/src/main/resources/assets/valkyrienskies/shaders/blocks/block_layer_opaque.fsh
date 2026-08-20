@@ -48,9 +48,8 @@ uniform int u_VsShipEmitterCount;
 // own concave faces).
 uniform samplerBuffer u_VsShipOccluders;
 uniform int u_VsShipOccluderCount;
-// Per-frame index of the ship being drawn, matched against each occluder's .w so a ship never
-// applies its own AO on top of what the mesher already baked. -1 while drawing anything else.
-uniform int u_VsSelfShipIndex;
+// (No self-ship index here: with ship-fragment SDF AO removed, nothing in this shader reads it, and
+// a declared-but-unused uniform is eliminated by GLSL and then throws in sodium's bindUniform.)
 
 // Inverse-rotate v by quaternion q (apply q^-1 = (-q.xyz, q.w) to v) so
 // the SDF / distance metrics line up with the owning ship's axes.
@@ -339,64 +338,10 @@ float vs_sosEmitterLight(vec3 worldPos) {
     return maxLight;
 }
 
-// Per-fragment ship-to-ship AO. Mirrors the world-FSH ws_shipAo: each
-// solid ship voxel projects an octagonal Manhattan tent on the face,
-// computed in the voxel's owning-ship local frame so the shadow rotates
-// with the hull. Diagonal corner cells get the bilinear-vs-Manhattan
-// extra (cornerExtra) gated by ≥2 contributors so isolated and adjacent
-// voxels keep their clean octagonal shadow but X-X gaps and rows fill
-// in to vanilla brightness.
-float vs_sosShipAo(vec3 worldPosWorld, vec3 nf) {
-    int n = min(u_VsShipOccluderCount, VS_SOS_OCCLUDER_LOOP_CAP);
-
-    float occlusionManhattan = 0.0;
-    float occlusionCorner = 0.0;
-    int cornerContributors = 0;
-
-    for (int i = 0; i < n; i++) {
-        vec4 voxel = texelFetch(u_VsShipOccluders, i * 2);
-        vec4 q = texelFetch(u_VsShipOccluders, i * 2 + 1);
-
-        // Skip this ship's own voxels. Their ambient occlusion is already baked into the mesh by the
-        // chunk mesher, so shading it again per fragment would darken every concave corner twice. Only
-        // OTHER ships have no representation in this mesh and therefore need the per-fragment pass.
-        if (voxel.w == float(u_VsSelfShipIndex)) continue;
-
-        vec3 d_world = voxel.xyz - worldPosWorld;
-        vec3 d_ship = vs_sosQuatRotateInv(q, d_world);
-        vec3 nf_ship = vs_sosQuatRotateInv(q, nf);
-
-        float d_n = dot(d_ship, nf_ship);
-        if (d_n <= 0.0 || d_n >= 1.5) continue;
-        float fn = 1.0 - smoothstep(0.5, 1.5, d_n);
-
-        vec3 helper = abs(nf_ship.y) < 0.9 ? vec3(0, 1, 0) : vec3(1, 0, 0);
-        vec3 uAxis = normalize(cross(helper, nf_ship));
-        vec3 vAxis = cross(nf_ship, uAxis);
-        float du = dot(d_ship, uAxis);
-        float dv = dot(d_ship, vAxis);
-
-        float dU = abs(du) - 0.5;
-        float dV = abs(dv) - 0.5;
-        float manhattan = max(0.0, 1.0 - max(dU, 0.0) - max(dV, 0.0));
-
-        float fU = clamp(1.0 - dU, 0.0, 1.0);
-        float fV = clamp(1.0 - dV, 0.0, 1.0);
-        float cornerExtra = max(0.0, fU * fV - manhattan);
-
-        occlusionManhattan += (1.0 / 3.0) * fn * manhattan;
-        float contribC = (1.0 / 3.0) * fn * cornerExtra;
-        occlusionCorner += contribC;
-        if (contribC > 0.0) {
-            cornerContributors++;
-        }
-    }
-
-    float occlusion = occlusionManhattan
-            + (cornerContributors >= 2 ? occlusionCorner : 0.0);
-    occlusion = clamp(occlusion, 0.0, 1.0);
-    return mix(0.2, 1.0, 1.0 - occlusion);
-}
+// Ship-fragment SDF ambient occlusion is deliberately absent here: jan-18 removed it as
+// artifact-prone, leaving ship surfaces on sodium's baked v_Color.a and keeping the ship->world
+// direction in the world shader's ws_shipAo. It was also a 128-iteration per-fragment loop, so its
+// removal is a straight performance win as well as jan-18's visual call.
 #ifdef VS_FLOOD_GRID
 // ===== Flooded ship light: the occlusion gate ============================
 //
@@ -638,7 +583,6 @@ void main() {
         // adjacent in world space. Both run through the same SDF, in each
         // contributing voxel's ship-frame, so shadows track each hull's
         // rotation independently.
-        sosShipAo = vs_sosShipAo(sosWorldPos, worldN);
     }
 #endif
 

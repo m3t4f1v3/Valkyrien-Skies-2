@@ -48,6 +48,13 @@ public abstract class MixinDefaultChunkRenderer {
                 SodiumCompat.getShipOccluderList().bind(SodiumCompat.SHIP_OCCLUDER_LIST_TEXTURE_UNIT);
                 SodiumCompat.recordListsBound();
             }
+            // World-section storage so ws_shipAo can scan world voxels in
+            // the 3×3×3 around a world fragment. Bound to texture units
+            // past the ValkyrienAir mask range (2..11) — see comment on
+            // LIGHT_SECTIONS_TEXTURE_UNIT in SodiumCompat for the reason.
+            SodiumCompat.getLightStorage().bind(
+                    SodiumCompat.LIGHT_SECTIONS_TEXTURE_UNIT,
+                    SodiumCompat.LIGHT_LUT_TEXTURE_UNIT);
             return;
         }
 

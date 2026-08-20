@@ -26,6 +26,11 @@ public class WorldThing extends ChunkShaderInterface {
     private final GlUniformInt uniformWorldFromShipSections;
     private final GlUniformInt uniformWorldFromShipLut;
     private final GlUniformInt uniformFloodGridValid;
+    // World-section storage samplers, mirroring ShipThing — let ws_shipAo read solid bits from the
+    // 3x3x3 around a world fragment so the X-X corner rule can fold ship voxels and world blocks into
+    // one SDF instead of leaving them as two independent shadow shapes.
+    private final GlUniformInt uniformLightSections;
+    private final GlUniformInt uniformLightLut;
 
     public WorldThing(ShaderBindingContext context, ChunkShaderOptions options, int features) {
         super(context, options);
@@ -47,6 +52,8 @@ public class WorldThing extends ChunkShaderInterface {
             ? context.bindUniform("u_VsWorldFromShipLut", GlUniformInt::new) : null;
         this.uniformFloodGridValid = floodGrid
             ? context.bindUniform("u_VsFloodGridValid", GlUniformInt::new) : null;
+        this.uniformLightSections = context.bindUniform("u_VsLightSections", GlUniformInt::new);
+        this.uniformLightLut = context.bindUniform("u_VsLightLut", GlUniformInt::new);
     }
 
     public void setFloodGridValid(final boolean valid) {
@@ -85,5 +92,13 @@ public class WorldThing extends ChunkShaderInterface {
     public void setShipOccluders(int textureUnit, int count) {
         this.uniformShipOccluders.setInt(textureUnit);
         this.uniformShipOccluderCount.setInt(count);
+    }
+
+    public void setLightSectionsSampler(int unit) {
+        this.uniformLightSections.setInt(unit);
+    }
+
+    public void setLightLutSampler(int unit) {
+        this.uniformLightLut.setInt(unit);
     }
 }
