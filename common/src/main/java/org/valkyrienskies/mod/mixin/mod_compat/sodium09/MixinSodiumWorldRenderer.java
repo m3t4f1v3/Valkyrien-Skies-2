@@ -85,7 +85,7 @@ public abstract class MixinSodiumWorldRenderer {
     // naming the injection that did not apply.
     @Redirect(
         method = "renderBlockEntity",
-        at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/vertex/PoseStack;translate(DDD)V"))
+        at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/vertex/PoseStack;translate(DDD)V"), remap = true)
     private static void vs$renderShipBlockEntityInShipyard(
         final PoseStack instance,
         final double x, final double y, final double z,
