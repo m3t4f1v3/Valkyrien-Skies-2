@@ -29,4 +29,7 @@ public interface ShaderChunkRendererAccessor {
 
     @Invoker("begin")
     void invokeBegin(TerrainRenderPass renderPass);
+
+    @Invoker("end")
+    void invokeEnd(TerrainRenderPass pass);
 }

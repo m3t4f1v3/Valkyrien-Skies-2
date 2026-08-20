@@ -1,0 +1,37 @@
+#version 430
+
+// Copies world-terrain opacity into the flood's solid bitmap.
+//
+// VsShipLightStorage already collects `canOcclude() && isShapeFullBlock` per world section, caches it
+// across frames, and invalidates on light updates, so this pass just moves those bits into the
+// working layout once per frame. Baking here rather than looking terrain up inside the flood turns a
+// LUT walk per voxel per iteration into a single LUT walk per voxel.
+
+layout(local_size_x = 256) in;
+
+#include "vs_light_common.glsl"
+
+uniform int u_ActiveCount;
+
+void main() {
+    uint gid = gl_GlobalInvocationID.x;
+    if (gid >= uint(u_ActiveCount) * VS_CORE_VOXELS) return;
+
+    uint si = gid >> 12u;
+    uint v = gid & (VS_CORE_VOXELS - 1u);
+
+    ivec4 slotPos = vs_slotPos[si];
+    int slot = slotPos.x;
+    ivec3 sectionPos = slotPos.yzw;
+
+    int worldSlot = vs_findWorldSection(sectionPos);
+    if (worldSlot < 0) return;
+
+    ivec3 c = vs_coreCoords(v);
+    // +1 on each axis skips the packed layout's leading border row.
+    uint bitOffset = uint((c.x + 1) + (c.z + 1) * 18 + (c.y + 1) * 324);
+    uint word = vs_worldSections[uint(worldSlot) * VS_SECTION_SIZE_INTS + (bitOffset >> 5u)];
+    if ((word & (1u << (bitOffset & 31u))) == 0u) return;
+
+    atomicOr(vs_solid[uint(slot) * VS_CORE_SOLID_INTS + (v >> 5u)], 1u << (v & 31u));
+}

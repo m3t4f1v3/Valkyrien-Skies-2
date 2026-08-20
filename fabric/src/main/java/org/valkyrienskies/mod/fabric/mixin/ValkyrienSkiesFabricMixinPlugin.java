@@ -6,6 +6,8 @@ import org.objectweb.asm.tree.ClassNode;
 import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
 import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 import org.valkyrienskies.mod.compat.LoadedMods;
+import org.valkyrienskies.mod.compat.SodiumGeneration;
+import org.valkyrienskies.mod.mixin.ValkyrienCommonMixinConfigPlugin;
 
 public class ValkyrienSkiesFabricMixinPlugin implements IMixinConfigPlugin {
 
@@ -34,6 +36,12 @@ public class ValkyrienSkiesFabricMixinPlugin implements IMixinConfigPlugin {
 
         if (mixinClassName.contains("org.valkyrienskies.mod.fabric.mixin.compat.old_create")) {
             return LoadedMods.getOldCreate();
+        }
+
+        // These target me.jellysquid classes; Sodium 0.9's equivalents are handled by the common
+        // sodium09 mixins instead.
+        if (mixinClassName.contains("org.valkyrienskies.mod.fabric.mixin.compat.sodium")) {
+            return ValkyrienCommonMixinConfigPlugin.getSodiumGeneration() == SodiumGeneration.LEGACY;
         }
 
         return true;

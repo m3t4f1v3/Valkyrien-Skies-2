@@ -1,0 +1,75 @@
+#version 430
+
+// One relaxation sweep of the block-light flood:
+//
+//     light[c] = max(seed[c], max over the 6 face neighbours n of (light[n] - 1))
+//
+// Repeating this `maxEmitterLevel - 1` times reproduces the CPU BFS exactly — light decrements by
+// one per block and dies at 0, so no cell can be reached in more steps than its brightest source.
+// Each thread owns one destination voxel and only ever READS the source buffer, so the sweep needs
+// no atomics; the Java side ping-pongs the two buffers between dispatches.
+//
+// Two kinds of blocker, treated differently because they are exact in different grids:
+//
+//   TERRAIN is a solid bit. It is world-aligned and static, so one cell is exactly one block and it
+//   can never shift or flicker. It hard-blocks.
+//
+//   SHIP HULL is fractional COVERAGE, the trilinear occluder field. A ship's blocks do not line up
+//   with world cells, and forcing them to a bit is what made a drifting ship pop: occupancy flipped
+//   for a whole cell at once. Coverage moves continuously with the ship, so it attenuates
+//   continuously. Full coverage costs enough to stop light dead.
+
+layout(local_size_x = 256) in;
+
+#include "vs_light_common.glsl"
+
+uniform int u_ActiveCount;
+
+uint vs_neighbourLight(ivec3 sectionPos, int slot, ivec3 c, uint cost) {
+    int vi;
+    if (all(greaterThanEqual(c, ivec3(0))) && all(lessThan(c, ivec3(16)))) {
+        vi = slot * int(VS_CORE_VOXELS) + int(vs_coreIndex(c));
+    } else {
+        vi = vs_voxelIndexAt((sectionPos << 4) + c);
+        if (vi < 0) return 0u;
+    }
+    // No solid check on the SOURCE. An opaque cell blocks light by never gaining any — its dst is
+    // pinned to its own seed below, so a plain wall sits at 0 forever and can never pass anything on.
+    // Rejecting solid sources here as well also silenced solid EMITTERS: a glowstone's own cell is
+    // marked solid by the stamp, so the seed sat there and lit nothing, which read in game as
+    // ship-to-world light being completely dead. Vanilla lights a glowstone's neighbours at 14.
+    uint light = vs_lightSrc[vi];
+    return light < cost ? 0u : light - cost;
+}
+
+void main() {
+    uint gid = gl_GlobalInvocationID.x;
+    if (gid >= uint(u_ActiveCount) * VS_CORE_VOXELS) return;
+
+    uint si = gid >> 12u;
+    uint v = gid & (VS_CORE_VOXELS - 1u);
+
+    ivec4 slotPos = vs_slotPos[si];
+    int slot = slotPos.x;
+    ivec3 sectionPos = slotPos.yzw;
+
+    uint self = uint(slot) * VS_CORE_VOXELS + v;
+    uint best = vs_lightSrc[self];
+
+    if ((vs_solid[uint(slot) * VS_CORE_SOLID_INTS + (v >> 5u)] & (1u << (v & 31u))) == 0u) {
+        // Cost of entering this cell: one level of travel, plus whatever the hull fills it with.
+        uint coverage = min(vs_occl[self], 15u);
+        uint over = coverage > VS_COVERAGE_SOLID ? coverage - VS_COVERAGE_SOLID : 0u;
+        uint cost = VS_LIGHT_SCALE + over * VS_COVERAGE_COST;
+        ivec3 c = vs_coreCoords(v);
+        uint in0 = vs_neighbourLight(sectionPos, slot, c + ivec3(1, 0, 0), cost);
+        uint in1 = vs_neighbourLight(sectionPos, slot, c - ivec3(1, 0, 0), cost);
+        uint in2 = vs_neighbourLight(sectionPos, slot, c + ivec3(0, 1, 0), cost);
+        uint in3 = vs_neighbourLight(sectionPos, slot, c - ivec3(0, 1, 0), cost);
+        uint in4 = vs_neighbourLight(sectionPos, slot, c + ivec3(0, 0, 1), cost);
+        uint in5 = vs_neighbourLight(sectionPos, slot, c - ivec3(0, 0, 1), cost);
+        best = max(best, max(max(max(in0, in1), max(in2, in3)), max(in4, in5)));
+    }
+
+    vs_lightDst[self] = best;
+}

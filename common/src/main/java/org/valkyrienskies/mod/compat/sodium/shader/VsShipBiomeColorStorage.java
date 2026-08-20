@@ -1,4 +1,4 @@
-package org.valkyrienskies.mod.compat.sodium.light;
+package org.valkyrienskies.mod.compat.sodium.shader;
 
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import it.unimi.dsi.fastutil.longs.Long2IntMap;
@@ -256,6 +256,11 @@ public class VsShipBiomeColorStorage {
         }
         if (sectionsTexture == 0) {
             sectionsTexture = GL11.glGenTextures();
+            // glGenBuffers only reserves a name; the buffer object itself does not exist until the
+            // name is first bound, and glTexBuffer against a name that is not yet a buffer object
+            // raises GL_INVALID_OPERATION. Bind once here so the association below is valid.
+            GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, sectionsBuffer);
+            GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, 0);
             GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, sectionsTexture);
             GL31.glTexBuffer(GL31.GL_TEXTURE_BUFFER, GL30RUI(), sectionsBuffer);
             GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, 0);
@@ -265,6 +270,11 @@ public class VsShipBiomeColorStorage {
         }
         if (lutTexture == 0) {
             lutTexture = GL11.glGenTextures();
+            // glGenBuffers only reserves a name; the buffer object itself does not exist until the
+            // name is first bound, and glTexBuffer against a name that is not yet a buffer object
+            // raises GL_INVALID_OPERATION. Bind once here so the association below is valid.
+            GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, lutBuffer);
+            GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, 0);
             GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, lutTexture);
             GL31.glTexBuffer(GL31.GL_TEXTURE_BUFFER, GL30RUI(), lutBuffer);
             GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, 0);

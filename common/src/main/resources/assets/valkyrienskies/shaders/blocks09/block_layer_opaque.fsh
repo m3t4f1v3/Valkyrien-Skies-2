@@ -1,0 +1,780 @@
+#version 330 core
+
+// VS ship chunk fragment shader, for Sodium 0.9. See ../blocks/block_layer_opaque.fsh for the 0.5 copy;
+// the VS lighting, biome and AO logic below is identical, and only the interface with Sodium changed:
+//   * fog colour and distances come from the u_Globals block, and _linearFog now takes both distance
+//     metrics plus the section fade factor;
+//   * the atlas is sampled through Sodium's nearest/RGSS filters rather than a mip-biased texture()
+//     call, because _material_mip_bias no longer exists;
+//   * the alpha cutoff is unpacked here from the material bits instead of arriving as a varying.
+
+#import <sodium:include/fog.glsl>
+#import <sodium:include/globals.glsl>
+#import <sodium:include/chunk_material.glsl>
+
+in vec4 v_Color;            // RGB = sodium-baked vertex color; .a = AO (decoded in VSH)
+in vec2 v_TexCoord;
+in vec2 v_FragDistance;     // cylindrical (.x) and spherical (.y) distance from the camera
+in float v_FadeFactor;
+in vec2 v_BakedLightCoord;   // _vert_tex_light_coord (baked from shipyard storage)
+flat in uint v_Material;
+flat in int v_ResolverType;  // 0 none, 1 grass, 2 foliage, 3 water
+flat in int v_IsShaded;      // 0 unshaded (skip directional shade), 1 shaded
+flat in int v_IsFullbright;  // 1 if the quad was tagged emissive in its source model JSON
+in vec3 v_VertexBiomeTint;   // rasterizer-blended world biome RGB, vec3(1.0) on non-biome quads
+#if defined(VS_DYNAMIC_LIGHT) || defined(VS_SHIP_ON_SHIP)
+in vec3 v_CameraRelWorldPos; // camera-relative WORLD pos; +u_VsRenderOrigin == absolute world pos
+#endif
+#if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_SHADE) || defined(VS_SHIP_ON_SHIP)
+flat in vec3 v_WorldNormal;  // world-space surface normal recovered from face slot in the VSH
+#endif
+
+uniform sampler2D u_BlockTex;
+uniform sampler2D u_LightTex;
+
+
+#if defined(VS_DYNAMIC_LIGHT) || defined(VS_SHIP_ON_SHIP)
+uniform ivec3 u_VsRenderOrigin;
+#endif
+#ifdef VS_DYNAMIC_LIGHT
+uniform usamplerBuffer u_VsLightSections;
+uniform usamplerBuffer u_VsLightLut;
+#endif
+#ifdef VS_SHIP_ON_SHIP
+// Per-frame ship-emitter list. TWO RGBA32F texels per emitter:
+//   texel 2i:   vec4(worldX, worldY, worldZ, lightLevel)
+//   texel 2i+1: vec4(qx, qy, qz, qw)   ship-to-world rotation quaternion
+// Manhattan distance is taken in the emitter's owning-ship local frame (offset rotated by q^-1) so the
+// octahedral light bubble rotates with the hull.
+uniform samplerBuffer u_VsShipEmitters;
+uniform int u_VsShipEmitterCount;
+// Per-frame solid ship voxel list (same 2-texel layout, position .w = 0). Used for ship-to-ship AO so
+// one ship's voxels can cast smooth-tracking octagonal shadows on another ship's surface (and on the
+// same ship's own concave faces).
+uniform samplerBuffer u_VsShipOccluders;
+uniform int u_VsShipOccluderCount;
+// Per-frame index of the ship being drawn, matched against each occluder's .w so a ship never
+// applies its own AO on top of what the mesher already baked. -1 while drawing anything else.
+uniform int u_VsSelfShipIndex;
+
+// Inverse-rotate v by quaternion q (apply q^-1 = (-q.xyz, q.w) to v) so the SDF / distance metrics line
+// up with the owning ship's axes.
+vec3 vs_sosQuatRotateInv(vec4 q, vec3 v) {
+    vec3 qNeg = -q.xyz;
+    return v + 2.0 * cross(qNeg, cross(qNeg, v) + q.w * v);
+}
+#endif
+
+out vec4 fragColor;
+
+#define MINECRAFT_LIGHT_X (0.6)
+#define MINECRAFT_LIGHT_Z (0.8)
+#define MINECRAFT_LIGHT_Y (0.5)
+
+// from Flywheel/common/src/backend/resources/assets/flywheel/flywheel/internal/diffuse.glsl
+float vanillaShadeFromNormal(vec3 normal) {
+    vec3 n2 = normal * normal * vec3(.6, .25, .8);
+    return min(n2.x + n2.y * (3. + normal.y) + n2.z, 1.);
+}
+
+// ===== Atlas sampling ========================================================
+// Copied from Sodium 0.9's own chunk FSH so the ship surface filters identically to the world's. 0.5
+// took a mip bias per material; 0.9 replaced that with an explicit nearest reconstruction plus optional
+// rotated-grid supersampling, both driven by u_TexelSize / u_UseRGSS from the globals block.
+
+vec4 vs_sampleNearest(sampler2D sampler, vec2 uv, vec2 pixelSize, vec2 du, vec2 dv, vec2 texelScreenSize) {
+    vec2 uvTexelCoords = uv / pixelSize;
+    vec2 texelCenter = round(uvTexelCoords) - 0.5f;
+    vec2 texelOffset = uvTexelCoords - texelCenter;
+
+    texelOffset = (texelOffset - 0.5f) * pixelSize / texelScreenSize + 0.5f;
+    texelOffset = clamp(texelOffset, 0.0f, 1.0f);
+
+    uv = (texelCenter + texelOffset) * pixelSize;
+    return textureGrad(sampler, uv, du, dv);
+}
+
+vec4 vs_sampleNearest(sampler2D source, vec2 uv, vec2 pixelSize) {
+    vec2 du = dFdx(uv);
+    vec2 dv = dFdy(uv);
+    vec2 texelScreenSize = sqrt(du * du + dv * dv);
+    return vs_sampleNearest(source, uv, pixelSize, du, dv, texelScreenSize);
+}
+
+vec4 vs_sampleRGSS(sampler2D source, vec2 uv, vec2 pixelSize) {
+    vec2 du = dFdx(uv);
+    vec2 dv = dFdy(uv);
+
+    vec2 texelScreenSize = sqrt(du * du + dv * dv);
+    float maxTexelSize = max(texelScreenSize.x, texelScreenSize.y);
+
+    float minPixelSize = min(pixelSize.x, pixelSize.y);
+
+    float transitionStart = minPixelSize * 1.0;
+    float transitionEnd = minPixelSize * 2.0;
+    float blendFactor = smoothstep(transitionStart, transitionEnd, maxTexelSize);
+
+    float duLength = length(du);
+    float dvLength = length(dv);
+    float minDerivative = min(duLength, dvLength);
+    float maxDerivative = max(duLength, dvLength);
+
+    float effectiveDerivative = sqrt(minDerivative * maxDerivative);
+
+    float mipLevelExact = max(0.0, log2(effectiveDerivative / minPixelSize));
+
+    const vec2 offsets[4] = vec2[](
+    vec2(0.125, 0.375),
+    vec2(-0.125, -0.375),
+    vec2(0.375, -0.125),
+    vec2(-0.375, 0.125)
+    );
+
+    vec4 rgssColor = vec4(0.0);
+    for (int i = 0; i < 4; ++i) {
+        vec2 sampleUV = uv + offsets[i] * pixelSize;
+        rgssColor += textureLod(source, sampleUV, mipLevelExact);
+    }
+    rgssColor *= 0.25;
+
+    vec4 nearestColor = vs_sampleNearest(source, uv, pixelSize, du, dv, texelScreenSize);
+
+    return mix(nearestColor, rgssColor, blendFactor);
+}
+
+// MC's lightmap texture uses GL's default GL_REPEAT wrap; at UV=0 a LINEAR sample blends pixel 15
+// (bright) into pixel 0 (dark), giving the wrong color for sky=0 in caves. Clamp to pixel-center range
+// to match sodium's baked vertex format (which clamps the packed light byte to [8, 248] for the same
+// reason). Outside the VS_DYNAMIC_LIGHT block because the off-path still needs to clamp
+// v_BakedLightCoord with these bounds.
+const float VS_UV_MIN = 1.0 / 32.0;
+const float VS_UV_MAX = 31.0 / 32.0;
+
+#ifdef VS_DYNAMIC_LIGHT
+// ===== Flywheel-style smooth light + AO ======================================
+// Layout matches Flywheel's light_lut.glsl: each section is
+//   [solid bits (732 B = 183 ints)] [light bytes (5832 B = 1458 ints)]
+// for a total of 6564 bytes / 1641 ints per section. Solid bit + light byte at the same in-section
+// position N use the same offset formula below.
+const uint VS_BLOCKS_PER_SECTION = 18u * 18u * 18u;
+const uint VS_LIGHT_SIZE_BYTES = VS_BLOCKS_PER_SECTION;
+const uint VS_SOLID_SIZE_BYTES = ((VS_BLOCKS_PER_SECTION + 31u) / 32u) * 4u;
+const uint VS_SOLID_START_INTS = 0u;
+const uint VS_LIGHT_START_INTS = VS_SOLID_SIZE_BYTES / 4u;
+const uint VS_SECTION_SIZE_INTS = (VS_SOLID_SIZE_BYTES + VS_LIGHT_SIZE_BYTES) / 4u;
+
+const uint VS_COMPLETELY_SOLID = 0x7FFFFFFu;
+const float VS_EPSILON = 1e-5;
+const uint VS_LOWER_10_BITS = 0x3FFu;
+const uint VS_UPPER_10_BITS = 0xFFF00000u;
+const float VS_LIGHT_NORMALIZER = 1.0 / 16.0;
+
+uint vs_indexLut(uint i) { return texelFetch(u_VsLightLut, int(i)).r; }
+uint vs_indexLight(uint i) { return texelFetch(u_VsLightSections, int(i)).r; }
+
+bool vs_nextLut(uint base, int coord, out uint next) {
+    int start = int(vs_indexLut(base));
+    uint size = vs_indexLut(base + 1u);
+    int idx = coord - start;
+    if (idx < 0 || idx >= int(size)) return true;
+    next = vs_indexLut(base + 2u + uint(idx));
+    return false;
+}
+
+bool vs_chunkCoordToSectionIndex(ivec3 sectionPos, out uint index) {
+    uint first;
+    if (vs_nextLut(0u, sectionPos.y, first) || first == 0u) return true;
+    uint second;
+    if (vs_nextLut(first, sectionPos.x, second) || second == 0u) return true;
+    uint sectionIndex;
+    if (vs_nextLut(second, sectionPos.z, sectionIndex) || sectionIndex == 0u) return true;
+    index = sectionIndex - 1u;
+    return false;
+}
+
+uvec2 vs_lightAt(uint sectionOffset, uvec3 blockInSectionPos) {
+    uint byteOffset = blockInSectionPos.x + blockInSectionPos.z * 18u + blockInSectionPos.y * 18u * 18u;
+    uint uintOffset = byteOffset >> 2u;
+    uint bitOffset = (byteOffset & 3u) << 3u;
+    uint raw = vs_indexLight(sectionOffset + VS_LIGHT_START_INTS + uintOffset);
+    uint b = (raw >> bitOffset) & 0xFu;
+    uint s = (raw >> (bitOffset + 4u)) & 0xFu;
+    return uvec2(b, s);
+}
+
+bool vs_isSolid(uint sectionOffset, uvec3 blockInSectionPos) {
+    uint bitOffset = blockInSectionPos.x + blockInSectionPos.z * 18u + blockInSectionPos.y * 18u * 18u;
+    uint uintOffset = bitOffset >> 5u;
+    uint bitInWordOffset = bitOffset & 31u;
+    uint word = vs_indexLight(sectionOffset + VS_SOLID_START_INTS + uintOffset);
+    return (word & (1u << bitInWordOffset)) != 0u;
+}
+
+uint vs_fetchSolid3x3x3(uint sectionOffset, ivec3 blockInSectionPos) {
+    uint ret = 0u;
+    #define VS_FETCH_SOLID(x, y, z, i) { \
+        bool flag = vs_isSolid(sectionOffset, uvec3(blockInSectionPos + ivec3(x, y, z))); \
+        ret |= uint(flag) << uint(i); \
+    }
+    VS_FETCH_SOLID(-1, -1, -1, 0)  VS_FETCH_SOLID(0, -1, -1, 1)  VS_FETCH_SOLID(1, -1, -1, 2)
+    VS_FETCH_SOLID(-1, -1,  0, 3)  VS_FETCH_SOLID(0, -1,  0, 4)  VS_FETCH_SOLID(1, -1,  0, 5)
+    VS_FETCH_SOLID(-1, -1,  1, 6)  VS_FETCH_SOLID(0, -1,  1, 7)  VS_FETCH_SOLID(1, -1,  1, 8)
+    VS_FETCH_SOLID(-1,  0, -1, 9)  VS_FETCH_SOLID(0,  0, -1,10)  VS_FETCH_SOLID(1,  0, -1,11)
+    VS_FETCH_SOLID(-1,  0,  0,12)  VS_FETCH_SOLID(0,  0,  0,13)  VS_FETCH_SOLID(1,  0,  0,14)
+    VS_FETCH_SOLID(-1,  0,  1,15)  VS_FETCH_SOLID(0,  0,  1,16)  VS_FETCH_SOLID(1,  0,  1,17)
+    VS_FETCH_SOLID(-1,  1, -1,18)  VS_FETCH_SOLID(0,  1, -1,19)  VS_FETCH_SOLID(1,  1, -1,20)
+    VS_FETCH_SOLID(-1,  1,  0,21)  VS_FETCH_SOLID(0,  1,  0,22)  VS_FETCH_SOLID(1,  1,  0,23)
+    VS_FETCH_SOLID(-1,  1,  1,24)  VS_FETCH_SOLID(0,  1,  1,25)  VS_FETCH_SOLID(1,  1,  1,26)
+    return ret;
+}
+
+uint[27] vs_fetchLight3x3x3(uint sectionOffset, ivec3 blockInSectionPos, uint solidMask) {
+    uint[27] lights;
+    #define VS_FETCH_LIGHT(_x, _y, _z, i) { \
+        uvec2 light = vs_lightAt(sectionOffset, uvec3(blockInSectionPos + ivec3(_x, _y, _z))); \
+        lights[i] = (light.x) | ((light.y) << 10u) | (uint((solidMask & (1u << uint(i))) == 0u) << 20u); \
+    }
+    VS_FETCH_LIGHT(-1, -1, -1, 0)  VS_FETCH_LIGHT(0, -1, -1, 1)  VS_FETCH_LIGHT(1, -1, -1, 2)
+    VS_FETCH_LIGHT(-1, -1,  0, 3)  VS_FETCH_LIGHT(0, -1,  0, 4)  VS_FETCH_LIGHT(1, -1,  0, 5)
+    VS_FETCH_LIGHT(-1, -1,  1, 6)  VS_FETCH_LIGHT(0, -1,  1, 7)  VS_FETCH_LIGHT(1, -1,  1, 8)
+    VS_FETCH_LIGHT(-1,  0, -1, 9)  VS_FETCH_LIGHT(0,  0, -1,10)  VS_FETCH_LIGHT(1,  0, -1,11)
+    VS_FETCH_LIGHT(-1,  0,  0,12)  VS_FETCH_LIGHT(0,  0,  0,13)  VS_FETCH_LIGHT(1,  0,  0,14)
+    VS_FETCH_LIGHT(-1,  0,  1,15)  VS_FETCH_LIGHT(0,  0,  1,16)  VS_FETCH_LIGHT(1,  0,  1,17)
+    VS_FETCH_LIGHT(-1,  1, -1,18)  VS_FETCH_LIGHT(0,  1, -1,19)  VS_FETCH_LIGHT(1,  1, -1,20)
+    VS_FETCH_LIGHT(-1,  1,  0,21)  VS_FETCH_LIGHT(0,  1,  0,22)  VS_FETCH_LIGHT(1,  1,  0,23)
+    VS_FETCH_LIGHT(-1,  1,  1,24)  VS_FETCH_LIGHT(0,  1,  1,25)  VS_FETCH_LIGHT(1,  1,  1,26)
+    return lights;
+}
+
+#define vs_index3x3x3(x, y, z) ((x) + (z) * 3u + (y) * 9u)
+#define vs_validCountToAo(validCount) (1.0 - (4.0 - (validCount)) * 0.2)
+
+vec3 vs_lightForDirection(uint[27] lights, vec3 interpolant,
+                          uint c00, uint c01, uint c10, uint c11,
+                          uint oppositeMask) {
+    uint[8] summed;
+    #define VS_SUM_CORNER(_x, _y, _z, i) { \
+        uint corner = vs_index3x3x3(_x, _y, _z); \
+        summed[i] = lights[c00 + corner] + lights[c01 + corner] + lights[c10 + corner] + lights[c11 + corner]; \
+    }
+    VS_SUM_CORNER(0u, 0u, 0u, 0)
+    VS_SUM_CORNER(1u, 0u, 0u, 1)
+    VS_SUM_CORNER(0u, 0u, 1u, 2)
+    VS_SUM_CORNER(1u, 0u, 1u, 3)
+    VS_SUM_CORNER(0u, 1u, 0u, 4)
+    VS_SUM_CORNER(1u, 1u, 0u, 5)
+    VS_SUM_CORNER(0u, 1u, 1u, 6)
+    VS_SUM_CORNER(1u, 1u, 1u, 7)
+
+    vec3[8] adjusted;
+    // Inner-face correction: if a corner has zero valid blocks, pull from the opposite corner via the
+    // bit-flip given by oppositeMask. uint() casts so the ternary branches are both uint (strict GLSL
+    // refuses int^uint).
+    #define VS_CORNER_INDEX(i) ((summed[uint(i)] & VS_UPPER_10_BITS) == 0u ? uint(i) ^ oppositeMask : uint(i))
+
+    const float[5] normalizers = float[](0.0, 1.0, 1.0/2.0, 1.0/3.0, 1.0/4.0);
+
+    #define VS_ADJUST_CORNER(i) { \
+        uint corner = summed[VS_CORNER_INDEX(i)]; \
+        uint validCount = corner >> 20u; \
+        adjusted[i].xy = vec2(corner & VS_LOWER_10_BITS, (corner >> 10u) & VS_LOWER_10_BITS) * normalizers[validCount]; \
+        adjusted[i].z = float(validCount); \
+    }
+    VS_ADJUST_CORNER(0) VS_ADJUST_CORNER(1) VS_ADJUST_CORNER(2) VS_ADJUST_CORNER(3)
+    VS_ADJUST_CORNER(4) VS_ADJUST_CORNER(5) VS_ADJUST_CORNER(6) VS_ADJUST_CORNER(7)
+
+    vec3 light00 = mix(adjusted[0], adjusted[1], interpolant.x);
+    vec3 light01 = mix(adjusted[2], adjusted[3], interpolant.x);
+    vec3 light10 = mix(adjusted[4], adjusted[5], interpolant.x);
+    vec3 light11 = mix(adjusted[6], adjusted[7], interpolant.x);
+    vec3 light0 = mix(light00, light01, interpolant.z);
+    vec3 light1 = mix(light10, light11, interpolant.z);
+    vec3 light = mix(light0, light1, interpolant.y);
+
+    light.xy = clamp(light.xy * VS_LIGHT_NORMALIZER, VS_UV_MIN, VS_UV_MAX);
+    light.z = vs_validCountToAo(light.z);
+    return light;
+}
+
+struct VsLightAo {
+    vec2 light;
+    float ao;
+};
+
+// Single-block world-light lookup at worldPos. Used as a fallback so we can still get the correct
+// sky-light (e.g. 0 in a cave) when the smooth lookup can't run — without this, callers fall back to the
+// shipyard's baked sky-light, which is ~max because the shipyard is an open-sky void.
+bool vs_lightFlat(vec3 worldPos, out vec2 light) {
+    ivec3 blockPos = ivec3(floor(worldPos));
+    uint sectionIndex;
+    if (vs_chunkCoordToSectionIndex(blockPos >> 4, sectionIndex)) {
+        return false;
+    }
+    uint sectionOffset = sectionIndex * VS_SECTION_SIZE_INTS;
+    ivec3 blockInSectionPos = (blockPos & 0xF) + 1;
+    uvec2 raw = vs_lightAt(sectionOffset, uvec3(blockInSectionPos));
+    light = clamp(vec2(raw) * VS_LIGHT_NORMALIZER, VS_UV_MIN, VS_UV_MAX);
+    return true;
+}
+
+bool vs_lightSmooth(vec3 worldPos, vec3 normal, out VsLightAo lightAoOut) {
+    ivec3 blockPos = ivec3(floor(worldPos));
+    uint lightSectionIndex;
+    if (vs_chunkCoordToSectionIndex(blockPos >> 4, lightSectionIndex)) {
+        return false;
+    }
+    uint sectionOffset = lightSectionIndex * VS_SECTION_SIZE_INTS;
+    ivec3 blockInSectionPos = (blockPos & 0xF) + 1;
+
+    uint solid = vs_fetchSolid3x3x3(sectionOffset, blockInSectionPos);
+    if (solid == VS_COMPLETELY_SOLID) {
+        lightAoOut.light = vec2(VS_UV_MIN);
+        lightAoOut.ao = vs_validCountToAo(0.0);
+        return true;
+    }
+    uint[27] lights = vs_fetchLight3x3x3(sectionOffset, blockInSectionPos, solid);
+    vec3 interpolant = fract(worldPos);
+
+    vec3 lightX;
+    if (normal.x > VS_EPSILON) {
+        lightX = vs_lightForDirection(lights, interpolant,
+            vs_index3x3x3(1u, 0u, 0u), vs_index3x3x3(1u, 0u, 1u),
+            vs_index3x3x3(1u, 1u, 0u), vs_index3x3x3(1u, 1u, 1u), 1u);
+    } else if (normal.x < -VS_EPSILON) {
+        lightX = vs_lightForDirection(lights, interpolant,
+            vs_index3x3x3(0u, 0u, 0u), vs_index3x3x3(0u, 0u, 1u),
+            vs_index3x3x3(0u, 1u, 0u), vs_index3x3x3(0u, 1u, 1u), 1u);
+    } else {
+        lightX = vec3(0.0);
+    }
+
+    vec3 lightZ;
+    if (normal.z > VS_EPSILON) {
+        lightZ = vs_lightForDirection(lights, interpolant,
+            vs_index3x3x3(0u, 0u, 1u), vs_index3x3x3(0u, 1u, 1u),
+            vs_index3x3x3(1u, 0u, 1u), vs_index3x3x3(1u, 1u, 1u), 2u);
+    } else if (normal.z < -VS_EPSILON) {
+        lightZ = vs_lightForDirection(lights, interpolant,
+            vs_index3x3x3(0u, 0u, 0u), vs_index3x3x3(0u, 1u, 0u),
+            vs_index3x3x3(1u, 0u, 0u), vs_index3x3x3(1u, 1u, 0u), 2u);
+    } else {
+        lightZ = vec3(0.0);
+    }
+
+    vec3 lightY;
+    if (normal.y > VS_EPSILON) {
+        lightY = vs_lightForDirection(lights, interpolant,
+            vs_index3x3x3(0u, 1u, 0u), vs_index3x3x3(0u, 1u, 1u),
+            vs_index3x3x3(1u, 1u, 0u), vs_index3x3x3(1u, 1u, 1u), 4u);
+    } else if (normal.y < -VS_EPSILON) {
+        lightY = vs_lightForDirection(lights, interpolant,
+            vs_index3x3x3(0u, 0u, 0u), vs_index3x3x3(0u, 0u, 1u),
+            vs_index3x3x3(1u, 0u, 0u), vs_index3x3x3(1u, 0u, 1u), 4u);
+    } else {
+        lightY = vec3(0.0);
+    }
+
+    vec3 n2 = normal * normal;
+    vec3 lightAo = lightX * n2.x + lightY * n2.y + lightZ * n2.z;
+    lightAoOut.light = lightAo.xy;
+    lightAoOut.ao = lightAo.z;
+    return true;
+}
+#endif // VS_DYNAMIC_LIGHT
+
+#ifdef VS_SHIP_ON_SHIP
+// ===== Ship-on-ship: distance-attenuated emitter list ====================
+// Loop bounds for the per-fragment scans. Should be <= the corresponding MAX_* constants in the Java
+// lists; 128 covers most real ship setups.
+const int VS_SOS_EMITTER_LOOP_CAP = 128;
+const int VS_SOS_OCCLUDER_LOOP_CAP = 128;
+
+// Max distance-attenuated contribution from any ship emitter (incl. own ship) at this fragment's world
+// position. Manhattan falloff is taken in the emitter's owning-ship frame so the octahedral light bubble
+// rotates with the hull.
+float vs_sosEmitterLight(vec3 worldPos) {
+    float maxLight = 0.0;
+    int n = min(u_VsShipEmitterCount, VS_SOS_EMITTER_LOOP_CAP);
+    for (int i = 0; i < n; i++) {
+        vec4 e = texelFetch(u_VsShipEmitters, i * 2);
+        vec4 q = texelFetch(u_VsShipEmitters, i * 2 + 1);
+        vec3 offset_ship = vs_sosQuatRotateInv(q, worldPos - e.xyz);
+        float dist = abs(offset_ship.x) + abs(offset_ship.y) + abs(offset_ship.z);
+        float light = max(0.0, e.w - dist);
+        maxLight = max(maxLight, light);
+    }
+    return maxLight;
+}
+
+// Per-fragment ship-to-ship AO. Mirrors the world-FSH ws_shipAo: each solid ship voxel projects an
+// octagonal Manhattan tent on the face, computed in the voxel's owning-ship local frame so the shadow
+// rotates with the hull. Diagonal corner cells get the bilinear-vs-Manhattan extra (cornerExtra) gated
+// by >=2 contributors so isolated and adjacent voxels keep their clean octagonal shadow but X-X gaps and
+// rows fill in to vanilla brightness.
+float vs_sosShipAo(vec3 worldPosWorld, vec3 nf) {
+    int n = min(u_VsShipOccluderCount, VS_SOS_OCCLUDER_LOOP_CAP);
+
+    float occlusionManhattan = 0.0;
+    float occlusionCorner = 0.0;
+    int cornerContributors = 0;
+
+    for (int i = 0; i < n; i++) {
+        vec4 voxel = texelFetch(u_VsShipOccluders, i * 2);
+        vec4 q = texelFetch(u_VsShipOccluders, i * 2 + 1);
+
+        // Skip this ship's own voxels. Their ambient occlusion is already baked into the mesh by the
+        // chunk mesher, so shading it again per fragment would darken every concave corner twice. Only
+        // OTHER ships have no representation in this mesh and therefore need the per-fragment pass.
+        if (voxel.w == float(u_VsSelfShipIndex)) continue;
+
+        vec3 d_world = voxel.xyz - worldPosWorld;
+        vec3 d_ship = vs_sosQuatRotateInv(q, d_world);
+        vec3 nf_ship = vs_sosQuatRotateInv(q, nf);
+
+        float d_n = dot(d_ship, nf_ship);
+        if (d_n <= 0.0 || d_n >= 1.5) continue;
+        float fn = 1.0 - smoothstep(0.5, 1.5, d_n);
+
+        vec3 helper = abs(nf_ship.y) < 0.9 ? vec3(0, 1, 0) : vec3(1, 0, 0);
+        vec3 uAxis = normalize(cross(helper, nf_ship));
+        vec3 vAxis = cross(nf_ship, uAxis);
+        float du = dot(d_ship, uAxis);
+        float dv = dot(d_ship, vAxis);
+
+        float dU = abs(du) - 0.5;
+        float dV = abs(dv) - 0.5;
+        float manhattan = max(0.0, 1.0 - max(dU, 0.0) - max(dV, 0.0));
+
+        float fU = clamp(1.0 - dU, 0.0, 1.0);
+        float fV = clamp(1.0 - dV, 0.0, 1.0);
+        float cornerExtra = max(0.0, fU * fV - manhattan);
+
+        occlusionManhattan += (1.0 / 3.0) * fn * manhattan;
+        float contribC = (1.0 / 3.0) * fn * cornerExtra;
+        occlusionCorner += contribC;
+        if (contribC > 0.0) {
+            cornerContributors++;
+        }
+    }
+
+    float occlusion = occlusionManhattan
+            + (cornerContributors >= 2 ? occlusionCorner : 0.0);
+    occlusion = clamp(occlusion, 0.0, 1.0);
+    return mix(0.2, 1.0, 1.0 - occlusion);
+}
+#ifdef VS_FLOOD_GRID
+// ===== Flooded ship light: the occlusion gate ============================
+//
+// The emitter loop above is a pure distance falloff — it has no idea a hull or a hillside is in the
+// way, so ship light shines straight through walls. The compute passes under
+// assets/valkyrienskies/shaders/compute flood the same emitters through the world's block grid,
+// stopping at ship voxels and terrain, and write the result into the section buffer sampled here.
+//
+// The flood is used only to GATE the emitter field, not to replace it. In open air the two agree
+// (both are the light level minus a Manhattan-ish distance) so min() barely changes anything and the
+// emitter list keeps its sub-block-precise, continuously-tracking falloff — the property that made
+// the grid unusable as the primary source in the first place. Behind a wall the flood is 0 and the
+// emitter's contribution is cut, which is exactly the case the emitter list gets wrong.
+uniform usamplerBuffer u_VsWorldFromShipSections;
+uniform usamplerBuffer u_VsWorldFromShipLut;
+// 0 when the flood could not be produced this frame; the gate then stands down entirely.
+uniform int u_VsFloodGridValid;
+
+// Headroom added to the sampled flood before the min(), in light levels. Now that solid taps are
+// excluded from the interpolation rather than zero-valued ones, a lit surface reads its true value
+// and no headroom is needed; anything above 0 is pure leakage allowance. Kept as a named constant
+// because it is the first knob to reach for if surfaces ever read a shade too dark.
+// (The gate's slack constant is gone: ship-on-ship light is the flood itself now, not a second field
+// that has to be reconciled with it.)
+
+// Must match VsWorldFromShipLightStorage's packed layout.
+const uint VSF_SECTION_SIZE_INTS = 1641u;
+const uint VSF_LIGHT_START_INTS = 183u;
+
+bool vsf_nextLut(uint base, int coord, out uint next) {
+    int start = int(texelFetch(u_VsWorldFromShipLut, int(base)).r);
+    uint size = texelFetch(u_VsWorldFromShipLut, int(base) + 1).r;
+    int idx = coord - start;
+    if (idx < 0 || idx >= int(size)) return true;
+    next = texelFetch(u_VsWorldFromShipLut, int(base + 2u + uint(idx))).r;
+    return false;
+}
+
+bool vsf_section(ivec3 sectionPos, out uint sectionOffset) {
+    uint first;
+    if (vsf_nextLut(0u, sectionPos.y, first) || first == 0u) return false;
+    uint second;
+    if (vsf_nextLut(first, sectionPos.x, second) || second == 0u) return false;
+    uint index;
+    if (vsf_nextLut(second, sectionPos.z, index) || index == 0u) return false;
+    sectionOffset = (index - 1u) * VSF_SECTION_SIZE_INTS;
+    return true;
+}
+
+/** True when the packed blocker bitmap marks this voxel opaque (a ship voxel or world terrain). */
+bool vsf_solidAt(uint sectionOffset, ivec3 blockInSection) {
+    uint bitOffset = uint(blockInSection.x)
+        + uint(blockInSection.z) * 18u
+        + uint(blockInSection.y) * 324u;
+    uint word = texelFetch(u_VsWorldFromShipSections, int(sectionOffset + (bitOffset >> 5u))).r;
+    return (word & (1u << (bitOffset & 31u))) != 0u;
+}
+
+float vsf_lightAt(uint sectionOffset, ivec3 blockInSection) {
+    uint byteOffset = uint(blockInSection.x)
+        + uint(blockInSection.z) * 18u
+        + uint(blockInSection.y) * 324u;
+    uint raw = texelFetch(u_VsWorldFromShipSections,
+        int(sectionOffset + VSF_LIGHT_START_INTS + (byteOffset >> 2u))).r;
+    // The whole byte, in 16ths of a level. This is a second copy of the world shader's sampler and it
+    // was left masking 4 bits when the pack pass moved to 16ths, so every ship-on-ship flood read was
+    // taking the low nibble of a fixed-point value -- near zero for anything close to a whole level.
+    return float((raw >> ((byteOffset & 3u) << 3u)) & 0xFFu) * (1.0 / 16.0);
+}
+
+// Trilinearly sampled flooded light, or -1 when this fragment sits outside every tracked section.
+// The caller must leave the emitter field alone in that case rather than gate it to zero: "no data"
+// means the flood simply never covered here, not that the spot is dark.
+float vsf_floodTrilinear(vec3 worldPos) {
+    vec3 p = worldPos - 0.5;              // grid values live at cell centres
+    ivec3 base = ivec3(floor(p));
+    vec3 f = p - vec3(base);
+
+    ivec3 baseSection = base >> 4;
+    uint baseOffset;
+    if (!vsf_section(baseSection, baseOffset)) return -1.0;
+
+    // SOLID taps are dropped and the rest renormalised. A fragment sits ON a block face, so half its
+    // taps land inside the block behind it; averaging those in would halve the value at every lit
+    // surface and the gate would then eat light that belongs there. Excluding them by the blocker
+    // bitmap — rather than by "the tap read zero", which was the earlier rule — keeps genuinely dark
+    // air taps in the average, so light still falls off and still stops at walls. Dropping zero taps
+    // instead let a single lit tap carry a shadowed fragment, which leaked light around corners.
+    float acc = 0.0;
+    float weight = 0.0;
+    for (int i = 0; i < 8; i++) {
+        ivec3 step = ivec3(i & 1, (i >> 1) & 1, (i >> 2) & 1);
+        vec3 w3 = mix(vec3(1.0) - f, f, vec3(step));
+        float w = w3.x * w3.y * w3.z;
+        if (w <= 0.0) continue;
+        ivec3 c = base + step;
+        uint offset = baseOffset;
+        // All eight taps usually land in one section; only re-walk the LUT when one doesn't.
+        if ((c >> 4) != baseSection && !vsf_section(c >> 4, offset)) continue;
+        ivec3 inSection = (c & 15) + 1;
+        if (vsf_solidAt(offset, inSection)) continue;
+        acc += w * vsf_lightAt(offset, inSection);
+        weight += w;
+    }
+    // Every tap opaque: the fragment is buried, so there is no light here.
+    return weight > 0.0 ? acc / weight : 0.0;
+}
+#endif // VS_FLOOD_GRID
+
+#endif // VS_SHIP_ON_SHIP
+
+// (No biome helpers in the FSH — biome lookup happens per-vertex in the VSH and arrives via the
+// v_VertexBiomeTint varying. The FSH just multiplies it.)
+
+void main() {
+    vec4 diffuseColor = u_UseRGSS
+            ? vs_sampleRGSS(u_BlockTex, v_TexCoord, u_TexelSize)
+            : vs_sampleNearest(u_BlockTex, v_TexCoord, u_TexelSize);
+
+#ifdef USE_FRAGMENT_DISCARD
+    if (diffuseColor.a < _material_alpha_cutoff(v_Material)) {
+        discard;
+    }
+#endif
+
+#if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_SHADE) || defined(VS_SHIP_ON_SHIP)
+    // World-space normal: the VSH packs the per-quad face direction into the alpha byte, decodes it to a
+    // shipyard-space normal, and transforms by u_TransformMatrix. v_WorldNormal is `flat`-interpolated
+    // so all 4 quad vertices contribute the same value — exact for a flat quad and free of the
+    // dFdx/dFdy precision artifacts on small triangles.
+    vec3 worldN = v_WorldNormal;
+#endif
+
+    // Fullbright / emissive: the mesher mixin reads the quad's own emissive flag and packs the
+    // FULLBRIGHT face slot. v_IsFullbright is the decoded flag — no fragment-time heuristic.
+    bool isFullbright = v_IsFullbright != 0;
+    bool isShade = v_IsShaded != 0;
+
+    vec2 lightCoord;
+    float aoMultiplier;
+#ifdef VS_DYNAMIC_LIGHT
+    // Absolute world position of the fragment (camera-relative + integer origin).
+    vec3 worldPos = v_CameraRelWorldPos + vec3(u_VsRenderOrigin);
+    // Default-init so the compiler can prove the values are defined when we skip the smooth-fetch branch
+    // (vs_lightSmooth doesn't write its out param on early-return paths).
+    VsLightAo vsLight;
+    vsLight.light = vec2(0.0);
+    vsLight.ao = 1.0;
+    if (isFullbright) {
+        // Skip the world-light lookup entirely; fullbright = max lightmap, no AO, no directional shade.
+        lightCoord = vec2(VS_UV_MAX);
+        aoMultiplier = 1.0;
+    } else if (vs_lightSmooth(worldPos, worldN, vsLight)) {
+        // World-space lighting + AO at the ship's rendered location.
+        // Block-light: max with baked so ship-internal torches still glow (they live in shipyard, the
+        //   world engine doesn't see them here).
+        // Sky-light: take from world (baked sky is from shipyard, irrelevant to the ship's actual
+        //   location).
+        // AO: combine world-external AO with the ship-internal AO baked into v_Color.a by the mesher.
+        lightCoord = vec2(
+            max(vsLight.light.x, v_BakedLightCoord.x),
+            vsLight.light.y
+        );
+        aoMultiplier = vsLight.ao * v_Color.a;
+    } else {
+        // Fallback when the smooth lookup misses (section not tracked yet).
+        vec2 flatLight;
+        if (vs_lightFlat(worldPos, flatLight)) {
+            lightCoord = vec2(
+                max(flatLight.x, v_BakedLightCoord.x),
+                flatLight.y
+            );
+        } else {
+            lightCoord = clamp(v_BakedLightCoord, VS_UV_MIN, VS_UV_MAX);
+        }
+        aoMultiplier = v_Color.a;
+    }
+#else
+    // Dynamic lighting disabled: just use the shipyard-baked lightmap. Caves and torches in the world
+    // will not affect the ship; the shipyard's open-sky bake means everything looks brightly lit even
+    // underground.
+    if (isFullbright) {
+        lightCoord = vec2(VS_UV_MAX);
+        aoMultiplier = 1.0;
+    } else {
+        lightCoord = clamp(v_BakedLightCoord, VS_UV_MIN, VS_UV_MAX);
+        aoMultiplier = v_Color.a;
+    }
+#endif
+
+    // BlockColors-baked vertex tint multiplied by the rasterizer-blended world-biome tint sampled
+    // per-vertex in the VSH. v_VertexBiomeTint is vec3(1.0) for non-biome quads, so this is a no-op
+    // there. For biome-tinted quads the mesher mixin already white-d out v_Color.rgb so the multiply
+    // yields just the world-biome color smoothly blended across the quad's vertices.
+    vec3 vertTint = v_Color.rgb * v_VertexBiomeTint;
+
+#ifdef VS_SHIP_ON_SHIP
+    // Ship-on-ship: the world-from-ship storage holds every ship's voxels projected into world coords
+    // (and dilated emitter values). Reading it at this fragment's world block lets nearby ships shadow /
+    // illuminate this ship's surface. Skipped for fullbright quads (already at max lightmap) and reuses
+    // the same world-position varyings as VS_DYNAMIC_LIGHT.
+    float sosShipAo = 1.0;
+    float vsDbgSosLight = 0.0;
+    if (!isFullbright) {
+        // Ship emitters anywhere (own ship + other ships). The emitter list stores world-space FLOAT
+        // coords, so as a ship slides sub-block the distance from each fragment varies continuously —
+        // the lit area tracks ship motion without any block-grid quantization.
+        vec3 sosWorldPos = v_CameraRelWorldPos + vec3(u_VsRenderOrigin);
+#ifdef VS_FLOOD_GRID
+        // Ship light on another ship's surface, straight out of the flood -- the same field, sampled
+        // the same way, that lights world terrain.
+        //
+        // This used to be the per-fragment emitter falloff clamped by the flood, and it inherited every
+        // failure of that hybrid: the falloff is Manhattan in the EMITTER's ship frame while the flood
+        // counts in world axes, so the clamp cut a rotated ship's light along a straight line, and the
+        // falloff itself has no idea a hull is in the way. With the flood carrying 16ths of a level
+        // there is nothing left to reconcile: propagation exactly as vanilla does it, occlusion
+        // included, sampled with sub-block precision.
+        // Sampled half a block OUT along the surface normal, not at the surface itself.
+        //
+        // The sampler drops taps that the packed SOLID bitmap marks as blocker, and that bitmap is
+        // terrain only -- ships contribute coverage instead. So on a ship surface nothing excludes the
+        // taps that fall inside the ship's own body, and the value a face reads is a blend of the air
+        // in front of it and the interior behind it. The interior part swings as another ship moves
+        // past, which is why ship-to-ship light flickered where terrain did not: measured on a dragged
+        // ship, single-frame steps of 153/255 on receiver pixels against a still-frame floor of 1.
+        // Offsetting by half a block puts all eight taps in the air the light is actually in.
+        float sosFlood = vsf_floodTrilinear(sosWorldPos + worldN * 0.5);
+        float sosLight = u_VsFloodGridValid != 0 ? max(sosFlood, 0.0) : 0.0;
+#else
+        // No compute support: fall back to the unoccluded emitter falloff, as this path always was.
+        float sosLight = vs_sosEmitterLight(sosWorldPos);
+#endif
+        vsDbgSosLight = sosLight;
+        if (sosLight > 0.0) {
+            lightCoord.x = max(lightCoord.x, (sosLight + 0.5) / 16.0);
+        }
+
+        // Ship-to-ship AO: own ship's voxels casting shadows on this ship's concave faces, plus any
+        // other ship's voxels that happen to be adjacent in world space. Both run through the same SDF,
+        // in each contributing voxel's ship-frame, so shadows track each hull's rotation independently.
+        sosShipAo = vs_sosShipAo(sosWorldPos, worldN);
+    }
+#endif
+
+    vec4 lightSample = texture(u_LightTex, lightCoord);
+    diffuseColor.rgb *= vertTint * lightSample.rgb;
+
+#ifdef VS_SHIP_ON_SHIP
+    // Stack the ship-to-ship AO with the existing aoMultiplier additively (in occlusion-loss space) —
+    // same compounding rule the world FSH uses for vanilla x ship AO so two op cells at a corner sum to
+    // loss 0.4 instead of 0.64. Floor at 0.2 matches sodium's deepest opaque AO.
+    aoMultiplier = max(0.2, aoMultiplier - (1.0 - sosShipAo));
+#endif
+
+#ifdef VS_DYNAMIC_SHADE
+    // Directional shade (vanilla "side darkening"): applied only when the quad opted in AND we didn't
+    // detect fullbright above. aoMultiplier is already 1.0 for fullbright so the else-branch is a no-op
+    // there too. Disabled: just AO-darken; ship sides won't have the vanilla direction-based brightness
+    // drop.
+    if (isShade && !isFullbright) {
+        diffuseColor.rgb *= vanillaShadeFromNormal(worldN) * aoMultiplier;
+    } else {
+        diffuseColor.rgb *= aoMultiplier;
+    }
+#else
+    diffuseColor.rgb *= aoMultiplier;
+#endif
+
+    fragColor = _linearFog(diffuseColor, v_FragDistance, u_FogColor, u_EnvironmentFog, u_RenderFog, v_FadeFactor);
+
+#ifdef VS_DEBUG_SHIP_LIGHT
+    // ===== Ship-chunk light source paint =========================================================
+    // Which of the two block-light sources is lighting this ship fragment?
+    //
+    //   RED   = v_BakedLightCoord.x, the SHIPYARD-baked lightmap, baked at mesh-compile time.
+    //   GREEN = the world-sampled light at the ship's rendered position.
+    //
+    // The shipyard lightmap is not occlusion-aware -- probed on the client it is a plain
+    // 15-minus-manhattan falloff, with solid stone reading 13 and 14 -- so if a ship's outer hull shows
+    // RED far from an enclosed emitter, its own lamp is shining through solid blocks. That is the thing
+    // to confirm before rewiring self-lighting onto the flood.
+    //
+    // Written OVER the finished fragColor, never as an early return: returning early lets the compiler
+    // drop the texture reads above and sodium's bindUniform then throws on the missing sampler. The
+    // 1e-4 term keeps them all live.
+    {
+        float dbgBaked = max(0.0, v_BakedLightCoord.x * 16.0 - 0.5);
+#ifdef VS_DYNAMIC_LIGHT
+        float dbgWorld = max(0.0, vsLight.light.x * 16.0 - 0.5);
+#else
+        float dbgWorld = 0.0;
+#endif
+        // Constant blue marks "this fragment is a ship chunk". Without it an unlit hull paints pure
+        // black and is indistinguishable from the night sky behind it, so a shot showing no leak and a
+        // shot with the ship out of frame look identical -- which is exactly how the first attempt at
+        // this measurement went.
+#if VS_DEBUG_SHIP_LIGHT == 4
+        // Mode 4 isolates the two ship-on-ship terms so a drag can say which one is unstable:
+        // RED = the ship-to-ship LIGHT received, GREEN = the ship-to-ship AO applied to it.
+#ifdef VS_SHIP_ON_SHIP
+        fragColor = vec4(clamp(vsDbgSosLight / 15.0, 0.0, 1.0),
+                         clamp(sosShipAo, 0.0, 1.0),
+                         0.20, 1.0) + fragColor * 1.0e-4;
+#else
+        fragColor = vec4(0.0, 0.0, 0.20, 1.0) + fragColor * 1.0e-4;
+#endif
+#else
+        fragColor = vec4(clamp(dbgBaked / 15.0, 0.0, 1.0),
+                         clamp(dbgWorld / 15.0, 0.0, 1.0),
+                         0.20, 1.0) + fragColor * 1.0e-4;
+#endif
+    }
+#endif
+
+}

@@ -1,0 +1,88 @@
+# Does the ship->world light flood survive rotation and non-grid-aligned placement?
+#
+# Every case is measured OPEN and CLOSED. The closed shot is the control: it is what the ground looks
+# like with the hull sealed, so "open" is only evidence of working light if it differs from its OWN
+# closed shot. Comparing an open shot against the axis-aligned baseline instead is how a sealed-by-
+# accident hull previously passed for a working one.
+world autotest
+wait-level
+wait 80
+hud off
+cmd gamemode creative
+cmd time set midnight
+cmd gamerule doDaylightCycle false
+cmd gamerule doMobSpawning false
+cmd kill @e[type=!player]
+wait 20
+
+run light_ship 0 -56 0 minecraft:glowstone
+wait 60
+run ship_light_info
+cmd tp @s 0 -58 -11 0 12
+wait 60
+
+# --- axis aligned, on the block lattice ---
+run hull closed
+wait 40
+screenshot rot0_closed
+run hull open
+wait 60
+screenshot rot0_open
+
+# --- yawed 45 degrees ---
+# A teleport lands on a later physics tick and has to reach the client, so wait before believing
+# anything: ship_light_info prints the CLIENT render rotation, which is what the flood reads.
+run rotate_ship 45 0 0
+wait 120
+run ship_light_info
+screenshot rot45_open
+run hull closed
+wait 60
+screenshot rot45_closed
+
+# --- yaw + pitch + roll, fully off-axis ---
+run rotate_ship 30 25 15
+wait 120
+run ship_light_info
+run hull open
+wait 60
+screenshot rot3d_open
+run hull closed
+wait 60
+screenshot rot3d_closed
+
+# --- back to axis aligned, but shifted half a block off the lattice ---
+run rotate_ship 0 0 0
+wait 120
+run move_ship 0.5 0.0 0.5
+wait 120
+run ship_light_info
+run hull open
+wait 60
+screenshot off_half_open
+run hull closed
+wait 60
+screenshot off_half_closed
+
+# --- an arbitrary fractional offset on all three axes ---
+run move_ship 0.37 0.21 0.63
+wait 120
+run ship_light_info
+run hull open
+wait 60
+screenshot off_frac_open
+run hull closed
+wait 60
+screenshot off_frac_closed
+
+# --- rotated AND off-lattice, the realistic case ---
+run rotate_ship 30 25 15
+wait 120
+run ship_light_info
+run hull open
+wait 60
+screenshot rot3d_off_open
+run hull closed
+wait 60
+screenshot rot3d_off_closed
+quit

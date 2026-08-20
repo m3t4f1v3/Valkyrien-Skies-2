@@ -10,6 +10,7 @@ import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 import org.spongepowered.asm.service.MixinService;
 import org.valkyrienskies.mod.compat.LoadedMods;
 import org.valkyrienskies.mod.compat.LoadedMods.FlywheelVersion;
+import org.valkyrienskies.mod.compat.SodiumGeneration;
 import org.valkyrienskies.mod.compat.VSRenderer;
 
 /**
@@ -18,6 +19,30 @@ import org.valkyrienskies.mod.compat.VSRenderer;
 public class ValkyrienCommonMixinConfigPlugin implements IMixinConfigPlugin {
 
     private static VSRenderer vsRenderer = null;
+    private static SodiumGeneration sodiumGeneration = null;
+
+    /**
+     * Which Sodium generation is installed. Drives both mixin selection (the two generations' mixins
+     * target disjoint class names, so only one set may be applied) and the runtime dispatch in
+     * {@link org.valkyrienskies.mod.compat.sodium.SodiumDispatch}.
+     */
+    public static SodiumGeneration getSodiumGeneration() {
+        if (sodiumGeneration == null) {
+            sodiumGeneration = getSodiumGenerationHelper();
+        }
+        return sodiumGeneration;
+    }
+
+    private static SodiumGeneration getSodiumGenerationHelper() {
+        if (classExists("net.caffeinemc.mods.sodium.client.SodiumClientMod")) {
+            return SodiumGeneration.MODERN;
+        }
+        if (classExists("me.jellysquid.mods.sodium.client.SodiumClientMod")
+            || classExists("org.embeddedt.embeddium.impl.Embeddium")) {
+            return SodiumGeneration.LEGACY;
+        }
+        return SodiumGeneration.NONE;
+    }
 
     public static VSRenderer getVSRenderer() {
         if (vsRenderer == null) {
@@ -30,11 +55,7 @@ public class ValkyrienCommonMixinConfigPlugin implements IMixinConfigPlugin {
         //TODO remove?
         if (classExists("optifine.OptiFineTransformationService")) {
             return VSRenderer.OPTIFINE;
-        } else if (
-            classExists("net.caffeinemc.mods.sodium.client.SodiumClientMod") ||
-                classExists("me.jellysquid.mods.sodium.client.SodiumClientMod") ||
-                classExists("org.embeddedt.embeddium.impl.Embeddium")
-        ) {
+        } else if (getSodiumGeneration() != SodiumGeneration.NONE) {
             return VSRenderer.SODIUM;
         } else {
             return VSRenderer.VANILLA;
@@ -79,8 +100,16 @@ public class ValkyrienCommonMixinConfigPlugin implements IMixinConfigPlugin {
             return !LoadedMods.getImmersivePortals(); // Only load this if immersive portals is NOT present
         }
 
-        if (mixinClassName.contains("org.valkyrienskies.mod.mixin.mod_compat.sodium")) {
+        // The two Sodium compat packages target disjoint class names; sodium_common targets vanilla
+        // classes and is good for either generation.
+        if (mixinClassName.contains("org.valkyrienskies.mod.mixin.mod_compat.sodium09")) {
+            return getSodiumGeneration() == SodiumGeneration.MODERN;
+        }
+        if (mixinClassName.contains("org.valkyrienskies.mod.mixin.mod_compat.sodium_common")) {
             return renderer == VSRenderer.SODIUM;
+        }
+        if (mixinClassName.contains("org.valkyrienskies.mod.mixin.mod_compat.sodium")) {
+            return getSodiumGeneration() == SodiumGeneration.LEGACY;
         }
         if (mixinClassName.contains("org.valkyrienskies.mod.mixin.mod_compat.optifine_vanilla")) {
             return renderer == VSRenderer.VANILLA || renderer == VSRenderer.OPTIFINE;

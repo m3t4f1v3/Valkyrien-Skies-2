@@ -141,6 +141,12 @@ object VSGameConfig {
         @ConfigEntry(description = "Project ships into the world's lighting at render time so ships occlude sunlight on the ground beneath them and ship-internal torches illuminate nearby world blocks (sodium/embeddium only). Experimental — overrides sodium's stock world-chunk shader. Disable for the default vanilla behavior where ships don't affect world lighting.")
         var dynamicShipToWorldLighting = false
 
+        @ConfigEntry(description = "Flood ship-to-world light on the GPU with compute shaders instead of on the CPU. Runs every frame instead of every 15th, and lets hulls and terrain actually block ship light. Requires OpenGL 4.3; falls back to the CPU flood automatically when unavailable.")
+        var gpuDynamicLightFlood = true
+
+        @ConfigEntry(description = "Debug paint for the GPU light flood, replacing world terrain shading. 0 = off. 1 = leak hunt: GREEN is light the flood justifies, RED is light applied beyond it, BLUE is a fragment outside the tracked grid. 2 = accuracy: RED is vanilla's own block light, GREEN is the flood, so agreement reads yellow. 3 = ship chunks: RED is the shipyard-baked lightmap, GREEN is the world-sampled light, showing which source lights a ship's own blocks. Diagnostic only.")
+        var debugFloodPaint = 0
+
     }
 
     class Server {

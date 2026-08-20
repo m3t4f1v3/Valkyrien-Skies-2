@@ -1,4 +1,4 @@
-package org.valkyrienskies.mod.compat.sodium.light;
+package org.valkyrienskies.mod.compat.sodium.shader;
 
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import it.unimi.dsi.fastutil.longs.Long2IntMap;
@@ -26,8 +26,6 @@ import net.minecraft.core.SectionPos;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.chunk.ChunkAccess;
-import net.minecraft.world.level.chunk.LevelChunkSection;
 
 import org.joml.Matrix4dc;
 import org.joml.Quaterniond;
@@ -96,6 +94,14 @@ public class VsWorldFromShipLightStorage {
     private final IntArrayList lutScratch = new IntArrayList();
     private ByteBuffer lutUploadBuf = null;
 
+    /**
+     * When set, the section arena is filled by the compute passes in {@link VsGpuLightFlood} rather
+     * than by this class. Section allocation and the LUT still happen here — the GPU needs both to
+     * find a section — but zeroing and uploading the CPU arena would be wasted work, so
+     * {@link #ensureSection} skips them.
+     */
+    private boolean gpuMode = false;
+
     private final Vector3d scratchPos = new Vector3d();
     private final Quaterniond scratchQuat = new Quaterniond();
     private final BlockPos.MutableBlockPos scratchBlockPos = new BlockPos.MutableBlockPos();
@@ -139,29 +145,18 @@ public class VsWorldFromShipLightStorage {
     }
 
     /**
-     * Walk every block in {@code ship}'s shipyard-space AABB, transform each one
-     * to world coordinates via the ship's render transform, and write its solid
-     * bit / block-light value into the world section that contains it. Sections
-     * are allocated as needed and zeroed before first write each frame.
+     * Projects one ship's cached voxels into the world grid: solid bits, trilinear occluder strength
+     * and the emitter seeds the BFS starts from, plus the per-frame emitter and occluder lists.
+     *
+     * <p>Voxels come from {@link VsShipVoxelCache} rather than being rescanned here. The block scan
+     * is the expensive half and a ship's blocks only change when someone edits them, so caching it
+     * turns this into pure transform math — and it shares one correct traversal with the GPU path
+     * instead of keeping a second, subtly different copy.
      */
-    public void populateFromShip(LevelAccessor level, ClientShip ship) {
-        populateFromShip(level, ship, null, null);
-    }
-
-    public void markShipVoxels(LevelAccessor level, ClientShip ship, VsShipEmitterList emitters,
-        VsShipOccluderList occluders) {
-        AABBic shipyardAabb = ship.getShipAABB();
-        if (shipyardAabb == null) return;
-
-        int xMin = shipyardAabb.minX();
-        int yMin = shipyardAabb.minY();
-        int zMin = shipyardAabb.minZ();
-        int xMax = shipyardAabb.maxX();
-        int yMax = shipyardAabb.maxY();
-        int zMax = shipyardAabb.maxZ();
-
-        long count = (long)(xMax - xMin + 1) * (yMax - yMin + 1) * (zMax - zMin + 1);
-        if (count > MAX_BLOCKS_PER_SHIP) return;
+    public void markShipVoxels(LevelAccessor level, ClientShip ship, VsShipVoxelCache cache,
+        VsShipEmitterList emitters, VsShipOccluderList occluders) {
+        final VsShipVoxelCache.ShipVoxels voxels = cache.get(level, ship);
+        if (voxels == null || voxels.count() == 0) return;
 
         ShipTransform xform = ship.getRenderTransform();
         Matrix4dc shipToWorld = xform.getShipToWorld();
@@ -171,135 +166,89 @@ public class VsWorldFromShipLightStorage {
         final float qz = (float) scratchQuat.z;
         final float qw = (float) scratchQuat.w;
 
-        int minChunkX = xMin >> 4;
-        int maxChunkX = xMax >> 4;
-        int minChunkZ = zMin >> 4;
-        int maxChunkZ = zMax >> 4;
-        int minSectionY = yMin >> 4;
-        int maxSectionY = yMax >> 4;
+        final int shipIndex = occluders != null ? occluders.indexForShip(ship.getId()) : 0;
+        final long base = voxels.pointer();
+        for (int i = 0; i < voxels.count(); i++) {
+            final long entry = base + (long) i * VsShipVoxelCache.BYTES_PER_VOXEL;
+            final int word0 = MemoryUtil.memGetInt(entry);
+            final int word1 = MemoryUtil.memGetInt(entry + 4);
+            final int sx = voxels.minX() + (word0 & 0xFFFF);
+            final int sy = voxels.minY() + ((word0 >>> 16) & 0xFFFF);
+            final int sz = voxels.minZ() + (word1 & 0xFFFF);
+            final int blockLight = (word1 >>> 16) & 0xFF;
+            final boolean isSolid = ((word1 >>> 24) & 1) != 0;
 
-        for (int chunkX = minChunkX; chunkX <= maxChunkX; chunkX++) {
-            int sectionXMin = Math.max(xMin, chunkX << 4);
-            int sectionXMax = Math.min(xMax, (chunkX << 4) + 15);
+            scratchPos.set(sx + 0.5, sy + 0.5, sz + 0.5);
+            shipToWorld.transformPosition(scratchPos);
+            double cwx = scratchPos.x;
+            double cwy = scratchPos.y;
+            double cwz = scratchPos.z;
+            // +1e-4 bias absorbs FP rounding error from the ship-to-
+            // world matrix multiply. A clean integer ship transform
+            // can produce e.g. 9.99999998 instead of exactly 10.0,
+            // and a naked floor() then puts the splat in cell 9
+            // instead of 10 — visible as an AO shape that's offset
+            // by one cell from where vanilla AO would render an
+            // equivalent solid block. The bias is small enough to
+            // not affect genuinely-at-half positions (10.5 ± epsilon
+            // floors the same with or without it).
+            int wx = (int) Math.floor(cwx + 1.0e-4);
+            int wy = (int) Math.floor(cwy + 1.0e-4);
+            int wz = (int) Math.floor(cwz + 1.0e-4);
 
-            for (int chunkZ = minChunkZ; chunkZ <= maxChunkZ; chunkZ++) {
-                ChunkAccess chunk = level.getChunk(chunkX, chunkZ);
+            int idx = ensureSection(SectionPos.asLong(wx >> 4, wy >> 4, wz >> 4));
 
-                int sectionZMin = Math.max(zMin, chunkZ << 4);
-                int sectionZMax = Math.min(zMax, (chunkZ << 4) + 15);
+            // Voxel offset within the section's 18^3 grid (matches the
+            // VsShipLightStorage layout: +1 to skip the leading border).
+            int ix = (wx & 15) + 1;
+            int iy = (wy & 15) + 1;
+            int iz = (wz & 15) + 1;
+            int voxelIdx = ix + iz * 18 + iy * 18 * 18;
 
-                for (int sectionY = minSectionY; sectionY <= maxSectionY; sectionY++) {
-                    int sectionIndex = sectionY - level.getMinSection();
-                    if (sectionIndex < 0 || sectionIndex >= chunk.getSections().length) {
-                        continue;
-                    }
-
-                    LevelChunkSection section = chunk.getSection(sectionIndex);
-                    if (section.hasOnlyAir()) {
-                        continue;
-                    }
-
-                    int sectionYMin = Math.max(yMin, sectionY << 4);
-                    int sectionYMax = Math.min(yMax, (sectionY << 4) + 15);
-
-                    for (int sy = sectionYMin; sy <= sectionYMax; sy++) {
-                        int localY = sy & 15;
-                        for (int sz = sectionZMin; sz <= sectionZMax; sz++) {
-                            int localZ = sz & 15;
-                            for (int sx = sectionXMin; sx <= sectionXMax; sx++) {
-                                BlockState state = section.getBlockState(sx & 15, localY, localZ);
-                    if (state.isAir()) continue;
-
-                    scratchBlockPos.set(sx, sy, sz);
-                    boolean isSolid = state.canOcclude()
-                            && Block.isShapeFullBlock(state.getOcclusionShape(level, scratchBlockPos));
-                    int blockLight = state.getLightEmission();
-                    if (!isSolid && blockLight == 0) continue;
-
-                    // Project block center to world coords (floats — sub-block
-                    // accuracy preserved). The CENTER cell (floor of these) is
-                    // where we set the binary solid bit + queue the emitter
-                    // BFS source. The 8 cells overlapping the voxel get
-                    // trilinear-weighted occluder STRENGTH so the shader's
-                    // sky/wall attenuation tracks ship motion smoothly even
-                    // when the ship moves a fraction of a block.
-                    scratchPos.set(sx + 0.5, sy + 0.5, sz + 0.5);
-                    shipToWorld.transformPosition(scratchPos);
-                    double cwx = scratchPos.x;
-                    double cwy = scratchPos.y;
-                    double cwz = scratchPos.z;
-                    // +1e-4 bias absorbs FP rounding error from the ship-to-
-                    // world matrix multiply. A clean integer ship transform
-                    // can produce e.g. 9.99999998 instead of exactly 10.0,
-                    // and a naked floor() then puts the splat in cell 9
-                    // instead of 10 — visible as an AO shape that's offset
-                    // by one cell from where vanilla AO would render an
-                    // equivalent solid block. The bias is small enough to
-                    // not affect genuinely-at-half positions (10.5 ± epsilon
-                    // floors the same with or without it).
-                    int wx = (int) Math.floor(cwx + 1.0e-4);
-                    int wy = (int) Math.floor(cwy + 1.0e-4);
-                    int wz = (int) Math.floor(cwz + 1.0e-4);
-
-                    int idx = ensureSection(SectionPos.asLong(wx >> 4, wy >> 4, wz >> 4));
-
-                    // Voxel offset within the section's 18^3 grid (matches the
-                    // VsShipLightStorage layout: +1 to skip the leading border).
-                    int ix = (wx & 15) + 1;
-                    int iy = (wy & 15) + 1;
-                    int iz = (wz & 15) + 1;
-                    int voxelIdx = ix + iz * 18 + iy * 18 * 18;
-
-                    if (isSolid) {
-                        long secPtr = arenaPtr + (long) idx * SECTION_SIZE_BYTES;
-                        // Binary solid bit at center cell — used by the BFS
-                        // dilation as an opaque-block check (light propagation
-                        // stops on solid). Smoothness is handled separately
-                        // via the trilinear-splatted occluder strength below.
-                        long solidWordPtr = secPtr + SOLID_START_BYTES + (long)(voxelIdx >>> 5) * 4L;
-                        int existing = MemoryUtil.memGetInt(solidWordPtr);
-                        MemoryUtil.memPutInt(solidWordPtr, existing | (1 << (voxelIdx & 31)));
-                        // Trilinear splat the voxel's "1.0 occluder" across the
-                        // 8 world cells it overlaps. As the ship moves
-                        // sub-block, the weights redistribute smoothly —
-                        // shadow on the ground tracks the motion instead of
-                        // jumping at integer crossings.
-                        splatOccluderStrength(cwx, cwy, cwz);
-                        if (occluders != null) {
-                            occluders.appendOccluder(cwx, cwy, cwz, qx, qy, qz, qw);
-                        }
-                    }
-                    if (blockLight > 0) {
-                        // Defer BFS dilation to pass 2 — solid bits for this
-                        // and every later voxel of the current ship aren't all
-                        // written yet, and we want the BFS to treat them as
-                        // occluders. Trilinear-splat the emitter source: for
-                        // each of the (up to) 8 cells the voxel overlaps,
-                        // queue an independent BFS source at full L. The BFS
-                        // dedupes via existing-light max-merge, so additional
-                        // seeds don't make things brighter — they just keep
-                        // the lit region tracking ship motion smoothly across
-                        // block boundaries. Without this the torch BFS source
-                        // sits at a single floor()'d cell and the lit region
-                        // jumps a full block whenever the ship's sub-block
-                        // position crosses an integer.
-                        splatEmitterSeeds(cwx, cwy, cwz, blockLight & 0xF);
-                        if (emitters != null) {
-                            emitters.appendEmitter(cwx, cwy, cwz, blockLight, qx, qy, qz, qw);
-                        }
-                    }
+            if (isSolid) {
+                long secPtr = arenaPtr + (long) idx * SECTION_SIZE_BYTES;
+                // Binary solid bit at center cell — used by the BFS
+                // dilation as an opaque-block check (light propagation
+                // stops on solid). Smoothness is handled separately
+                // via the trilinear-splatted occluder strength below.
+                long solidWordPtr = secPtr + SOLID_START_BYTES + (long)(voxelIdx >>> 5) * 4L;
+                int existing = MemoryUtil.memGetInt(solidWordPtr);
+                MemoryUtil.memPutInt(solidWordPtr, existing | (1 << (voxelIdx & 31)));
+                // Trilinear splat the voxel's "1.0 occluder" across the
+                // 8 world cells it overlaps. As the ship moves
+                // sub-block, the weights redistribute smoothly —
+                // shadow on the ground tracks the motion instead of
+                // jumping at integer crossings.
+                splatOccluderStrength(cwx, cwy, cwz);
+                if (occluders != null) {
+                    occluders.appendOccluder(cwx, cwy, cwz, shipIndex, qx, qy, qz, qw);
+                }
+            }
+            if (blockLight > 0) {
+                // Defer BFS dilation to pass 2 — solid bits for this
+                // and every later voxel of the current ship aren't all
+                // written yet, and we want the BFS to treat them as
+                // occluders. Trilinear-splat the emitter source: for
+                // each of the (up to) 8 cells the voxel overlaps,
+                // queue an independent BFS source at full L. The BFS
+                // dedupes via existing-light max-merge, so additional
+                // seeds don't make things brighter — they just keep
+                // the lit region tracking ship motion smoothly across
+                // block boundaries. Without this the torch BFS source
+                // sits at a single floor()'d cell and the lit region
+                // jumps a full block whenever the ship's sub-block
+                // position crosses an integer.
+                splatEmitterSeeds(cwx, cwy, cwz, blockLight & 0xF);
+                if (emitters != null) {
+                    emitters.appendEmitter(cwx, cwy, cwz, blockLight, qx, qy, qz, qw);
                 }
             }
         }
-                }
-            }
-        }
-
     }
 
-    public void populateFromShip(LevelAccessor level, ClientShip ship, VsShipEmitterList emitters,
-        VsShipOccluderList occluders) {
-        markShipVoxels(level, ship, emitters, occluders);
+    public void populateFromShip(LevelAccessor level, ClientShip ship, VsShipVoxelCache cache,
+        VsShipEmitterList emitters, VsShipOccluderList occluders) {
+        markShipVoxels(level, ship, cache, emitters, occluders);
         runQueuedBfs(level);
     }
 
@@ -518,20 +467,159 @@ public class VsWorldFromShipLightStorage {
                 section2Index.put(sectionPos, idx);
                 lut.add(sectionPos, idx);
                 lutDirty = true;
-                MemoryUtil.memSet(arenaPtr + (long) idx * SECTION_SIZE_BYTES, 0, SECTION_SIZE_BYTES);
-                changed.set(idx);
+                if (!gpuMode) {
+                    MemoryUtil.memSet(arenaPtr + (long) idx * SECTION_SIZE_BYTES, 0, SECTION_SIZE_BYTES);
+                    changed.set(idx);
+                }
                 return idx;
             } else {
-                // Re-using a section from last frame: zero it before writing.
-                MemoryUtil.memSet(arenaPtr + (long) existing * SECTION_SIZE_BYTES, 0, SECTION_SIZE_BYTES);
-                changed.set(existing);
+                if (!gpuMode) {
+                    // Re-using a section from last frame: zero it before writing.
+                    MemoryUtil.memSet(arenaPtr + (long) existing * SECTION_SIZE_BYTES, 0,
+                        SECTION_SIZE_BYTES);
+                    changed.set(existing);
+                }
                 return existing;
             }
         }
         return section2Index.get(sectionPos);
     }
 
+    public void setGpuMode(final boolean gpuMode) {
+        this.gpuMode = gpuMode;
+    }
+
+    public int sectionsBufferId() {
+        ensureGlObjects();
+        return sectionsBuffer;
+    }
+
+    public int lutBufferId() {
+        ensureGlObjects();
+        return lutBuffer;
+    }
+
+    /** Number of arena slots, allocated or free. GPU working buffers are sized against this. */
+    public int capacity() {
+        return capacity;
+    }
+
+    /**
+     * Allocate (without writing) every section intersecting the given world-space AABB, so the
+     * compute passes have somewhere to stamp into and a LUT entry to find it by. Mirrors
+     * {@link VsShipLightStorage#requestSectionsInAabb}; the 1-block pad keeps the tracked set from
+     * flipping frame to frame on sub-block jitter, which would otherwise force a LUT rebuild.
+     */
+    public void ensureSectionsInAabb(final LevelAccessor level,
+        double minX, double minY, double minZ,
+        double maxX, double maxY, double maxZ) {
+        minX -= 1.0; minY -= 1.0; minZ -= 1.0;
+        maxX += 1.0; maxY += 1.0; maxZ += 1.0;
+
+        final int sxMin = SectionPos.blockToSectionCoord((int) Math.floor(minX));
+        final int syMin = SectionPos.blockToSectionCoord((int) Math.floor(minY));
+        final int szMin = SectionPos.blockToSectionCoord((int) Math.floor(minZ));
+        final int sxMax = SectionPos.blockToSectionCoord((int) Math.floor(maxX));
+        final int syMax = SectionPos.blockToSectionCoord((int) Math.floor(maxY));
+        final int szMax = SectionPos.blockToSectionCoord((int) Math.floor(maxZ));
+
+        final long count = (long) (sxMax - sxMin + 1) * (syMax - syMin + 1) * (szMax - szMin + 1);
+        if (count > MAX_SECTIONS_PER_REQUEST) {
+            return;
+        }
+        for (int sy = syMin; sy <= syMax; sy++) {
+            for (int sz = szMin; sz <= szMax; sz++) {
+                for (int sx = sxMin; sx <= sxMax; sx++) {
+                    ensureSection(SectionPos.asLong(sx, sy, sz));
+                }
+            }
+        }
+    }
+
+    private static final int MAX_SECTIONS_PER_REQUEST = 4096;
+
+    /**
+     * Write one {@code ivec4(arenaSlot, sectionX, sectionY, sectionZ)} per live section into
+     * {@code out}, returning how many were written. The compute dispatches are sized against this
+     * count, so free arena slots cost nothing.
+     */
+    public int fillActiveSlotPositions(final IntArrayList out) {
+        out.clear();
+        final ObjectIterator<Long2IntMap.Entry> it = section2Index.long2IntEntrySet().iterator();
+        int written = 0;
+        while (it.hasNext()) {
+            final Long2IntMap.Entry entry = it.next();
+            final long sectionPos = entry.getLongKey();
+            out.add(entry.getIntValue());
+            out.add(SectionPos.x(sectionPos));
+            out.add(SectionPos.y(sectionPos));
+            out.add(SectionPos.z(sectionPos));
+            written++;
+        }
+        return written;
+    }
+
+    /**
+     * GPU-path upload: size the section buffer to the current capacity and refresh the LUT. The
+     * section contents themselves come from the pack compute pass, so nothing is copied up from the
+     * CPU arena.
+     */
+    public void uploadForGpu() {
+        ensureGlObjects();
+        final int needed = capacity * SECTION_SIZE_BYTES;
+        if (currentSectionsByteSize != needed) {
+            GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, sectionsBuffer);
+            GL15.nglBufferData(GL31.GL_TEXTURE_BUFFER, needed, MemoryUtil.NULL, GL15.GL_DYNAMIC_DRAW);
+            GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, 0);
+            currentSectionsByteSize = needed;
+            // glBufferData orphans the data store; some drivers cache the store reference at
+            // glTexBuffer time and won't see the new one otherwise.
+            GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, sectionsTexture);
+            GL31.glTexBuffer(GL31.GL_TEXTURE_BUFFER, GL_R32UI(), sectionsBuffer);
+            GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, 0);
+        }
+        changed.clear();
+        uploadLut();
+    }
+
+    /**
+     * Drop every tracked section and publish the now-empty LUT. Used when the GPU path has to skip a
+     * frame: leaving the LUT pointing at sections the pack pass never refreshed would have shaders
+     * sample stale light, whereas an empty LUT reads as "no data here" and they fall back cleanly.
+     */
+    public void clearAll() {
+        if (!section2Index.isEmpty()) {
+            final ObjectIterator<Long2IntMap.Entry> it = section2Index.long2IntEntrySet().iterator();
+            while (it.hasNext()) {
+                final Long2IntMap.Entry entry = it.next();
+                free.set(entry.getIntValue());
+                changed.clear(entry.getIntValue());
+                lut.remove(entry.getLongKey());
+                it.remove();
+            }
+            lutDirty = true;
+        }
+        requestedThisFrame.clear();
+        ensureGlObjects();
+        uploadLut();
+    }
+
     /** Release any sections that no ship populated this frame. */
+    /**
+     * How many frames a section survives after it stops being requested.
+     *
+     * <p>Hysteresis, not caching. The tracked region is the ships' reach rounded out to whole 16-block
+     * sections, so a ship drifting across a section boundary makes the section span flip back and
+     * forth: measured at 27 sections one frame, 36 the next, and back again five frames later. Because
+     * the fragment shaders treat "no section here" as UNLIT, each flip switched light on and off across
+     * a whole 16-block region -- popping far larger than anything sub-block quantisation causes.
+     *
+     * <p>Letting a dropped section linger means the set only ever grows during a crossing and settles
+     * afterwards, so the boundary is crossed once instead of oscillated over. The cost is a handful of
+     * stale sections held for a fraction of a second.
+     */
+    private static final int SECTION_LINGER_FRAMES = 30;
+
     public void pruneUnused() {
         if (section2Index.isEmpty()) return;
         ObjectIterator<Long2IntMap.Entry> it = section2Index.long2IntEntrySet().iterator();
@@ -539,17 +627,28 @@ public class VsWorldFromShipLightStorage {
         while (it.hasNext()) {
             Long2IntMap.Entry entry = it.next();
             long sec = entry.getLongKey();
-            if (!requestedThisFrame.contains(sec)) {
-                int idx = entry.getIntValue();
-                free.set(idx);
-                changed.clear(idx);
-                lut.remove(sec);
-                it.remove();
-                anyRemoved = true;
+            if (requestedThisFrame.contains(sec)) {
+                unusedFrames.remove(sec);
+                continue;
             }
+            final int idle = unusedFrames.getOrDefault(sec, 0) + 1;
+            if (idle < SECTION_LINGER_FRAMES) {
+                unusedFrames.put(sec, idle);
+                continue;
+            }
+            unusedFrames.remove(sec);
+            int idx = entry.getIntValue();
+            free.set(idx);
+            changed.clear(idx);
+            lut.remove(sec);
+            it.remove();
+            anyRemoved = true;
         }
         if (anyRemoved) lutDirty = true;
     }
+
+    /** Frames each tracked section has gone unrequested; see {@link #SECTION_LINGER_FRAMES}. */
+    private final Long2IntMap unusedFrames = new Long2IntOpenHashMap();
 
     public void upload() {
         ensureGlObjects();
@@ -576,25 +675,30 @@ public class VsWorldFromShipLightStorage {
             }
             changed.clear();
         }
-        if (lutDirty) {
-            lut.flattenInto(lutScratch);
-            int sizeInts = lutScratch.size();
-            int neededBytes = Math.max(4, sizeInts * 4);
-            if (lutUploadBuf == null || lutUploadBuf.capacity() < neededBytes) {
-                int newCap = Math.max(neededBytes, lutUploadBuf == null ? 1024 : lutUploadBuf.capacity() * 2);
-                lutUploadBuf = ByteBuffer.allocateDirect(newCap).order(ByteOrder.nativeOrder());
-            }
-            IntBuffer ib = lutUploadBuf.asIntBuffer();
-            if (sizeInts > 0) ib.put(lutScratch.elements(), 0, sizeInts);
-            ib.flip();
-            GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, lutBuffer);
-            GL15.glBufferData(GL31.GL_TEXTURE_BUFFER, ib, GL15.GL_DYNAMIC_DRAW);
-            GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, 0);
-            GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, lutTexture);
-            GL31.glTexBuffer(GL31.GL_TEXTURE_BUFFER, GL_R32UI(), lutBuffer);
-            GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, 0);
-            lutDirty = false;
+        uploadLut();
+    }
+
+    private void uploadLut() {
+        if (!lutDirty) {
+            return;
         }
+        lut.flattenInto(lutScratch);
+        int sizeInts = lutScratch.size();
+        int neededBytes = Math.max(4, sizeInts * 4);
+        if (lutUploadBuf == null || lutUploadBuf.capacity() < neededBytes) {
+            int newCap = Math.max(neededBytes, lutUploadBuf == null ? 1024 : lutUploadBuf.capacity() * 2);
+            lutUploadBuf = ByteBuffer.allocateDirect(newCap).order(ByteOrder.nativeOrder());
+        }
+        IntBuffer ib = lutUploadBuf.asIntBuffer();
+        if (sizeInts > 0) ib.put(lutScratch.elements(), 0, sizeInts);
+        ib.flip();
+        GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, lutBuffer);
+        GL15.glBufferData(GL31.GL_TEXTURE_BUFFER, ib, GL15.GL_DYNAMIC_DRAW);
+        GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, 0);
+        GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, lutTexture);
+        GL31.glTexBuffer(GL31.GL_TEXTURE_BUFFER, GL_R32UI(), lutBuffer);
+        GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, 0);
+        lutDirty = false;
     }
 
     public void bind(int sectionsTextureUnit, int lutTextureUnit) {
@@ -620,6 +724,11 @@ public class VsWorldFromShipLightStorage {
         if (sectionsBuffer == 0) sectionsBuffer = GL15.glGenBuffers();
         if (sectionsTexture == 0) {
             sectionsTexture = GL11.glGenTextures();
+            // glGenBuffers only reserves a name; the buffer object itself does not exist until the
+            // name is first bound, and glTexBuffer against a name that is not yet a buffer object
+            // raises GL_INVALID_OPERATION. Bind once here so the association below is valid.
+            GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, sectionsBuffer);
+            GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, 0);
             GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, sectionsTexture);
             GL31.glTexBuffer(GL31.GL_TEXTURE_BUFFER, GL_R32UI(), sectionsBuffer);
             GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, 0);
@@ -627,6 +736,11 @@ public class VsWorldFromShipLightStorage {
         if (lutBuffer == 0) lutBuffer = GL15.glGenBuffers();
         if (lutTexture == 0) {
             lutTexture = GL11.glGenTextures();
+            // glGenBuffers only reserves a name; the buffer object itself does not exist until the
+            // name is first bound, and glTexBuffer against a name that is not yet a buffer object
+            // raises GL_INVALID_OPERATION. Bind once here so the association below is valid.
+            GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, lutBuffer);
+            GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, 0);
             GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, lutTexture);
             GL31.glTexBuffer(GL31.GL_TEXTURE_BUFFER, GL_R32UI(), lutBuffer);
             GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, 0);

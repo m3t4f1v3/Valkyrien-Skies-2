@@ -1,0 +1,66 @@
+# Light escaping a long HORIZONTAL shaft, viewed from directly above the ship's exterior.
+#
+# Three things this framing gets right that the earlier attempts did not. The shaft is horizontal and
+# the camera is overhead, so the shot sees the hull's TOP face and the ground around it -- the surfaces
+# that must stay black -- rather than looking down the bore at the glowstone. And every case is shot
+# twice, emitter present and replaced by stone, because moonlight on that top face reads up to 252 at
+# midnight and buries the ship's own contribution; only the difference isolates it.
+#
+# shaftLen 14 puts the flood at the mouth with strength exactly 0.
+#
+# Spectator, not creative: tp'd to 55 blocks up in creative the player simply falls and lands on the
+# hull, and the shot ends up being the ship's own top face filling the frame -- drawn by the SHIP
+# shader, which the world debug paint does not touch, so it reads as featureless grey.
+#
+# Camera pulled well back (55 blocks up) so the whole hull and a wide apron of ground are in frame at
+# once -- a tight overhead shot crops exactly the surfaces a leak would spread onto.
+world autotest
+wait-level
+wait 80
+hud off
+cmd gamemode spectator
+cmd time set midnight
+cmd gamerule doDaylightCycle false
+cmd gamerule doMobSpawning false
+cmd kill @e[type=!player]
+wait 20
+
+run light_shaft 0 -60 0 4 minecraft:glowstone
+wait 120
+cmd tp @s 2 -5 0 0 90
+wait 80
+run emitter on
+wait 60
+screenshot shaft04_on
+run emitter off
+wait 60
+screenshot shaft04_off
+cmd kill @e[type=!player]
+wait 20
+
+run light_shaft 60 -60 0 14 minecraft:glowstone
+wait 120
+cmd tp @s 67 -5 0 0 90
+wait 80
+run emitter on
+wait 60
+screenshot shaft14_on
+run emitter off
+wait 60
+screenshot shaft14_off
+cmd kill @e[type=!player]
+wait 20
+
+run light_shaft 120 -60 0 20 minecraft:glowstone
+wait 120
+cmd tp @s 130 -5 0 0 90
+wait 80
+run emitter on
+wait 60
+screenshot shaft20_on
+run emitter off
+wait 60
+screenshot shaft20_off
+cmd kill @e[type=!player]
+wait 20
+quit

@@ -32,8 +32,46 @@ sourceSets {
     }
 }
 
+// Read outside the loom block: inside it, `rootProject` resolves against Loom's extension rather than
+// the Gradle project.
+def vsSodiumRuntime = rootProject.sodium_runtime
+
 loom {
     accessWidenerPath = project(":common").loom.accessWidenerPath
+
+    // Autotest passthrough: `-Pvs_autotest=<script>` hands the script path to the client, where
+    // VsAutoTestHarness drives it. Absent the property the harness never installs itself.
+    if (project.hasProperty('vs_autotest')) {
+        runs.configureEach {
+            property("vs.autotest", project.property('vs_autotest').toString())
+        }
+    }
+
+    // `-Pvs_floodtrace=true` turns on VsGpuLightFlood's per-frame state trace, which logs only when the
+    // flood's inputs change — the thing to line up against a screenshot burst when chasing flicker.
+    if (project.hasProperty('vs_floodtrace')) {
+        runs.configureEach {
+            property("vs.floodtrace", project.property('vs_floodtrace').toString())
+        }
+    }
+
+    // `-Pvs_floodbench=N` — see VsGpuLightFlood.BENCH.
+    if (project.hasProperty('vs_floodbench')) {
+        runs.configureEach {
+            property("vs.floodbench", project.property('vs_floodbench').toString())
+        }
+    }
+
+    if (vsSodiumRuntime == "backport") {
+        // Sodium refuses to start when the running LWJGL differs from the one it was compiled against.
+        // The version pin below reaches this module's runtimeClasspath, but Forge's dev launch classpath
+        // is assembled by Loom outside it and still supplies 3.3.2 against Sodium's 3.3.1. That is a
+        // patch-level difference, so opt out of the check for the dev run rather than fighting Loom's
+        // library provisioning. Sodium documents this switch; see BugChecks.ISSUE_2561.
+        runs.configureEach {
+            property("sodium.checks.issue2561", "false")
+        }
+    }
 
     forge {
         mixinConfig "valkyrienskies-common.mixins.json"
@@ -58,6 +96,23 @@ configurations {
     shadowCommon.extendsFrom core
 }
 
+// Sodium's pre-launch check refuses to start when the running LWJGL differs from the one it was
+// compiled against (BuildConfig.LWJGL_VERSION over in the backport, and the version 1.20.1 itself
+// ships). Something on this module's runtime classpath declares 3.3.2 and wins conflict resolution,
+// so pin the whole group back to what vanilla uses. Scoped to the backport runtime, since the legacy
+// Sodium/Embeddium dev setup has no such check and is known to work as-is.
+if (rootProject.sodium_runtime == "backport") {
+    configurations.all {
+        resolutionStrategy {
+            eachDependency { details ->
+                if (details.requested.group == "org.lwjgl") {
+                    details.useVersion("3.3.1")
+                }
+            }
+        }
+    }
+}
+
 dependencies {
     implementation(annotationProcessor("io.github.llamalad7:mixinextras-common:${rootProject.mixinextras_version}"))
     implementation(include("io.github.llamalad7:mixinextras-forge:${rootProject.mixinextras_version}"))
@@ -73,6 +128,16 @@ dependencies {
     }
 
     modCompileOnly("maven.modrinth:embeddium:${embeddium_version}")
+    compileOnly("net.caffeinemc:sodium-forge:${rootProject.sodium_backport_version}:dev")
+
+    // Which Sodium the dev client runs with. See the fabric module for why this is the `dev` artifact
+    // consumed as a plain runtimeOnly: the production jar is reobfuscated to SRG and carries a refmap
+    // that translates its mixins the same way, neither of which a Mojang-named dev environment wants.
+    if (rootProject.sodium_runtime == "backport") {
+        runtimeOnly("net.caffeinemc:sodium-forge:${rootProject.sodium_backport_version}:dev")
+    } else if (rootProject.sodium_runtime == "legacy") {
+        modRuntimeOnly("maven.modrinth:embeddium:${embeddium_version}")
+    }
     //modRuntimeOnly("maven.modrinth:embeddium:${embeddium_version}")
     modCompileOnly("maven.modrinth:oculus:${oculus_version}")
 

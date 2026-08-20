@@ -1,0 +1,42 @@
+# Frame rate with the ship's light sealed vs exposed. Exposing it is what makes the flood actually run
+# (a sealed hull yields no exit cells and zero iterations), so this is the comparison that matters for
+# "the game lags when the light is exposed". Sampled several times because the first frames after a
+# block change include a rescan.
+world autotest
+wait-level
+wait 80
+hud off
+cmd gamemode creative
+cmd time set midnight
+cmd gamerule doDaylightCycle false
+cmd kill @e[type=!player]
+wait 20
+run light_ship 0 -56 0 minecraft:glowstone
+wait 100
+cmd tp @s 0 -58 -14 0 10
+wait 100
+
+run hull closed
+wait 100
+run fps SEALED
+wait 60
+run fps SEALED
+wait 60
+run fps SEALED
+
+run hull open
+wait 100
+run fps EXPOSED
+wait 60
+run fps EXPOSED
+wait 60
+run fps EXPOSED
+
+run rotate_ship 45 0 0
+wait 120
+run fps EXPOSED-YAW45
+wait 60
+run fps EXPOSED-YAW45
+wait 60
+run fps EXPOSED-YAW45
+quit

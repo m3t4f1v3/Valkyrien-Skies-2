@@ -1,4 +1,4 @@
-package org.valkyrienskies.mod.compat.sodium.light;
+package org.valkyrienskies.mod.compat.sodium.shader;
 
 import org.lwjgl.opengl.GL30C;
 

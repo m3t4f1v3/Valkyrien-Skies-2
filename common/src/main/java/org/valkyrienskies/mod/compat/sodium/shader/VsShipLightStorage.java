@@ -1,4 +1,4 @@
-package org.valkyrienskies.mod.compat.sodium.light;
+package org.valkyrienskies.mod.compat.sodium.shader;
 
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import it.unimi.dsi.fastutil.longs.Long2IntMap;
@@ -15,7 +15,6 @@ import java.util.BitSet;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL13;
 import org.lwjgl.opengl.GL15;
-import org.lwjgl.opengl.GL30;
 import org.lwjgl.opengl.GL31;
 import org.lwjgl.system.MemoryUtil;
 
@@ -317,6 +316,21 @@ public class VsShipLightStorage {
         return !section2Index.isEmpty();
     }
 
+    /**
+     * Raw buffer handles, for binding this storage as an SSBO. The GPU light flood reads the world
+     * terrain's solid bitmap straight out of here rather than collecting its own copy — this storage
+     * already caches it across frames and invalidates it on light updates.
+     */
+    public int sectionsBufferId() {
+        ensureGlObjects();
+        return sectionsBuffer;
+    }
+
+    public int lutBufferId() {
+        ensureGlObjects();
+        return lutBuffer;
+    }
+
     public int trackedSectionCount() {
         return section2Index.size();
     }
@@ -355,6 +369,11 @@ public class VsShipLightStorage {
         }
         if (sectionsTexture == 0) {
             sectionsTexture = GL11.glGenTextures();
+            // glGenBuffers only reserves a name; the buffer object itself does not exist until the
+            // name is first bound, and glTexBuffer against a name that is not yet a buffer object
+            // raises GL_INVALID_OPERATION. Bind once here so the association below is valid.
+            GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, sectionsBuffer);
+            GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, 0);
             GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, sectionsTexture);
             GL31.glTexBuffer(GL31.GL_TEXTURE_BUFFER, GL31.GL_R32UI, sectionsBuffer);
             GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, 0);
@@ -364,6 +383,11 @@ public class VsShipLightStorage {
         }
         if (lutTexture == 0) {
             lutTexture = GL11.glGenTextures();
+            // glGenBuffers only reserves a name; the buffer object itself does not exist until the
+            // name is first bound, and glTexBuffer against a name that is not yet a buffer object
+            // raises GL_INVALID_OPERATION. Bind once here so the association below is valid.
+            GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, lutBuffer);
+            GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, 0);
             GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, lutTexture);
             GL31.glTexBuffer(GL31.GL_TEXTURE_BUFFER, GL31.GL_R32UI, lutBuffer);
             GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, 0);

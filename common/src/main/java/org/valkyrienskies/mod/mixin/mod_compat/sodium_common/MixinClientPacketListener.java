@@ -1,4 +1,4 @@
-package org.valkyrienskies.mod.mixin.mod_compat.sodium;
+package org.valkyrienskies.mod.mixin.mod_compat.sodium_common;
 
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.multiplayer.ClientPacketListener;
@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.valkyrienskies.core.api.ships.ClientShip;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
-import org.valkyrienskies.mod.compat.sodium.SodiumCompat;
+import org.valkyrienskies.mod.compat.SodiumDispatch;
 import org.valkyrienskies.mod.mixin.accessors.network.protocol.game.ClientboundSectionBlocksUpdatePacketAccessor;
 
 @Mixin(ClientPacketListener.class)
@@ -28,7 +28,7 @@ public abstract class MixinClientPacketListener {
         final int cx = packet.getPos().getX() >> 4;
         final int cz = packet.getPos().getZ() >> 4;
         if (VSGameUtilsKt.getShipManagingPos(level, cx, cz) instanceof ClientShip ship) {
-            SodiumCompat.markShipSectionCacheDirty(ship);
+            SodiumDispatch.markShipSectionCacheDirty(ship);
         }
     }
 
@@ -38,7 +38,7 @@ public abstract class MixinClientPacketListener {
         if (level == null) return;
         final SectionPos pos = ((ClientboundSectionBlocksUpdatePacketAccessor) packet).getSectionPos();
         if (VSGameUtilsKt.getShipManagingPos(level, pos.x(), pos.z()) instanceof ClientShip ship) {
-            SodiumCompat.markShipSectionCacheDirty(ship);
+            SodiumDispatch.markShipSectionCacheDirty(ship);
         }
     }
 }

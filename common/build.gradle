@@ -11,6 +11,7 @@ dependencies {
     modCompileOnly("fuzs.forgeconfigapiport:forgeconfigapiport-common:${rootProject.fcap_version}") { transitive = false }
 
     modCompileOnly("maven.modrinth:sodium:${sodium_version}")
+    compileOnly("net.caffeinemc:sodium-forge:${rootProject.sodium_backport_version}:dev")
     modCompileOnly("maven.modrinth:iris:${iris_version}")
 
     // Alex Caves
@@ -104,6 +105,7 @@ dependencies {
     testImplementation "io.kotest:kotest-property:${kotestVersion}"
     testImplementation "io.kotest:kotest-assertions-core:${kotestVersion}"
     testImplementation "io.mockk:mockk:1.12.5"
+    testImplementation 'org.jetbrains.kotlin:kotlin-test'
 }
 
 architectury {
@@ -140,4 +142,7 @@ publishing {
             }
         }
     }
+}
+repositories {
+    mavenCentral()
 }

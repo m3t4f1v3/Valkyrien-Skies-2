@@ -1,4 +1,4 @@
-package org.valkyrienskies.mod.compat.sodium.light;
+package org.valkyrienskies.mod.compat.sodium.shader;
 
 import it.unimi.dsi.fastutil.objects.Reference2IntMap;
 import it.unimi.dsi.fastutil.objects.Reference2IntOpenHashMap;

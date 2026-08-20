@@ -1,4 +1,4 @@
-package org.valkyrienskies.mod.compat.sodium.light;
+package org.valkyrienskies.mod.compat.sodium.shader;
 
 import it.unimi.dsi.fastutil.doubles.DoubleArrayList;
 
@@ -146,6 +146,56 @@ public class VsShipEmitterList {
         count++;
     }
 
+    /**
+     * Brightest emitter contribution at a world block, using the same falloff the fragment shaders
+     * apply: Manhattan distance taken in the emitter's owning-ship frame, so the octahedral bubble
+     * lines up with the hull.
+     *
+     * <p>This is the CPU stand-in for the flooded grid on the GPU path, where the block-light values
+     * live only in GPU memory. It deliberately ignores occlusion — it feeds entity and block-entity
+     * brightness, where a readback stall would cost far more than the accuracy is worth, and it
+     * matches what the shaders draw in open air. The CPU flood path keeps using the exact value from
+     * {@link VsWorldFromShipLightStorage#getBlockLightAt}.
+     */
+    public int maxLightAt(final double worldX, final double worldY, final double worldZ) {
+        int best = 0;
+        for (int i = 0; i < count; i++) {
+            final long offset = arenaPtr + (long) i * BYTES_PER_EMITTER;
+            final double ex = MemoryUtil.memGetFloat(offset);
+            final double ey = MemoryUtil.memGetFloat(offset + 4);
+            final double ez = MemoryUtil.memGetFloat(offset + 8);
+            final double level = MemoryUtil.memGetFloat(offset + 12);
+            if (level <= best) {
+                continue;
+            }
+            final double qx = MemoryUtil.memGetFloat(offset + 16);
+            final double qy = MemoryUtil.memGetFloat(offset + 20);
+            final double qz = MemoryUtil.memGetFloat(offset + 24);
+            final double qw = MemoryUtil.memGetFloat(offset + 28);
+
+            // q^-1 applied to (world - emitter), matching vs_quatRotateInv in the fragment shaders.
+            final double vx = worldX - ex;
+            final double vy = worldY - ey;
+            final double vz = worldZ - ez;
+            final double nx = -qx;
+            final double ny = -qy;
+            final double nz = -qz;
+            double tx = ny * vz - nz * vy + qw * vx;
+            double ty = nz * vx - nx * vz + qw * vy;
+            double tz = nx * vy - ny * vx + qw * vz;
+            final double rx = vx + 2.0 * (ny * tz - nz * ty);
+            final double ry = vy + 2.0 * (nz * tx - nx * tz);
+            final double rz = vz + 2.0 * (nx * ty - ny * tx);
+
+            final double distance = Math.abs(rx) + Math.abs(ry) + Math.abs(rz);
+            final int light = (int) Math.floor(level - distance);
+            if (light > best) {
+                best = light;
+            }
+        }
+        return best;
+    }
+
     public void upload() {
         ensureGlObjects();
         GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, buffer);
@@ -179,6 +229,11 @@ public class VsShipEmitterList {
         if (buffer == 0) buffer = GL15.glGenBuffers();
         if (texture == 0) {
             texture = GL11.glGenTextures();
+            // glGenBuffers only reserves a name; the buffer object itself does not exist until the
+            // name is first bound, and glTexBuffer against a name that is not yet a buffer object
+            // raises GL_INVALID_OPERATION. Bind once here so the association below is valid.
+            GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, buffer);
+            GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, 0);
             GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, texture);
             GL31.glTexBuffer(GL31.GL_TEXTURE_BUFFER, GL30.GL_RGBA32F, buffer);
             GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, 0);

@@ -217,6 +217,7 @@ public abstract class MixinSodiumWorldRenderer implements SodiumWorldRendererDuc
         SodiumCompat.populateWorldFromShipsForFrame(world);
         SodiumCompat.populateLightSectionStorage(world);
         SodiumCompat.populateBiomeSectionStorage(world);
+        SodiumCompat.dispatchGpuLightFlood();
 
     }
 }

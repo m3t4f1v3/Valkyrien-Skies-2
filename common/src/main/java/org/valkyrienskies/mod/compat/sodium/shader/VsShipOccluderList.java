@@ -1,4 +1,7 @@
-package org.valkyrienskies.mod.compat.sodium.light;
+package org.valkyrienskies.mod.compat.sodium.shader;
+
+import it.unimi.dsi.fastutil.longs.Long2IntMap;
+import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
 
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL13;
@@ -57,6 +60,13 @@ public class VsShipOccluderList {
     private int currentByteSize = 0;
 
     private final Vector3d scratch = new Vector3d();
+    /**
+     * Per-frame ship id -> small dense index, stored in each voxel's spare {@code .w} slot so the ship
+     * shader can tell a voxel's owner from the ship it is currently drawing. A ship's own AO is already
+     * baked into its mesh by the chunk mesher, so re-applying it per fragment would double-darken it;
+     * the shader skips voxels whose index matches the ship being drawn.
+     */
+    private final Long2IntMap shipIndices = new Long2IntOpenHashMap();
     private final Quaterniond scratchQuat = new Quaterniond();
     private final BlockPos.MutableBlockPos scratchBlockPos = new BlockPos.MutableBlockPos();
 
@@ -72,6 +82,23 @@ public class VsShipOccluderList {
 
     public void beginFrame() {
         count = 0;
+        shipIndices.clear();
+    }
+
+    /** This ship's index if it contributed occluders this frame, else -1. Never assigns. */
+    public int indexOfShip(final long shipId) {
+        return shipIndices.getOrDefault(shipId, -1);
+    }
+
+    /** Dense per-frame index for a ship, assigned on first use. */
+    public int indexForShip(final long shipId) {
+        final int existing = shipIndices.getOrDefault(shipId, -1);
+        if (existing >= 0) {
+            return existing;
+        }
+        final int assigned = shipIndices.size();
+        shipIndices.put(shipId, assigned);
+        return assigned;
     }
 
     public int size() {
@@ -121,21 +148,22 @@ public class VsShipOccluderList {
                     scratch.set(sx + 0.5, sy + 0.5, sz + 0.5);
                     shipToWorld.transformPosition(scratch);
 
-                    appendOccluder(scratch.x, scratch.y, scratch.z, qx, qy, qz, qw);
+                    appendOccluder(scratch.x, scratch.y, scratch.z, indexForShip(ship.getId()),
+                        qx, qy, qz, qw);
                 }
             }
         }
     }
 
     public void appendOccluder(final double worldX, final double worldY, final double worldZ,
-        final float qx, final float qy, final float qz, final float qw) {
+        final int shipIndex, final float qx, final float qy, final float qz, final float qw) {
         if (count >= MAX_OCCLUDERS) return;
 
         long offset = arenaPtr + (long) count * BYTES_PER_OCCLUDER;
         MemoryUtil.memPutFloat(offset,        (float) worldX);
         MemoryUtil.memPutFloat(offset + 4,    (float) worldY);
         MemoryUtil.memPutFloat(offset + 8,    (float) worldZ);
-        MemoryUtil.memPutFloat(offset + 12,   0.0f);
+        MemoryUtil.memPutFloat(offset + 12,   (float) shipIndex);
         MemoryUtil.memPutFloat(offset + 16,   qx);
         MemoryUtil.memPutFloat(offset + 20,   qy);
         MemoryUtil.memPutFloat(offset + 24,   qz);
@@ -171,6 +199,11 @@ public class VsShipOccluderList {
         if (buffer == 0) buffer = GL15.glGenBuffers();
         if (texture == 0) {
             texture = GL11.glGenTextures();
+            // glGenBuffers only reserves a name; the buffer object itself does not exist until the
+            // name is first bound, and glTexBuffer against a name that is not yet a buffer object
+            // raises GL_INVALID_OPERATION. Bind once here so the association below is valid.
+            GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, buffer);
+            GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, 0);
             GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, texture);
             GL31.glTexBuffer(GL31.GL_TEXTURE_BUFFER, GL30.GL_RGBA32F, buffer);
             GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, 0);

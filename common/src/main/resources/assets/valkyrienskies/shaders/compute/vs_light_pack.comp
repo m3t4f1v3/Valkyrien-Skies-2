@@ -1,0 +1,69 @@
+#version 430
+
+// Compresses the working buffers into the packed 18^3 section layout the fragment shaders sample.
+//
+// One thread per uint of a section, so each thread is the sole writer of its word and no atomics are
+// needed. Threads below VS_LIGHT_START_INTS build a solid-bitmap word (32 voxels); the rest build a
+// light word (4 voxels, low nibble = flooded block light, high nibble = occluder strength). Border
+// voxels of the padded volume are gathered from the neighbouring section's core through the LUT,
+// which is what gives the sampled grid its one-block halo.
+//
+// The packed solid bitmap is the COMBINED blocker set — ship voxels and baked world terrain — because
+// its only consumer is the fragment shader's trilinear sampler, which needs to know which taps sit
+// inside something opaque so it can leave them out of the interpolation.
+
+layout(local_size_x = 256) in;
+
+#include "vs_light_common.glsl"
+
+uniform int u_ActiveCount;
+
+void main() {
+    uint gid = gl_GlobalInvocationID.x;
+    if (gid >= uint(u_ActiveCount) * VS_SECTION_SIZE_INTS) return;
+
+    uint si = gid / VS_SECTION_SIZE_INTS;
+    uint local = gid - si * VS_SECTION_SIZE_INTS;
+
+    ivec4 slotPos = vs_slotPos[si];
+    int slot = slotPos.x;
+    ivec3 sectionPos = slotPos.yzw;
+
+    uint out_ = 0u;
+
+    if (local < VS_SOLID_SIZE_INTS) {
+        for (uint b = 0u; b < 32u; b++) {
+            uint i = local * 32u + b;
+            if (i >= VS_BLOCKS_PER_SECTION) break;
+            int vi = vs_paddedVoxelIndex(sectionPos, slot, i);
+            if (vi < 0) continue;
+            uint s = uint(vi) >> 12u;
+            uint c = uint(vi) & (VS_CORE_VOXELS - 1u);
+            if ((vs_solid[s * VS_CORE_SOLID_INTS + (c >> 5u)] & (1u << (c & 31u))) != 0u) {
+                out_ |= 1u << b;
+            }
+        }
+    } else {
+        uint lightWord = local - VS_LIGHT_START_INTS;
+        for (uint b = 0u; b < 4u; b++) {
+            uint i = lightWord * 4u + b;
+            if (i >= VS_BLOCKS_PER_SECTION) break;
+            int vi = vs_paddedVoxelIndex(sectionPos, slot, i);
+            if (vi < 0) continue;
+            // The WHOLE byte is flooded light, in 16ths of a level -- not a 0-15 nibble.
+            //
+            // Sixteen levels across a fifteen-block falloff means the sampled field can only change in
+            // steps of a whole level, so its iso-contours can only sit on cell boundaries: as a ship
+            // drifted sub-block the entire lit pattern held still and then jumped a block at a time.
+            // That quantisation, not the flood itself, was what made the grid visible. At 16ths the
+            // field slides continuously with the ship while the propagation stays exactly vanilla's.
+            //
+            // The high nibble used to carry occluder strength and nothing ever read it back -- the
+            // flood's coverage comes from the vs_occl working buffer, not from here.
+            uint value = min(vs_lightSrc[uint(vi)], 255u);
+            out_ |= value << (b * 8u);
+        }
+    }
+
+    vs_sections[uint(slot) * VS_SECTION_SIZE_INTS + local] = out_;
+}

@@ -1,0 +1,81 @@
+#version 430
+
+// Transforms one ship's cached voxels into the world grid: solid bits and trilinear occluder
+// strength. Dispatched once per contributing ship, so the ship's transform arrives as uniforms and
+// each voxel entry stays 8 bytes.
+//
+// Emitter seeds are NOT written here. They live in vs_light_seed.comp, which runs after a barrier,
+// because a seed has to know whether the cell it is landing in ended up solid -- and within this
+// dispatch the solid bits of other voxels (other threads, other ships) are still being written.
+//
+// Ports splatOccluderStrength() from VsWorldFromShipLightStorage; the merge rule is atomicMax,
+// matching the CPU's max-merge across overlapping ships and voxels.
+//
+// Positions are computed RELATIVE to the render origin (floor of the camera) and only converted to
+// absolute block coordinates by an integer add. Doing the matrix multiply in absolute world space
+// would put float precision at ~2 blocks near the world border; relative to the camera the error
+// stays around 3e-5, comfortably under the 1e-4 floor bias inherited from the CPU path.
+
+layout(local_size_x = 256) in;
+
+#include "vs_light_common.glsl"
+
+uniform mat3 u_Rot;           // ship rotation * scale
+// World position of the voxel at shipyard-AABB-min, minus the render origin. Because shipToWorld is
+// affine, transforming that one corner on the CPU in double precision and adding `u_Rot * delta` here
+// is exact — no need to feed the ship's centre of rotation through as well.
+uniform vec3 u_PosRel;
+uniform ivec3 u_RenderOrigin;
+uniform int u_FirstVoxel;
+uniform int u_VoxelCount;
+
+void vs_writeOccluder(ivec3 cellRel, float weight) {
+    if (weight <= 0.0) return;
+    uint strength = uint(round(min(weight, 1.0) * 15.0));
+    if (strength == 0u) return;
+    int vi = vs_voxelIndexAt(cellRel + u_RenderOrigin);
+    if (vi < 0) return;
+    atomicMax(vs_occl[vi], strength);
+}
+
+void vs_seed(ivec3 cellRel, uint light) {
+    int vi = vs_voxelIndexAt(cellRel + u_RenderOrigin);
+    if (vi < 0) return;
+    atomicMax(vs_lightSrc[vi], light);
+}
+
+void main() {
+    uint gid = gl_GlobalInvocationID.x;
+    if (gid >= uint(u_VoxelCount)) return;
+
+    uvec2 entry = vs_voxels[uint(u_FirstVoxel) + gid];
+    vec3 delta = vec3(float(entry.x & 0xFFFFu), float(entry.x >> 16u), float(entry.y & 0xFFFFu));
+    bool solid = ((entry.y >> 24u) & 1u) != 0u;
+
+    // Voxel centre, relative to the render origin.
+    vec3 centre = u_Rot * delta + u_PosRel;
+
+    // The voxel spans [centre - 0.5, centre + 0.5], so it overlaps the eight cells around `base`
+    // with trilinear weights. At an integer-aligned transform the weights collapse to 1 in a single
+    // cell, which is what keeps axis-aligned ships pixel-identical to a binary splat.
+    vec3 corner = centre - 0.5;
+    ivec3 base = ivec3(floor(corner));
+    vec3 hi = corner - vec3(base);
+    vec3 lo = vec3(1.0) - hi;
+
+    if (solid) {
+        // Solid bits are NOT written here -- vs_light_stamp_solid.comp gathers them per world cell.
+        // Scattering them from here landed a rotated ship's voxels on colliding cells, which sealed
+        // real openings and left holes in solid hull. Occluder strength is fine to scatter: it is a
+        // soft field merged with atomicMax, so a collision just wins twice.
+        vs_writeOccluder(base + ivec3(0, 0, 0), lo.x * lo.y * lo.z);
+        vs_writeOccluder(base + ivec3(1, 0, 0), hi.x * lo.y * lo.z);
+        vs_writeOccluder(base + ivec3(0, 1, 0), lo.x * hi.y * lo.z);
+        vs_writeOccluder(base + ivec3(1, 1, 0), hi.x * hi.y * lo.z);
+        vs_writeOccluder(base + ivec3(0, 0, 1), lo.x * lo.y * hi.z);
+        vs_writeOccluder(base + ivec3(1, 0, 1), hi.x * lo.y * hi.z);
+        vs_writeOccluder(base + ivec3(0, 1, 1), lo.x * hi.y * hi.z);
+        vs_writeOccluder(base + ivec3(1, 1, 1), hi.x * hi.y * hi.z);
+    }
+
+}

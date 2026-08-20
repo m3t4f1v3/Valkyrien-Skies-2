@@ -1,7 +1,7 @@
 package org.valkyrienskies.mod.compat.flywheel;
 
 import org.valkyrienskies.mod.common.config.VSGameConfig;
-import org.valkyrienskies.mod.compat.sodium.SodiumCompat;
+import org.valkyrienskies.mod.common.render.light.VsDynamicLight;
 
 import dev.engine_room.flywheel.api.visualization.VisualizationManager;
 import dev.engine_room.flywheel.impl.visualization.VisualManagerImpl;
@@ -20,7 +20,7 @@ public class FlywheelDynLightCompat {
                 }
             }
             if (VSGameConfig.CLIENT.getDynamicShipToWorldLighting()) {
-                for (Long sectionLong : SodiumCompat.getWorldFromShipStorage().trackedSections()) {
+                for (Long sectionLong : VsDynamicLight.getWorldFromShipStorage().trackedSections()) {
                     blockEntityManager.onLightUpdate(sectionLong);
                 }
             }

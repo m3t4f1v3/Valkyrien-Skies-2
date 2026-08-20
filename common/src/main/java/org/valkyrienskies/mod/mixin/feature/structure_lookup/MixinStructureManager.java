@@ -165,35 +165,35 @@ public abstract class MixinStructureManager {
         return false;
     }
 
-    @WrapMethod(method = "getAllStructuresAt")
-    private Map<Structure, LongSet> includeShipsInGetAllStructuresAt(
-        final BlockPos pos, final Operation<Map<Structure, LongSet>> original
-    ) {
-        final Map<Structure, LongSet> result = original.call(pos);
-        final List<BlockPos> shipPositions = valkyrienskies$shipQueryPositions(pos);
-        if (shipPositions == null) {
-            return result;
-        }
-        Map<Structure, LongSet> merged = null;
-        for (final BlockPos shipPos : shipPositions) {
-            final Map<Structure, LongSet> shipResult = original.call(shipPos);
-            if (shipResult.isEmpty()) {
-                continue;
-            }
-            if (merged == null) {
-                merged = new HashMap<>(result);
-            }
-            for (final Map.Entry<Structure, LongSet> entry : shipResult.entrySet()) {
-                final LongSet existing = merged.get(entry.getKey());
-                if (existing == null) {
-                    merged.put(entry.getKey(), entry.getValue());
-                } else {
-                    final LongOpenHashSet combined = new LongOpenHashSet(existing);
-                    combined.addAll(entry.getValue());
-                    merged.put(entry.getKey(), combined);
-                }
-            }
-        }
-        return merged == null ? result : merged;
-    }
+//    @WrapMethod(method = "getAllStructuresAt")
+//    private Map<Structure, LongSet> includeShipsInGetAllStructuresAt(
+//        final BlockPos pos, final Operation<Map<Structure, LongSet>> original
+//    ) {
+//        final Map<Structure, LongSet> result = original.call(pos);
+//        final List<BlockPos> shipPositions = valkyrienskies$shipQueryPositions(pos);
+//        if (shipPositions == null) {
+//            return result;
+//        }
+//        Map<Structure, LongSet> merged = null;
+//        for (final BlockPos shipPos : shipPositions) {
+//            final Map<Structure, LongSet> shipResult = original.call(shipPos);
+//            if (shipResult.isEmpty()) {
+//                continue;
+//            }
+//            if (merged == null) {
+//                merged = new HashMap<>(result);
+//            }
+//            for (final Map.Entry<Structure, LongSet> entry : shipResult.entrySet()) {
+//                final LongSet existing = merged.get(entry.getKey());
+//                if (existing == null) {
+//                    merged.put(entry.getKey(), entry.getValue());
+//                } else {
+//                    final LongOpenHashSet combined = new LongOpenHashSet(existing);
+//                    combined.addAll(entry.getValue());
+//                    merged.put(entry.getKey(), combined);
+//                }
+//            }
+//        }
+//        return merged == null ? result : merged;
+//    }
 }

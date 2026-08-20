@@ -24,6 +24,23 @@ loom {
     accessWidenerPath = project(":common").loom.accessWidenerPath
 }
 
+// Sodium's pre-launch check refuses to start when the running LWJGL differs from the one it was
+// compiled against (BuildConfig.LWJGL_VERSION over in the backport, and the version 1.20.1 itself
+// ships). Something on this module's runtime classpath declares 3.3.2 and wins conflict resolution,
+// so pin the whole group back to what vanilla uses. Scoped to the backport runtime, since the legacy
+// Sodium/Embeddium dev setup has no such check and is known to work as-is.
+if (rootProject.sodium_runtime == "backport") {
+    configurations.all {
+        resolutionStrategy {
+            eachDependency { details ->
+                if (details.requested.group == "org.lwjgl") {
+                    details.useVersion("3.3.1")
+                }
+            }
+        }
+    }
+}
+
 dependencies {
     include(implementation(annotationProcessor("io.github.llamalad7:mixinextras-fabric:${rootProject.mixinextras_version}")))
 
@@ -45,6 +62,24 @@ dependencies {
 
     modCompileOnly("maven.modrinth:create-utilities:${create_utilities_version}")
     modCompileOnly("maven.modrinth:sodium:${sodium_version}")
+    // Compile against the backport's forge artifact even here: it is the one built for Java 17, which
+    // is what this module targets. The two generations' packages don't collide, so both are on the
+    // classpath at once and the compat layer for whichever is installed is picked at runtime.
+    compileOnly("net.caffeinemc:sodium-forge:${rootProject.sodium_backport_version}:dev")
+
+    // Which Sodium the dev client runs with. See sodium_backport_version in the root gradle.properties.
+    //
+    // The backport goes in as a plain runtimeOnly of its `dev` artifact, not modRuntimeOnly of the
+    // production one. Its build remaps mixin annotations statically instead of shipping a refmap, so the
+    // production jar carries intermediary names in its @Inject targets; this Loom is too old to rewrite
+    // those, and with no refmap to fall back on Sodium's own mixins fail to apply. The dev jar is the
+    // pre-remap copy — Mojang names throughout, which is what this dev environment runs — so it needs no
+    // remapping at all, and Fabric Loader still discovers it from the classpath.
+    if (rootProject.sodium_runtime == "backport") {
+        runtimeOnly("net.caffeinemc:sodium-fabric:${rootProject.sodium_backport_version}:dev")
+    } else if (rootProject.sodium_runtime == "legacy") {
+        modRuntimeOnly("maven.modrinth:sodium:${sodium_version}")
+    }
     // Disable indium until we update sodium to newer versions
     //modRuntimeOnly("maven.modrinth:indium:${indium_version}")
     modCompileOnly("maven.modrinth:iris:${iris_version}")

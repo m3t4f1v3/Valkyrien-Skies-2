@@ -6,7 +6,7 @@ import me.jellysquid.mods.sodium.client.render.chunk.shader.ChunkShaderInterface
 import me.jellysquid.mods.sodium.client.render.chunk.shader.ChunkShaderOptions;
 import me.jellysquid.mods.sodium.client.render.chunk.shader.ShaderBindingContext;
 
-import org.valkyrienskies.mod.compat.sodium.light.GlUniformInt3v;
+import org.valkyrienskies.mod.compat.sodium.shader.GlUniformInt3v;
 
 /**
  * ChunkShaderInterface for the VS-modified world chunk shader. Rendered for
@@ -21,15 +21,47 @@ public class WorldThing extends ChunkShaderInterface {
     private final GlUniformInt uniformShipEmitterCount;
     private final GlUniformInt uniformShipOccluders;
     private final GlUniformInt uniformShipOccluderCount;
+    // Compute-flooded ship light; only bound under VS_FLOOD_GRID, because sodium's bindUniform throws
+    // on a name the linked program doesn't declare.
+    private final GlUniformInt uniformWorldFromShipSections;
+    private final GlUniformInt uniformWorldFromShipLut;
+    private final GlUniformInt uniformFloodGridValid;
 
-    public WorldThing(ShaderBindingContext context, ChunkShaderOptions options) {
+    public WorldThing(ShaderBindingContext context, ChunkShaderOptions options, int features) {
         super(context, options);
+        final boolean floodGrid = (features & SodiumCompat.FEATURE_FLOOD_GRID) != 0;
         this.uniformRenderOrigin = context.bindUniform("u_VsRenderOrigin", GlUniformInt3v::new);
         this.uniformCameraFrac = context.bindUniform("u_VsCameraFrac", GlUniformFloat3v::new);
-        this.uniformShipEmitters = context.bindUniform("u_VsShipEmitters", GlUniformInt::new);
-        this.uniformShipEmitterCount = context.bindUniform("u_VsShipEmitterCount", GlUniformInt::new);
+        // Under VS_FLOOD_GRID the world shader takes ship light entirely from the flood, so it does
+        // not declare these at all and sodium's bindUniform would throw on the missing names. They
+        // remain for the non-compute fallback, which still evaluates the emitter list per fragment.
+        this.uniformShipEmitters = floodGrid
+            ? null : context.bindUniform("u_VsShipEmitters", GlUniformInt::new);
+        this.uniformShipEmitterCount = floodGrid
+            ? null : context.bindUniform("u_VsShipEmitterCount", GlUniformInt::new);
         this.uniformShipOccluders = context.bindUniform("u_VsShipOccluders", GlUniformInt::new);
         this.uniformShipOccluderCount = context.bindUniform("u_VsShipOccluderCount", GlUniformInt::new);
+        this.uniformWorldFromShipSections = floodGrid
+            ? context.bindUniform("u_VsWorldFromShipSections", GlUniformInt::new) : null;
+        this.uniformWorldFromShipLut = floodGrid
+            ? context.bindUniform("u_VsWorldFromShipLut", GlUniformInt::new) : null;
+        this.uniformFloodGridValid = floodGrid
+            ? context.bindUniform("u_VsFloodGridValid", GlUniformInt::new) : null;
+    }
+
+    public void setFloodGridValid(final boolean valid) {
+        if (this.uniformFloodGridValid != null) {
+            this.uniformFloodGridValid.setInt(valid ? 1 : 0);
+        }
+    }
+
+    public void setWorldFromShipSamplers(int sectionsUnit, int lutUnit) {
+        if (this.uniformWorldFromShipSections != null) {
+            this.uniformWorldFromShipSections.setInt(sectionsUnit);
+        }
+        if (this.uniformWorldFromShipLut != null) {
+            this.uniformWorldFromShipLut.setInt(lutUnit);
+        }
     }
 
     public void setRenderOrigin(int x, int y, int z) {
@@ -41,6 +73,11 @@ public class WorldThing extends ChunkShaderInterface {
     }
 
     public void setShipEmitters(int textureUnit, int count) {
+        // Null under VS_FLOOD_GRID, where the world shader does not declare the emitter uniforms at
+        // all. The caller sets this unconditionally for both paths, so the check belongs here.
+        if (this.uniformShipEmitters == null) {
+            return;
+        }
         this.uniformShipEmitters.setInt(textureUnit);
         this.uniformShipEmitterCount.setInt(count);
     }

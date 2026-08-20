@@ -1,0 +1,49 @@
+# Flicker in SHIP-TO-SHIP light: drag a lit ship across another ship and watch the receiver.
+#
+# Terrain reads clean, so the difference must be something only a ship receiver has. A ship writes
+# COVERAGE into the world grid (terrain writes solid bits instead), and the flood's coverage
+# attenuation still has a hard threshold in it -- so the receiver modulates the very light it is
+# receiving, and does so in steps.
+#
+# The emitter ship is dragged (per-tick position delta, keeping it static) rather than thrown: given a
+# velocity it is non-static, falls, and stops within a few ticks.
+#
+# NEITHER ship is lattice aligned: the receiver is yawed 27 degrees and shifted 0.37 of a block, the
+# emitter 18 degrees and a different fraction again.
+#
+# Both sit close enough to the superflat surface that world TERRAIN is lit in the same frames, so the
+# receiver ship and the terrain can be compared under identical motion -- the comparison the report
+# ("terrain is perfect, ship-to-ship is flickery") rests on. Higher up the ground is out of range and
+# reads a vacuous zero. On integer coordinates every grid quantisation
+# effect lines up and disappears, which is the one arrangement not worth measuring.
+world autotest
+wait-level
+wait 80
+hud off
+cmd gamemode spectator
+cmd time set midnight
+cmd gamerule doDaylightCycle false
+cmd gamerule doMobSpawning false
+cmd kill @e[type=!player]
+wait 20
+
+run plate_ship 0 -52 0 10 27 0.37
+wait 80
+run light_ship -6 -47 0 minecraft:glowstone
+wait 60
+run move_ship 0.31 0.17 0.43
+run rotate_ship 18 0 0
+wait 120
+run hull open
+wait 80
+cmd tp @s 0 -40 -20 0 26
+wait 80
+
+# static control: any variation here is renderer noise, not lighting
+burst 30 still
+
+run drag_ship 0.075 0 0
+wait 10
+burst 60 drift
+run drag_stop
+quit
