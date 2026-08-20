@@ -56,8 +56,11 @@ public class WorldThing extends ChunkShaderInterface {
             ? context.bindUniform("u_VsWorldFromShipLut", GlUniformInt::new) : null;
         this.uniformFloodGridValid = floodGrid
             ? context.bindUniform("u_VsFloodGridValid", GlUniformInt::new) : null;
-        this.uniformLightSections = context.bindUniform("u_VsLightSections", GlUniformInt::new);
-        this.uniformLightLut = context.bindUniform("u_VsLightLut", GlUniformInt::new);
+        // Read only by ws_shipAo, which is compiled out unless VS_SHIP_AO.
+        this.uniformLightSections = shipAo
+            ? context.bindUniform("u_VsLightSections", GlUniformInt::new) : null;
+        this.uniformLightLut = shipAo
+            ? context.bindUniform("u_VsLightLut", GlUniformInt::new) : null;
     }
 
     public void setFloodGridValid(final boolean valid) {
@@ -102,10 +105,14 @@ public class WorldThing extends ChunkShaderInterface {
     }
 
     public void setLightSectionsSampler(int unit) {
-        this.uniformLightSections.setInt(unit);
+        if (this.uniformLightSections != null) {
+            this.uniformLightSections.setInt(unit);
+        }
     }
 
     public void setLightLutSampler(int unit) {
-        this.uniformLightLut.setInt(unit);
+        if (this.uniformLightLut != null) {
+            this.uniformLightLut.setInt(unit);
+        }
     }
 }

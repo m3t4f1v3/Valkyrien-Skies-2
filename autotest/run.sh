@@ -16,7 +16,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 SCRIPT="$(realpath "${1:?usage: autotest/run.sh <script.txt>}")"
-RUN_DIR="forge/run"
+RUN_DIR="forge/${AUTOTEST_RUN_DIR:-run}"
 RESULT_FILE="$RUN_DIR/autotest-result.txt"
 WORLD="${2:-autotest}"
 

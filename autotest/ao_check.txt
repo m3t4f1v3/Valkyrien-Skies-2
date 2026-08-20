@@ -1,0 +1,29 @@
+# Does ship AO darken world terrain? The ship must sit within AO reach of the ground: the merged
+# ws_shipAo falls off by ~2.1 blocks (VS_AO_CARDINAL_MAX_DISTANCE), so a ship hovering four blocks up
+# casts nothing and an AO on/off comparison there is vacuous.
+world autotest
+wait-level
+wait 100
+hud off
+cmd gamemode spectator
+cmd time set noon
+cmd gamerule doDaylightCycle false
+cmd kill @e[type=!player]
+wait 20
+
+# resting just above the superflat surface (grass at y=-60)
+run light_ship 0 -59 0 minecraft:stone
+wait 120
+cmd tp @s 6 -56 6 -135 25
+wait 100
+
+ao off
+wait 60
+screenshot aochk_off
+ao on
+wait 80
+screenshot aochk_on
+ao off
+wait 60
+screenshot aochk_off2
+quit

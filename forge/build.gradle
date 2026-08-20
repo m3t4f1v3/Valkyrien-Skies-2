@@ -41,6 +41,14 @@ loom {
 
     // Autotest passthrough: `-Pvs_autotest=<script>` hands the script path to the client, where
     // VsAutoTestHarness drives it. Absent the property the harness never installs itself.
+    // `-Pvs_rundir=<name>` gives this client its own run directory, so two runtimes can be exercised
+    // in parallel without fighting over forge/run's logs, screenshots and config.
+    if (project.hasProperty('vs_rundir')) {
+        runs.configureEach {
+            runDir project.property('vs_rundir').toString()
+        }
+    }
+
     if (project.hasProperty('vs_autotest')) {
         runs.configureEach {
             property("vs.autotest", project.property('vs_autotest').toString())

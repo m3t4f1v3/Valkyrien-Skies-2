@@ -664,6 +664,13 @@ public class SodiumCompat {
         // The world shader has one VS feature of its own — the flood-grid gate — so it needs the same
         // (options, features) cache key the ship shader uses, not options alone.
         int features = VsDynamicLight.isGpuFloodActive() ? FEATURE_FLOOD_GRID : 0;
+        // The world program builds its own feature bits rather than calling computeFeatureBits(), so
+        // every world-shader feature has to be added HERE as well. Ship-cast AO lives in the world
+        // shader (ws_shipAo shades world terrain under a ship), and omitting it here compiled the AO
+        // out unconditionally -- the config appeared to do nothing at all.
+        if (VSGameConfig.CLIENT.getShipAmbientOcclusion()) {
+            features |= FEATURE_SHIP_AO;
+        }
         if (features != 0) {
             int paint = VSGameConfig.CLIENT.getDebugFloodPaint();
             if (paint == 1) features |= FEATURE_DEBUG_FLOOD_1;

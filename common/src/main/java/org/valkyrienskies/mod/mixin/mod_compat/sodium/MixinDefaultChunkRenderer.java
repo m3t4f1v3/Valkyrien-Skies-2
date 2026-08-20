@@ -78,6 +78,15 @@ public abstract class MixinDefaultChunkRenderer {
                 SodiumCompat.getShipOccluderList().bind(SodiumCompat.SHIP_OCCLUDER_LIST_TEXTURE_UNIT);
                 SodiumCompat.recordListsBound();
             }
+            // ws_shipAo reads the world-section storage in the WORLD shader too, so this branch has to
+            // bind it exactly as the ship branch above does. Without it the world pass samples a
+            // texture unit nothing bound -- GL_INVALID_OPERATION, "Not a valid buffer object", and the
+            // driver takes the client down with no Java exception to point at it. It only survived on
+            // the source branch because a ship drawn earlier in the frame happens to leave the unit
+            // bound; a frame that reaches the world pass first has nothing there.
+            SodiumCompat.getLightStorage().bind(
+                    SodiumCompat.LIGHT_SECTIONS_TEXTURE_UNIT,
+                    SodiumCompat.LIGHT_LUT_TEXTURE_UNIT);
             return;
         }
 

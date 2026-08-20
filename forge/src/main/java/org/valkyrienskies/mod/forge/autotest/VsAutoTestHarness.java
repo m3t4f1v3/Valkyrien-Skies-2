@@ -210,6 +210,20 @@ public final class VsAutoTestHarness {
                 minecraft.player.setXRot(Float.parseFloat(inst[2]));
             }
             case "run" -> runHook(minecraft, inst);
+            // Flipping the config in game rather than relaunching: the shader programs are cached by
+            // feature bits, so the next draw compiles the variant for the new setting.
+            case "aoinfo" -> LOGGER.info(
+                "[autotest] aoinfo: config={} occluderListSize={} emitterListSize={} floodActive={}",
+                org.valkyrienskies.mod.common.config.VSGameConfig.CLIENT.getShipAmbientOcclusion(),
+                org.valkyrienskies.mod.common.render.light.VsDynamicLight.getShipOccluderList().size(),
+                org.valkyrienskies.mod.common.render.light.VsDynamicLight.getShipEmitterList().size(),
+                org.valkyrienskies.mod.common.render.light.VsDynamicLight.isGpuFloodActive());
+            case "ao" -> {
+                org.valkyrienskies.mod.common.config.VSGameConfig.CLIENT
+                    .setShipAmbientOcclusion("on".equalsIgnoreCase(inst[1]));
+                LOGGER.info("[autotest] shipAmbientOcclusion -> {}",
+                    org.valkyrienskies.mod.common.config.VSGameConfig.CLIENT.getShipAmbientOcclusion());
+            }
             case "hud" -> minecraft.options.hideGui = !"on".equalsIgnoreCase(inst[1]);
             case "screenshot" -> screenshot(minecraft, inst[1]);
             case "log" -> LOGGER.info("[autotest] MARK: {}", join(inst, 1));

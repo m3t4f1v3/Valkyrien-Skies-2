@@ -1,0 +1,35 @@
+# Does the client survive both AO states? A uniform that GLSL eliminated but the Java still binds
+# crashes at program link, so simply reaching both states is the test. AO is flipped IN GAME -- the
+# shader programs are cached by feature bits, so the next draw compiles the other variant.
+world autotest
+wait-level
+wait 80
+hud off
+cmd gamemode spectator
+cmd time set midnight
+cmd gamerule doDaylightCycle false
+cmd kill @e[type=!player]
+wait 20
+
+run light_ship 0 -56 0 minecraft:glowstone
+wait 100
+run hull open
+wait 60
+cmd tp @s 0 -58 -11 0 12
+wait 60
+
+log ---- AO OFF ----
+ao off
+wait 60
+screenshot boot_ao_off
+
+log ---- AO ON ----
+ao on
+wait 80
+screenshot boot_ao_on
+
+log ---- back to AO OFF ----
+ao off
+wait 60
+screenshot boot_ao_off2
+quit

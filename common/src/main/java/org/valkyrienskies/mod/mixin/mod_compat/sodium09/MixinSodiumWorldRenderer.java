@@ -79,6 +79,10 @@ public abstract class MixinSodiumWorldRenderer {
      * Ship block entities are stored at their shipyard positions, so the plain camera-relative translate
      * would draw them out in the shipyard. Substitute the ship's render transform instead.
      */
+    // Deliberately left REQUIRED. If a Sodium 0.9 build positions block entities differently, this
+    // must fail loudly at load: silently degrading would draw every ship's block entities out at their
+    // shipyard coordinates, millions of blocks away, which is far harder to diagnose than a crash
+    // naming the injection that did not apply.
     @Redirect(
         method = "renderBlockEntity",
         at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/vertex/PoseStack;translate(DDD)V"))

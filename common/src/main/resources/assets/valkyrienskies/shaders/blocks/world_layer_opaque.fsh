@@ -126,8 +126,12 @@ uniform sampler2D ValkyrienAir_Mask8;
 // (in u_VsShipOccluders) and vanilla baked AO from sodium handles
 // the world side, producing two separate shadow shapes that don't
 // combine cleanly. Bound from WorldThing.java.
+#ifdef VS_SHIP_AO
+// Only ws_shipAo reads these. Declared outside the AO gate they are eliminated by GLSL when AO is
+// compiled out, and sodium's bindUniform then throws on the missing name.
 uniform usamplerBuffer u_VsLightSections;
 uniform usamplerBuffer u_VsLightLut;
+#endif
 
 // Inverse-rotate v by quaternion q (i.e., apply q^-1 = (-q.xyz, q.w) to v).
 // Used to express world-frame offsets in the owning ship's local frame so
@@ -137,6 +141,7 @@ vec3 vs_quatRotateInv(vec4 q, vec3 v) {
     return v + 2.0 * cross(qNeg, cross(qNeg, v) + q.w * v);
 }
 
+#ifdef VS_SHIP_AO
 // ===== Section-storage helpers (mirrored from ship FSH) =====
 // Layout: each section is [solid bits 732B][light bytes 5832B] = 6564B = 1641 ints.
 const uint VS_BLOCKS_PER_SECTION = 18u * 18u * 18u;
@@ -193,6 +198,8 @@ uint vs_fetchSolid3x3x3(uint sectionOffset, ivec3 blockInSectionPos) {
     VS_FETCH_SOLID(-1,  1,  1,24)  VS_FETCH_SOLID(0,  1,  1,25)  VS_FETCH_SOLID(1,  1,  1,26)
     return ret;
 }
+
+#endif // VS_SHIP_AO
 
 out vec4 fragColor;
 

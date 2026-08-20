@@ -1,0 +1,68 @@
+#Use a custom vanilla shader for rendering ship chunks, improving lighting on tilted and upside down ships. Also enables the directional-shade fix for the sodium/embeddium ship renderer.
+betterVanillaShipShading = false
+#Debug paint for the GPU light flood, replacing world terrain shading. 0 = off. 1 = leak hunt: GREEN is light the flood justifies, RED is light applied beyond it, BLUE is a fragment outside the tracked grid. 2 = accuracy: RED is vanilla's own block light, GREEN is the flood, so agreement reads yellow. 3 = ship chunks: RED is the shipyard-baked lightmap, GREEN is the world-sampled light, showing which source lights a ship's own blocks. Diagnostic only.
+debugFloodPaint = 0
+#The way ships are rendered by default. BATCHED is the built-in default and powers advanced features; VANILLA uses MC's terrain chunk renderer; FLYWHEEL requires the Flywheel mod.
+#Allowed Values: VANILLA, FLYWHEEL, BATCHED
+defaultRenderer = "BATCHED"
+#Sample the world biome at the ship's actual rendered position so grass/leaves/water on ships show the correct biome color (sodium/embeddium only). Disable for a small perf gain — ship blocks fall back to whatever the chunk mesher baked.
+dynamicShipBiomeTinting = false
+#Sample world block/sky light at the ship's rendered position so torches and sunlight in the world correctly light the ship (sodium/embeddium only). Disable for a moderate perf gain — ship blocks fall back to the shipyard's baked lightmap.
+dynamicShipLighting = true
+#Project ships into the world's lighting at render time so ships occlude sunlight on the ground beneath them and ship-internal torches illuminate nearby world blocks (sodium/embeddium only). Experimental — overrides sodium's stock world-chunk shader. Disable for the default vanilla behavior where ships don't affect world lighting.
+dynamicShipToWorldLighting = true
+#Flood ship-to-world light on the GPU with compute shaders instead of on the CPU. Runs every frame instead of every 15th, and lets hulls and terrain actually block ship light. Requires OpenGL 4.3; falls back to the CPU flood automatically when unavailable.
+gpuDynamicLightFlood = true
+#Recommend ship slugs in mc commands where player names could be used ex. /tp ship-name wich could pollute user autocomplete
+recommendSlugsInMcCommands = true
+#Renders the VS2 debug HUD with TPS
+renderDebugText = false
+#Use synchronized retained flood fluid for camera fog and fluid overlays
+renderFloodedFluidFog = true
+#Render synchronized retained flood fluid inside ships
+renderFloodedVoxels = true
+#Hide external world fluid surfaces inside synchronized dry ship volumes
+renderFluidOcclusion = true
+#Grace period before a player's camera is no longer considered to be within a sealed area
+sealedAreaCameraGracePeriod = 2
+#Ambient occlusion cast by ship blocks onto the world. Off by default: it is evaluated per fragment against a list of ship voxels, which is by far the most expensive part of ship rendering, and it is independent of the lighting itself.
+shipAmbientOcclusion = true
+
+["Block Tint"]
+	#Partly fixes the block tinting issue with blocks on ships
+	fixBlockTinting = false
+
+[Connectivity]
+	#Enable client connectivity; increases client load, but allows for client-sided sealed space visuals, like occluding water in a submarine.
+	enableClientConnectivity = false
+
+[Performance]
+	#Maximum distance (blocks) from the camera at which client particles collide with ships. Particle-vs-ship collision is purely cosmetic and runs per particle every tick (convex-polygon collision), so it gets very expensive around large fleets. Particles beyond this distance skip it (imperceptible). Set to 0 to disable particle-ship collision entirely.
+	#Range: 0 ~ 256
+	maxParticleShipCollisionDistance = 48
+	#Per-frame time budget, in milliseconds, for applying deferred ship chunk packets when a small backlog is present.
+	#Range: 1 ~ 300
+	shipChunkPacketBacklogBudgetMs = 20
+	#Base per-frame time budget, in milliseconds, for applying deferred ship chunk packets on the client.
+	#Range: 1 ~ 200
+	shipChunkPacketBaseBudgetMs = 5
+	#Per-frame time budget, in milliseconds, for applying deferred ship chunk packets when a large backlog is present.
+	#Range: 1 ~ 500
+	shipChunkPacketLargeBacklogBudgetMs = 80
+	#Maximum number of cached ship chunks to unload per client tick.
+	#Range: 1 ~ 1024
+	shipChunkUnloadBatchSize = 64
+
+[SoundEffect]
+	#Doppler effect scaler. 1.0 for realistic; smaller value results in weaker doppler effect
+	dopplerEffectScale = 0.05
+	#Enable doppler effect for sounds
+	enableDopplerEffect = true
+
+[Tooltips]
+	#Set when the Mass Tooltip is Visible
+	#Allowed Values: ALWAYS, ADVANCED, DISABLED
+	massTooltipVisibility = "ADVANCED"
+	#Use Imperial Units to show Mass
+	useImperialUnits = false
+

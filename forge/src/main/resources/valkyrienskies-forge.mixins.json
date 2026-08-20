@@ -34,8 +34,7 @@
     "feature.mob_spawning.MixinPatrolSpawnerShipFinalize",
     "feature.mob_spawning.MixinPhantomSpawnerShipFinalize",
     "feature.shipyard_entities.MixinPersistentEntitySectionManager",
-    "feature.water_in_ships_entity.MixinEntity",
-    // "world.level.block.FireMixin"
+    "feature.water_in_ships_entity.MixinEntity"
   ],
   "client": [
     "client.render.MixinLevelRenderer",
