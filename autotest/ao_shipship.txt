@@ -1,0 +1,52 @@
+# Ship-to-ship AO: cross-ship must shade, self must not. Both in one client, same geometry.
+#
+# GEOMETRY MATTERS AND IS EASY TO GET WRONG. The seam pass stamps only the unit slab directly in
+# front of the receiving face, with a tent weight max(0, 1 - |voxel centre - band centre|). Two walls
+# facing each other across a ONE-BLOCK GAP give weight exactly 0 -- correct behaviour, but it makes an
+# on/off comparison read as "the AO does nothing". So the occluder here RESTS ON the surface it
+# shades, which is the same relationship a ship has with the ground.
+#
+#   cross: a 5x5 plate (ship 0) with a 2-tall column (ship 1) standing on it   -> AO must appear
+#   self:  the same shape built as ONE ship                                    -> AO must NOT appear,
+#          because the mesher already baked that occlusion into v_Color.a
+world autotest
+wait-level
+wait 100
+hud off
+cmd gamemode spectator
+cmd time set noon
+cmd gamerule doDaylightCycle false
+cmd kill @e[type=!player]
+wait 20
+cmd tp @s 2.5 -49 2.5 0 90
+wait 60
+
+# ---- CROSS-SHIP: plate and column are SEPARATE ships --------------------
+run ao_ship 0 0 -56 0 0:0:0,1:0:0,2:0:0,3:0:0,4:0:0,0:0:1,1:0:1,2:0:1,3:0:1,4:0:1,0:0:2,1:0:2,2:0:2,3:0:2,4:0:2,0:0:3,1:0:3,2:0:3,3:0:3,4:0:3,0:0:4,1:0:4,2:0:4,3:0:4,4:0:4
+run ao_ship 1 2 -55 2 0:0:0,0:1:0
+wait 150
+ao off
+wait 60
+screenshot aoss_cross_off
+wait 20
+ao on
+wait 60
+screenshot aoss_cross_on
+wait 20
+aoinfo
+run ao_clear
+wait 60
+
+# ---- SELF: the identical shape as ONE ship ------------------------------
+run ao_ship 0 0 -56 0 0:0:0,1:0:0,2:0:0,3:0:0,4:0:0,0:0:1,1:0:1,2:0:1,3:0:1,4:0:1,0:0:2,1:0:2,2:0:2,3:0:2,4:0:2,0:0:3,1:0:3,2:0:3,3:0:3,4:0:3,0:0:4,1:0:4,2:0:4,3:0:4,4:0:4,2:1:2,2:2:2
+wait 150
+ao off
+wait 60
+screenshot aoss_self_off
+wait 20
+ao on
+wait 60
+screenshot aoss_self_on
+wait 20
+aoinfo
+quit

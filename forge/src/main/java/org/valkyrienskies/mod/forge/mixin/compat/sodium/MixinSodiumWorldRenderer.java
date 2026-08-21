@@ -6,6 +6,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.valkyrienskies.mod.compat.sodium.SodiumCompat;
+import org.valkyrienskies.mod.compat.sodium.shader.VsGpuTimer;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 
@@ -22,6 +23,15 @@ public abstract class MixinSodiumWorldRenderer {
     @Inject(method = "drawChunkLayer", at = @At("HEAD"))
     private void beforeChunkLayer(RenderType renderLayer, PoseStack matrixStack, double x, double y, double z,
             CallbackInfo ci) {
+        // Brackets ship rendering AND sodium's own terrain draw, which is the whole of the chunk pass
+        // the seam AO runs in. Compiled-in but inert unless -Pvs_gputime is set.
+        VsGpuTimer.begin();
         SodiumCompat.renderShips(renderSectionManager, renderLayer, ChunkRenderMatrices.from(matrixStack), x, y, z);
+    }
+
+    @Inject(method = "drawChunkLayer", at = @At("TAIL"))
+    private void afterChunkLayerTiming(RenderType renderLayer, PoseStack matrixStack, double x, double y, double z,
+            CallbackInfo ci) {
+        VsGpuTimer.end();
     }
 }

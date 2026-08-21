@@ -70,6 +70,13 @@ loom {
         }
     }
 
+    // `-Pvs_gputime` — GL timer queries around the chunk terrain passes. See VsGpuTimer.
+    if (project.hasProperty('vs_gputime')) {
+        runs.configureEach {
+            property("vs.gputime", "true")
+        }
+    }
+
     // `-Pvs_aogate=off` — disable the no-occluders AO gate, to measure what it is worth.
     if (project.hasProperty('vs_aogate')) {
         runs.configureEach {

@@ -40,6 +40,7 @@ a few levels of darkening in a shaded frame.
 | `ao_merge.txt` | touching pair at lateral offset 0 / 0.25 / 0.5; straight \| gap \| yawed | `verify5:scene_pair`, `:scene_rot` |
 | `ao_contact.txt` | flush → hover sweep → past support radius; sunk | seam3 band rule, `probe_support.py` |
 | `ao_misalign.txt` | neighbour a few degrees off / a fraction of a block off the lattice | `seam5.pair_claim` (partial-claim regime) |
+| `ao_shipship.txt` | cross-ship AO applies, self-occlusion does not | the ship path's two halves |
 | `ao_ab.txt` | plain on/off A/B of `shipAmbientOcclusion` in one client | — |
 
 What each group is actually asserting:
@@ -55,6 +56,11 @@ What each group is actually asserting:
   hundred lit pixels over 64 bins move across bin edges for any sub-pixel shift.
 - **merging** — two touching separate ships must look like the same two cells as one ship, and the
   one-block-gap merge bridge must survive the partner rotating.
+- **ship-to-ship** — one fixture, two opposite assertions, which is what makes each trustworthy: a
+  column resting on a *separate* ship's plate must shade it (242,863 px), and the identical shape
+  built as *one* ship must not (0 px), because the mesher already baked that occlusion into
+  `v_Color.a`. The cross case is what stops the self case passing vacuously — a dead render path or a
+  compiled-out shader would zero both, and this pair catches that.
 - **contact** — the band weighting through flush → hover → past support. A flush ship casts full AO
   and it fades linearly to exactly zero one block up.
 - **misalignment vs the reference** (`autotest/ref_merge.py`) — the checks above are all
@@ -98,6 +104,11 @@ single-`lightShip` hooks cannot express:
 
 Things that have gone wrong here before and cost whole runs:
 
+- **Occluders must be ADJACENT to the surface they shade.** The seam pass stamps only the unit slab
+  in front of the face, weighted `max(0, 1 - |voxel centre - band centre|)`, so a gap of one block
+  gives weight exactly 0.00. Three fixtures in a row were written with a one-block gap and read as
+  "the AO does nothing" when the shader was behaving correctly. Put the occluder *touching* the
+  receiving surface.
 - **Put the ship *on* the ground.** Vanilla AO stamps only the unit slab directly in front of the
   face, so a ship hovering even one block up casts exactly zero and an on/off comparison measures
   nothing. `ao_contact`'s hover profile is the check that placement is right — if the ship were

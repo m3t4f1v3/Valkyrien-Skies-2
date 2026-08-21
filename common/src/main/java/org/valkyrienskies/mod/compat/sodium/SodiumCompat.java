@@ -120,7 +120,6 @@ public class SodiumCompat {
     /** Ship being rendered on this thread. Used by setupShipShaderState to
      *  feed the ship FSH the per-frame ship index so vs_sosShipAo can skip
      *  same-ship voxels (their AO is already baked into v_Color.a). */
-    private static final ThreadLocal<Long> CURRENT_SHIP_ID = ThreadLocal.withInitial(() -> 0L);
 
     // Texture units used for the ship light buffer textures.
     // Sodium uses unit 0 for the block atlas and 1 for the lightmap.
@@ -330,15 +329,18 @@ public class SodiumCompat {
                 getShipOccluderList().gridOriginX(), getShipOccluderList().gridOriginY(),
                 getShipOccluderList().gridOriginZ(), getShipOccluderList().gridInvCellX(),
                 getShipOccluderList().gridInvCellY(), getShipOccluderList().gridInvCellZ());
-        // Tell the ship FSH which ship we're currently drawing so
-        // vs_sosShipAo can skip its own ship's voxels (whose AO is
-        // already in v_Color.a). Look up the per-frame index assigned by
-        // VsShipOccluderList; 0 means "this ship wasn't populated this
-        // frame" and the shader's compare-against-shipIndex never matches
-        // any real voxel (real voxels start at 1).
-        long currentShipId = CURRENT_SHIP_ID.get();
-        int currentShipIdx = getShipOccluderList().getShipIndex(currentShipId);
-        shipInterface.setCurrentShipIndex(currentShipIdx);
+        // Tell the ship FSH which ship is being drawn, so the seam pass skips that ship's own voxels
+        // -- their occlusion is already baked into v_Color.a by the mesher, and counting it again
+        // double-darkens every concave corner on the hull.
+        //
+        // This reads the index the render loop pushed (vsRenderLayer, pushSelfShipIndex). It used to
+        // read a CURRENT_SHIP_ID ThreadLocal that the merge left orphaned -- upstream set it in the
+        // loop this branch replaced, so it kept its initial 0 forever, getShipIndex(0) returned 0,
+        // and the shader's `owner == selfShipIndex` never matched a real voxel (they start at 1).
+        // Self-occlusion was therefore never removed on this generation.
+        //
+        // -1 when no ship is being drawn, which likewise matches no voxel.
+        shipInterface.setCurrentShipIndex(CURRENT_SELF_SHIP_INDEX.get());
     }
 
     /** Stores transform for the next render() call on the current thread. */
