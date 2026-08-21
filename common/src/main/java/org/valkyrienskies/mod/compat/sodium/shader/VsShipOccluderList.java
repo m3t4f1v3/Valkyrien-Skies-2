@@ -622,14 +622,30 @@ public class VsShipOccluderList {
     }
 
     private void ensureGlObjects() {
-        if (buffer == 0) buffer = GL15.glGenBuffers();
+        if (buffer == 0) buffer = newBackedBuffer();
         if (texture == 0) texture = makeBufferTexture(buffer);
-        if (headerBuffer == 0) headerBuffer = GL15.glGenBuffers();
+        if (headerBuffer == 0) headerBuffer = newBackedBuffer();
         if (headerTexture == 0) headerTexture = makeBufferTexture(headerBuffer);
-        if (shipDirBuffer == 0) shipDirBuffer = GL15.glGenBuffers();
+        if (shipDirBuffer == 0) shipDirBuffer = newBackedBuffer();
         if (shipDirTexture == 0) shipDirTexture = makeBufferTexture(shipDirBuffer);
-        if (gridBuffer == 0) gridBuffer = GL15.glGenBuffers();
+        if (gridBuffer == 0) gridBuffer = newBackedBuffer();
         if (gridTexture == 0) gridTexture = makeBufferTexture(gridBuffer);
+    }
+
+    /**
+     * A buffer name with a real (if empty) data store. glTexBuffer against a name that has never
+     * seen glBufferData leaves the texture incomplete, and sampling it is GL_INVALID_OPERATION --
+     * "Not a valid buffer object", four per frame while the client sits in a world with no ships
+     * yet, on the same driver path that has taken this client down before. One zeroed RGBA32F texel
+     * is enough to make it legal; the shader early-outs on the count uniforms long before it reads
+     * anything here.
+     */
+    private static int newBackedBuffer() {
+        final int buf = GL15.glGenBuffers();
+        GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, buf);
+        GL15.glBufferData(GL31.GL_TEXTURE_BUFFER, new float[] {0f, 0f, 0f, 0f}, GL15.GL_DYNAMIC_DRAW);
+        GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, 0);
+        return buf;
     }
 
     private static int makeBufferTexture(int buf) {

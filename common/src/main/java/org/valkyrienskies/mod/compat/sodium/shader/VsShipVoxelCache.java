@@ -24,7 +24,7 @@ import org.valkyrienskies.core.api.ships.ClientShip;
  * <p>Entries are 8 bytes, two uints, so the stamp compute shader can read them as a {@code uvec2}:
  * <pre>
  *   word0: dx | (dy &lt;&lt; 16)                          offsets from the ship AABB min, uint16 each
- *   word1: dz | (light &lt;&lt; 16) | (solidFlag &lt;&lt; 24)
+ *   word1: dz | (light &lt;&lt; 16) | (solidFlag &lt;&lt; 24) | (occluderFlag &lt;&lt; 25)
  * </pre>
  *
  * <p>Invalidation mirrors {@code ShipRenderObject}'s {@code emittersDirty}: a client block update in a
@@ -354,8 +354,15 @@ public final class VsShipVoxelCache {
                     nonAirSeen++;
                     final boolean isSolid = state.canOcclude()
                         && Block.isShapeFullBlock(state.getOcclusionShape(level, pos));
+                    // The AO occluder set is a SEPARATE test, kept bit-for-bit identical to the one
+                    // upstream-shader-core feeds VsShipOccluderList with (canOcclude + full COLLISION
+                    // shape). It disagrees with the flood's occlusion-shape test on real blocks --
+                    // soul sand, honey, mud are collision-short but occlusion-full -- and the seam AO
+                    // has to see exactly the voxel set its algorithm was verified against.
+                    final boolean isOccluder = state.canOcclude()
+                        && state.isCollisionShapeFullBlock(level, pos);
                     final int light = state.getLightEmission() & 0xF;
-                    if (!isSolid && light == 0) {
+                    if (!isSolid && !isOccluder && light == 0) {
                         continue;
                     }
                     final int dx = sx - xMin;
@@ -366,7 +373,7 @@ public final class VsShipVoxelCache {
                         final long word = voxels.solidPtr + (long) (bit >>> 5) * Integer.BYTES;
                         MemoryUtil.memPutInt(word, MemoryUtil.memGetInt(word) | (1 << (bit & 31)));
                     }
-                    append(voxels, dx, dy, dz, light, isSolid);
+                    append(voxels, dx, dy, dz, light, isSolid, isOccluder);
                 }
             }
         }
@@ -528,11 +535,12 @@ public final class VsShipVoxelCache {
     }
 
     private void append(final ShipVoxels voxels, final int dx, final int dy, final int dz,
-        final int light, final boolean solid) {
+        final int light, final boolean solid, final boolean occluder) {
         voxels.ensureCapacity(voxels.count + 1);
         final long entry = voxels.ptr + (long) voxels.count * BYTES_PER_VOXEL;
         MemoryUtil.memPutInt(entry, (dx & 0xFFFF) | ((dy & 0xFFFF) << 16));
-        MemoryUtil.memPutInt(entry + 4, (dz & 0xFFFF) | (light << 16) | ((solid ? 1 : 0) << 24));
+        MemoryUtil.memPutInt(entry + 4, (dz & 0xFFFF) | (light << 16) | ((solid ? 1 : 0) << 24)
+            | ((occluder ? 1 : 0) << 25));
         voxels.count++;
         if (light > voxels.maxLightLevel) {
             voxels.maxLightLevel = light;

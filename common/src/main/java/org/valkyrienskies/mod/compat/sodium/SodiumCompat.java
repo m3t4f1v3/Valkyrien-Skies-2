@@ -594,6 +594,9 @@ public class SodiumCompat {
                     // that binds, and anything missing here would be left unbound for both.
                     getShipEmitterList().bind(SHIP_EMITTER_LIST_TEXTURE_UNIT);
                     getShipOccluderList().bind(SHIP_OCCLUDER_LIST_TEXTURE_UNIT);
+                    getShipOccluderList().bindHeaders(SEAM_RUN_HEADERS_TEXTURE_UNIT);
+                    getShipOccluderList().bindShipDir(SEAM_SHIP_DIR_TEXTURE_UNIT);
+                    getShipOccluderList().bindGrid(SEAM_GRID_TEXTURE_UNIT);
                     getWorldFromShipStorage().bind(
                         WORLD_FROM_SHIP_SECTIONS_TEXTURE_UNIT, WORLD_FROM_SHIP_LUT_TEXTURE_UNIT);
                 }

@@ -382,12 +382,15 @@ public final class VsGpuLightFlood {
             final float dz = word1 & 0xFFFF;
             final int light = (word1 >>> 16) & 0xFF;
             final boolean solid = ((word1 >>> 24) & 1) != 0;
+            // Bit 25, not bit 24: the seam AO's occluder set is upstream's collision-shape test,
+            // which is not the flood's occlusion-shape test. See VsShipVoxelCache.
+            final boolean occludes = ((word1 >>> 25) & 1) != 0;
 
             final double wx = m.m00 * dx + m.m10 * dy + m.m20 * dz + originX;
             final double wy = m.m01 * dx + m.m11 * dy + m.m21 * dz + originY;
             final double wz = m.m02 * dx + m.m12 * dy + m.m22 * dz + originZ;
 
-            if (solid) {
+            if (occludes) {
                 occluders.appendOccluder(wx, wy, wz, shipIndex, qx, qy, qz, qw);
             }
             if (light > 0) {
