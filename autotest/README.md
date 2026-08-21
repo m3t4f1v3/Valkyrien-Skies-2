@@ -26,7 +26,7 @@ The seam AO's situations come from the Python verification suite in `claude-scra
 situations in the running game, and `autotest/score_ao.py` checks the same invariants.
 
 ```
-autotest/ao_all.sh [legacy|backport]      # run all four and score them
+autotest/ao_all.sh [legacy|backport]      # run all five, score them, and compare against seam5
 ```
 
 They run with `debugFloodPaint=5` (`VS_DEBUG_SEAM_AO`), which replaces the shaded colour with the AO
@@ -48,8 +48,11 @@ What each group is actually asserting:
   it as one ship. This is the property the cross-ship responsibility weighting exists to produce.
 - **rigidity** — the field must translate and rotate *rigidly* with the occluder ship. The rejected
   receiver-anchored variant sampled on the world grid, so an off-grid ship made the shadow drag.
-  Scored by loss histogram, not a registered pixel diff: re-registering needs a resample, and a
-  resample blurs by about the amount of drag being looked for.
+  Scored as `verify4` scored it: the field total across the sweep, where the shipped algorithm holds
+  to <=0.02 and the drifting one jumped 0.16-0.20. Not by registering two frames and diffing them
+  (re-registering needs a resample, and a resample blurs by about the amount of drag being looked
+  for), and not by loss histogram either — that was tried and measures binning noise, since a few
+  hundred lit pixels over 64 bins move across bin edges for any sub-pixel shift.
 - **merging** — two touching separate ships must look like the same two cells as one ship, and the
   one-block-gap merge bridge must survive the partner rotating.
 - **contact** — the band weighting through flush → hover → past support. A flush ship casts full AO
