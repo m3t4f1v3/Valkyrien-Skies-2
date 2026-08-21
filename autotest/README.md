@@ -64,6 +64,20 @@ What each group is actually asserting:
   the pixels-per-block scale drops out. It needs `claude-scratchpad/` present (it is gitignored); if
   the reference is missing it exits 2 rather than passing.
 
+### Looking at the paint
+
+The painted frames are close to black on screen — the loss beside a one-block ship peaks around 0.2
+of a 0..1 channel — so they are readable as measurements but not as pictures.
+
+```
+python3 autotest/paint_panels.py     # -> forge/run/screenshots/panels/*.png
+```
+
+crops each group of frames to one shared window and maps the loss through a colormap on a shared
+scale. No smoothing and no per-frame normalisation: the numbers under the colours are the same ones
+`score_ao.py` and `ref_merge.py` scored. The dark rectangle in the middle of each cell is the ship's
+own footprint hiding the floor, not an absence of AO.
+
 ### Scene hooks
 
 The AO situations are comparisons between arrangements of several small ships, which the older
