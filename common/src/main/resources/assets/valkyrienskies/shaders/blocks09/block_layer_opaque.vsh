@@ -51,6 +51,14 @@ out vec3 v_CameraRelWorldPos;
 #if defined(VS_DYNAMIC_LIGHT) || defined(VS_DYNAMIC_SHADE) || defined(VS_SHIP_ON_SHIP)
 flat out vec3 v_WorldNormal;
 #endif
+#ifdef VS_SHIP_ON_SHIP
+// This vertex's shipyard-local position and shipyard-space face normal. The FSH interpolates
+// v_ShipyardPos to each fragment and rebuilds the block face it sits on in shipyard space (where
+// floor() finds voxel boundaries), then lifts it to world space via u_TransformMatrix for the
+// per-fragment seam AO. Same pair the 0.5 shader carries.
+out vec3 v_ShipyardPos;
+flat out vec3 v_ShipyardNormal;
+#endif
 // Decoded VS vertex flags packed by the BlockRenderer mixin into the alpha byte of the vertex colour.
 // See VsVertexFlagPacker for the packing contract:
 //   alpha bits 0-2: AO level (0..5 mapped to 0/0.2/0.4/0.6/0.8/1.0)
@@ -196,6 +204,14 @@ void main() {
     // All four vertices of a quad share the same face slot, so flat-interpolating this is exact.
     vec3 shipyardNormal = vs_faceSlotToNormal(faceSlot);
     v_WorldNormal = normalize((u_TransformMatrix * vec4(shipyardNormal, 0.0)).xyz);
+#endif
+
+#ifdef VS_SHIP_ON_SHIP
+    // Forwarded raw: the seam pass only ever uses DIFFERENCES from this fragment's own position, and
+    // the region/draw translation it omits is a whole number of blocks, so floor() boundaries in the
+    // shipyard lattice land in the same places either way.
+    v_ShipyardPos = _vert_position;
+    v_ShipyardNormal = shipyardNormal;
 #endif
 
 #ifdef VS_DYNAMIC_BIOME

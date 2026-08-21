@@ -32,6 +32,11 @@ public final class VsDynamicLight {
     public static final int WORLD_FROM_SHIP_LUT_TEXTURE_UNIT = 11;
     public static final int SHIP_EMITTER_LIST_TEXTURE_UNIT = 12;
     public static final int SHIP_OCCLUDER_LIST_TEXTURE_UNIT = 13;
+    // Seam-AO acceleration buffers (sub-run headers, per-ship directory, spatial grid). The 0.5 path
+    // has its own copies of these numbers; only the 0.9 path reads them from here.
+    public static final int SEAM_RUN_HEADERS_TEXTURE_UNIT = 14;
+    public static final int SEAM_SHIP_DIR_TEXTURE_UNIT = 15;
+    public static final int SEAM_GRID_TEXTURE_UNIT = 16;
 
     private static VsShipLightStorage lightStorage;
     private static VsShipBiomeColorStorage biomeStorage;

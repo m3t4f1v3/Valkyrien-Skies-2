@@ -1,6 +1,7 @@
 package org.valkyrienskies.mod.compat.sodium09;
 
 import net.caffeinemc.mods.sodium.client.gl.shader.uniform.GlUniformFloat3v;
+import net.caffeinemc.mods.sodium.client.gl.shader.uniform.GlUniformFloat4v;
 import net.caffeinemc.mods.sodium.client.gl.shader.uniform.GlUniformInt;
 import net.caffeinemc.mods.sodium.client.render.chunk.shader.ChunkShaderOptions;
 import net.caffeinemc.mods.sodium.client.render.chunk.shader.DefaultShaderInterface;
@@ -19,6 +20,15 @@ public class WorldThing extends DefaultShaderInterface {
     private final GlUniformInt uniformShipEmitterCount;
     private final GlUniformInt uniformShipOccluders;
     private final GlUniformInt uniformShipOccluderCount;
+    // Seam-AO acceleration structures: sub-run headers, per-ship directory (pose + cross-ship merge
+    // claims), global bounds and the coarse spatial grid. Same set the 0.5 path binds.
+    private final GlUniformInt uniformSeamRuns;
+    private final GlUniformInt uniformSeamRunCount;
+    private final GlUniformInt uniformSeamShipDir;
+    private final GlUniformFloat4v uniformSeamBounds;
+    private final GlUniformInt uniformSeamGrid;
+    private final GlUniformFloat3v uniformSeamGridOrigin;
+    private final GlUniformFloat3v uniformSeamGridInvCell;
     // Compute-flooded ship light; only bound under VS_FLOOD_GRID, because sodium's bindUniform throws
     // on a name the linked program doesn't declare.
     private final GlUniformInt uniformWorldFromShipSections;
@@ -44,6 +54,18 @@ public class WorldThing extends DefaultShaderInterface {
             ? context.bindUniform("u_VsShipOccluders", GlUniformInt::new) : null;
         this.uniformShipOccluderCount = shipAo
             ? context.bindUniform("u_VsShipOccluderCount", GlUniformInt::new) : null;
+        this.uniformSeamRuns = shipAo ? context.bindUniform("u_VsSeamRuns", GlUniformInt::new) : null;
+        this.uniformSeamRunCount = shipAo
+            ? context.bindUniform("u_VsSeamRunCount", GlUniformInt::new) : null;
+        this.uniformSeamShipDir = shipAo
+            ? context.bindUniform("u_VsSeamShipDir", GlUniformInt::new) : null;
+        this.uniformSeamBounds = shipAo
+            ? context.bindUniform("u_VsSeamBounds", GlUniformFloat4v::new) : null;
+        this.uniformSeamGrid = shipAo ? context.bindUniform("u_VsSeamGrid", GlUniformInt::new) : null;
+        this.uniformSeamGridOrigin = shipAo
+            ? context.bindUniform("u_VsSeamGridOrigin", GlUniformFloat3v::new) : null;
+        this.uniformSeamGridInvCell = shipAo
+            ? context.bindUniform("u_VsSeamGridInvCell", GlUniformFloat3v::new) : null;
         this.uniformWorldFromShipSections = floodGrid
             ? context.bindUniform("u_VsWorldFromShipSections", GlUniformInt::new) : null;
         this.uniformWorldFromShipLut = floodGrid
@@ -89,5 +111,26 @@ public class WorldThing extends DefaultShaderInterface {
         }
         this.uniformShipOccluders.setInt(textureUnit);
         this.uniformShipOccluderCount.setInt(count);
+    }
+
+    public void setSeamData(final int runsTextureUnit, final int runCount, final int shipDirTextureUnit,
+        final float boundsCx, final float boundsCy, final float boundsCz, final float boundsRadius) {
+        if (this.uniformSeamRuns == null) {
+            return;
+        }
+        this.uniformSeamRuns.setInt(runsTextureUnit);
+        this.uniformSeamRunCount.setInt(runCount);
+        this.uniformSeamShipDir.setInt(shipDirTextureUnit);
+        this.uniformSeamBounds.set(new float[] {boundsCx, boundsCy, boundsCz, boundsRadius});
+    }
+
+    public void setSeamGrid(final int gridTextureUnit, final float ox, final float oy, final float oz,
+        final float icx, final float icy, final float icz) {
+        if (this.uniformSeamGrid == null) {
+            return;
+        }
+        this.uniformSeamGrid.setInt(gridTextureUnit);
+        this.uniformSeamGridOrigin.set(ox, oy, oz);
+        this.uniformSeamGridInvCell.set(icx, icy, icz);
     }
 }

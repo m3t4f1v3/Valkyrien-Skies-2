@@ -71,6 +71,9 @@ public abstract class MixinDefaultChunkRenderer {
                     SodiumCompat.WORLD_FROM_SHIP_SECTIONS_TEXTURE_UNIT,
                     SodiumCompat.WORLD_FROM_SHIP_LUT_TEXTURE_UNIT);
                 SodiumCompat.getShipOccluderList().bind(SodiumCompat.SHIP_OCCLUDER_LIST_TEXTURE_UNIT);
+                SodiumCompat.getShipOccluderList().bindHeaders(SodiumCompat.SEAM_RUN_HEADERS_TEXTURE_UNIT);
+                SodiumCompat.getShipOccluderList().bindShipDir(SodiumCompat.SEAM_SHIP_DIR_TEXTURE_UNIT);
+                SodiumCompat.getShipOccluderList().bindGrid(SodiumCompat.SEAM_GRID_TEXTURE_UNIT);
                 SodiumCompat.recordListsBound();
             }
             return;
@@ -97,6 +100,9 @@ public abstract class MixinDefaultChunkRenderer {
                     SodiumCompat.WORLD_FROM_SHIP_SECTIONS_TEXTURE_UNIT,
                     SodiumCompat.WORLD_FROM_SHIP_LUT_TEXTURE_UNIT);
                 SodiumCompat.getShipOccluderList().bind(SodiumCompat.SHIP_OCCLUDER_LIST_TEXTURE_UNIT);
+                SodiumCompat.getShipOccluderList().bindHeaders(SodiumCompat.SEAM_RUN_HEADERS_TEXTURE_UNIT);
+                SodiumCompat.getShipOccluderList().bindShipDir(SodiumCompat.SEAM_SHIP_DIR_TEXTURE_UNIT);
+                SodiumCompat.getShipOccluderList().bindGrid(SodiumCompat.SEAM_GRID_TEXTURE_UNIT);
                 SodiumCompat.recordListsBound();
             }
             return;

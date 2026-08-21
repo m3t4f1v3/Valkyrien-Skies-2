@@ -1,5 +1,7 @@
 package org.valkyrienskies.mod.compat.sodium09;
 
+import net.caffeinemc.mods.sodium.client.gl.shader.uniform.GlUniformFloat3v;
+import net.caffeinemc.mods.sodium.client.gl.shader.uniform.GlUniformFloat4v;
 import net.caffeinemc.mods.sodium.client.gl.shader.uniform.GlUniformInt;
 import net.caffeinemc.mods.sodium.client.gl.shader.uniform.GlUniformMatrix4f;
 import net.caffeinemc.mods.sodium.client.render.chunk.shader.ChunkShaderOptions;
@@ -46,7 +48,16 @@ public class ShipThing extends DefaultShaderInterface {
     // geometry).
     private final GlUniformInt uniformShipOccluders;
     private final GlUniformInt uniformShipOccluderCount;
+    // Per-frame dense index of the ship being drawn. Named u_VsCurrentShipIndex to match the shader
+    // block copied verbatim from the 0.5 path; it is the same quantity setSelfShipIndex always carried.
     private final GlUniformInt uniformSelfShipIndex;
+    private final GlUniformInt uniformSeamRuns;
+    private final GlUniformInt uniformSeamRunCount;
+    private final GlUniformInt uniformSeamShipDir;
+    private final GlUniformFloat4v uniformSeamBounds;
+    private final GlUniformInt uniformSeamGrid;
+    private final GlUniformFloat3v uniformSeamGridOrigin;
+    private final GlUniformFloat3v uniformSeamGridInvCell;
     // Compute-flooded ship light, used to gate the emitter falloff so hulls block it; only when
     // VS_FLOOD_GRID.
     private final GlUniformInt uniformWorldFromShipSections;
@@ -93,7 +104,20 @@ public class ShipThing extends DefaultShaderInterface {
             (shipOnShip && shipAo) ? context.bindUniform("u_VsShipOccluderCount", GlUniformInt::new) : null;
         // Read only by the AO loop, which is compiled out unless VS_SHIP_AO.
         this.uniformSelfShipIndex = (shipOnShip && shipAo)
-            ? context.bindUniform("u_VsSelfShipIndex", GlUniformInt::new) : null;
+            ? context.bindUniform("u_VsCurrentShipIndex", GlUniformInt::new) : null;
+        final boolean seamAo = shipOnShip && shipAo;
+        this.uniformSeamRuns = seamAo ? context.bindUniform("u_VsSeamRuns", GlUniformInt::new) : null;
+        this.uniformSeamRunCount = seamAo
+            ? context.bindUniform("u_VsSeamRunCount", GlUniformInt::new) : null;
+        this.uniformSeamShipDir = seamAo
+            ? context.bindUniform("u_VsSeamShipDir", GlUniformInt::new) : null;
+        this.uniformSeamBounds = seamAo
+            ? context.bindUniform("u_VsSeamBounds", GlUniformFloat4v::new) : null;
+        this.uniformSeamGrid = seamAo ? context.bindUniform("u_VsSeamGrid", GlUniformInt::new) : null;
+        this.uniformSeamGridOrigin = seamAo
+            ? context.bindUniform("u_VsSeamGridOrigin", GlUniformFloat3v::new) : null;
+        this.uniformSeamGridInvCell = seamAo
+            ? context.bindUniform("u_VsSeamGridInvCell", GlUniformFloat3v::new) : null;
         this.uniformWorldFromShipSections =
             floodGrid ? context.bindUniform("u_VsWorldFromShipSections", GlUniformInt::new) : null;
         this.uniformWorldFromShipLut =
@@ -178,5 +202,26 @@ public class ShipThing extends DefaultShaderInterface {
         if (this.uniformWorldFromShipLut != null) {
             this.uniformWorldFromShipLut.setInt(lutUnit);
         }
+    }
+
+    public void setSeamData(final int runsTextureUnit, final int runCount, final int shipDirTextureUnit,
+        final float boundsCx, final float boundsCy, final float boundsCz, final float boundsRadius) {
+        if (this.uniformSeamRuns == null) {
+            return;
+        }
+        this.uniformSeamRuns.setInt(runsTextureUnit);
+        this.uniformSeamRunCount.setInt(runCount);
+        this.uniformSeamShipDir.setInt(shipDirTextureUnit);
+        this.uniformSeamBounds.set(new float[] {boundsCx, boundsCy, boundsCz, boundsRadius});
+    }
+
+    public void setSeamGrid(final int gridTextureUnit, final float ox, final float oy, final float oz,
+        final float icx, final float icy, final float icz) {
+        if (this.uniformSeamGrid == null) {
+            return;
+        }
+        this.uniformSeamGrid.setInt(gridTextureUnit);
+        this.uniformSeamGridOrigin.set(ox, oy, oz);
+        this.uniformSeamGridInvCell.set(icx, icy, icz);
     }
 }

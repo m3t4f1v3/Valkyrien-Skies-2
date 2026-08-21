@@ -51,9 +51,23 @@ uniform int u_VsShipEmitterCount;
 // the voxel's ship-local frame. That makes each voxel's octagonal shadow rotate with its ship instead of
 // staying world-axis-aligned.
 #ifdef VS_SHIP_AO
+// Per-frame list of solid ship voxel CENTERS in world space, paired with the
+// voxel's owning-ship rotation quaternion (see VsShipOccluderList). Consumed
+// PER-FRAGMENT by ws_seamAoFrag below for ship-to-world AO seam matching.
 uniform samplerBuffer u_VsShipOccluders;
 uniform int u_VsShipOccluderCount;
-#endif
+uniform samplerBuffer u_VsSeamRuns;
+uniform int u_VsSeamRunCount;
+uniform samplerBuffer u_VsSeamShipDir;
+uniform vec4 u_VsSeamBounds;
+// Coarse spatial grid over SUB-RUNS: cell = floor((worldPos - origin)*invCell).
+// Buffer = per-cell (offset,count) headers then a flat sub-run-index list, so a
+// fragment processes only the sub-runs actually near it, not a big ship's whole
+// run list. See VsShipOccluderList.
+uniform samplerBuffer u_VsSeamGrid;
+uniform vec3 u_VsSeamGridOrigin;
+uniform vec3 u_VsSeamGridInvCell;
+#endif // VS_SHIP_AO
 
 // Inverse-rotate v by quaternion q (i.e., apply q^-1 = (-q.xyz, q.w) to v). Used to express world-frame
 // offsets in the owning ship's local frame so the SDF / distance metrics line up with the ship's axes.
@@ -131,101 +145,332 @@ vec4 ws_sampleRGSS(sampler2D source, vec2 uv, vec2 pixelSize) {
     return mix(nearestColor, rgssColor, blendFactor);
 }
 #ifdef VS_SHIP_AO
-
-// Loop bound for the per-fragment ship-occluder scan. Should match VsShipOccluderList.MAX_OCCLUDERS —
-// 1024 fits but is excessive per fragment; 128 covers typical scenes (a single mid-size ship's solid
-// voxels), excess entries beyond this cap are silently ignored.
-const int VS_OCCLUDER_LOOP_CAP = 128;
-
-// Per-fragment ship AO via voxel-position iteration.
+// ===== Ship-to-world AO (PER-FRAGMENT, occluder-lattice, cross-ship merge) ==========
+// Vanilla AO evaluated in occluder-SHIP lattices, sliced by this face, per
+// fragment -- with CROSS-SHIP MERGING. The CPU precomputes sub-run bounding
+// spheres plus a per-ship directory (pose, material responsibility r, top-4
+// claim partners). The shader first discovers nearby source runs, expands them
+// to host lattices through the directory, then only scans sub-runs whose sphere
+// can touch this fragment's finite support.
 //
-// For each ship voxel center (in world coords, stored as a continuous float — so the position smoothly
-// tracks the ship's transform including rotation), compute its contribution to this fragment's AO based
-// on:
-//   * d_n (component along the face normal): how far the voxel is in the outward direction. Voxels in
-//     the half-space behind the face (d_n <= 0) are skipped.
-//   * the in-plane offset: how far the voxel is laterally from the fragment's projected position.
-// Smooth falloff in both directions; sum contributions, clamp to 1.
-//
-// This replaces the cell-storage-based AO that operated on grid-aligned world cells — that approach
-// quantized voxel positions to cells and the AO pattern could only morph between cell-aligned configs.
-// With the voxel list, every voxel's exact transformed position contributes, so the AO shape rotates and
-// translates continuously with the ship.
-float ws_shipAo(vec3 worldPosWorld, vec3 nf) {
-    int n = min(u_VsShipOccluderCount, VS_OCCLUDER_LOOP_CAP);
+// Per host lattice the field is vanilla AoFaceData, made continuous:
+//  - voxel BANDS along the dominant normal axis are weighted by overlap with
+//    the unit slab in front of the face (flush contact = 1, hover/sink fade
+//    linearly, behind-face = 0, multi-deck lerps between layers);
+//  - per face corner the count is the 4 QUADRANT occupancies around the
+//    lattice vertex plus a diagonal-pair bonus
+//        max(0, min(diag1) - max(diag2)) + max(0, min(diag2) - max(diag1));
+//  - the 4 corner losses are interpolated with the vanilla two-triangle rule
+//    (ws_seamInterp). Hosts SUM (vanilla sums per-sample losses), clamped to
+//    the 0.2-multiplier floor.
+const int WS_SEAM_SUBRUN_LOOP_CAP = 32;
+const int WS_SEAM_MAX_HOSTS = 4;
+// Spatial grid over SUB-RUNS: buffer is GRID_CELLS header texels (offset,count)
+// then a flat sub-run-index list packed 4/texel. Must match VsShipOccluderList.
+const int WS_SEAM_GRID_DIM = 8;
+const int WS_SEAM_GRID_CELLS = 8 * 8 * 8;
+// Safety bound on sub-runs examined per cell.
+const int WS_SEAM_CELL_LOOP_CAP = 512;
+// Darkening per solid sample: vanilla getShadeBrightness() is 0.2 for a solid
+// block, and each solid sample lowers the 4-sample vertex average by 0.2.
+const float WS_SEAM_STRENGTH = 0.2;
+// Vanilla's AO floor is a 0.2 multiplier: at most 0.8 of the light lost.
+const float WS_SEAM_MAX_TOTAL = 0.8;
+// Finite support for the tent-injected voxel field: a voxel farther than this
+// (world distance) from the fragment contributes exactly zero, so it is culled
+// with no fade. The tent product (three half-width-1 tents over u/v/normal
+// cells) collapses to 0 well before the theoretical 3x2.5-box corner (~4.33),
+// so 3.7 is measured drift-free vs the 4.5 the field was originally sized for
+// (see claude-scratchpad/probe_support.py). Smaller = fewer voxels survive the
+// cull and a tighter grid binning, both per-fragment wins. MUST match
+// VsShipOccluderList.SEAM_SUPPORT (grid fattening) and seam5.SUPPORT.
+const float WS_SEAM_SUPPORT = 3.7;
+// DEBUG: world-space radius of the dot drawn at each sampled lattice corner.
+const float WS_DBG_VERTEX_RADIUS = 0.06;
 
-    float occlusionManhattan = 0.0;
-    float occlusionCorner = 0.0;
-    int cornerContributors = 0;
+vec3 ws_seamQuatRotate(vec4 q, vec3 v) {
+    return v + 2.0 * cross(q.xyz, cross(q.xyz, v) + q.w * v);
+}
 
-    for (int i = 0; i < n; i++) {
-        // Two texels per voxel: position (with payload in .w) and the owning ship's rotation quaternion.
-        // Apply q^-1 to the fragment-to-voxel offset and to the world face normal to get both into the
-        // voxel's ship-local frame; pick face-local U/V from the rotated normal so the SDF axes track
-        // the ship.
-        vec4 voxel = texelFetch(u_VsShipOccluders, i * 2);
-        vec4 q = texelFetch(u_VsShipOccluders, i * 2 + 1);
+// Inverse-rotation matrix R(q)^T, so Rinv * v == vs_quatRotateInv(q, v). Built
+// ONCE per host lattice and reused for the fragment, the normal and every
+// stamped voxel: a mat3*vec3 (~15 flops) is roughly half a per-voxel
+// quaternion double-cross (~30), and the voxel loop is the shader's hot path.
+mat3 ws_seamRotInvMat(vec4 q) {
+    float x = q.x, y = q.y, z = q.z, w = q.w;
+    // columns = rows of the forward rotation matrix R
+    return mat3(
+        1.0 - 2.0 * (y * y + z * z), 2.0 * (x * y - z * w),       2.0 * (x * z + y * w),
+        2.0 * (x * y + z * w),       1.0 - 2.0 * (x * x + z * z), 2.0 * (y * z - x * w),
+        2.0 * (x * z - y * w),       2.0 * (y * z + x * w),       1.0 - 2.0 * (x * x + y * y));
+}
 
-        vec3 d_world = voxel.xyz - worldPosWorld;
-        vec3 d_ship = vs_quatRotateInv(q, d_world);
-        vec3 nf_ship = vs_quatRotateInv(q, nf);
+// Vanilla-style interpolation of the 4 corner losses across the face:
+// linear over the quad's two triangles. Sodium picks the split diagonal
+// (ModelQuadOrientation.orientByBrightness, NORMAL iff br[0]+br[2] >
+// br[1]+br[3]) so the crease runs through the opposite corner pair with the
+// greater brightness -- in loss terms the SMALLER loss sum. The two splits
+// coincide identically when the sums tie, so the flip is continuous.
+// c = (L00, L10, L01, L11).
+float ws_seamInterp(vec4 c, vec2 uv) {
+    if (c.x + c.w <= c.y + c.z) {           // crease through 00-11
+        return uv.x >= uv.y
+            ? c.x + (c.y - c.x) * uv.x + (c.w - c.y) * uv.y
+            : c.x + (c.w - c.z) * uv.x + (c.z - c.x) * uv.y;
+    } else {                                // crease through 10-01
+        return uv.x + uv.y <= 1.0
+            ? c.x + (c.y - c.x) * uv.x + (c.z - c.x) * uv.y
+            : c.w + (c.z - c.w) * (1.0 - uv.x) + (c.y - c.w) * (1.0 - uv.y);
+    }
+}
 
-        float d_n = dot(d_ship, nf_ship);
-        if (d_n <= 0.0 || d_n >= 1.5) continue;
-        float fn = 1.0 - smoothstep(0.5, 1.5, d_n);
+float ws_seamDistSq(vec3 a, vec3 b) {
+    vec3 d = a - b;
+    return dot(d, d);
+}
 
-        // Build a stable orthonormal face basis from the SHIP-frame normal. The old threshold picker
-        // could choose the same axis for U and V when nf_ship was diagonal in X/Z, collapsing the
-        // footprint into a one-dimensional strip and producing very long shadows.
-        vec3 helper = abs(nf_ship.y) < 0.9 ? vec3(0, 1, 0) : vec3(1, 0, 0);
-        vec3 uAxis = normalize(cross(helper, nf_ship));
-        vec3 vAxis = cross(nf_ship, uAxis);
-        float du = dot(d_ship, uAxis);
-        float dv = dot(d_ship, vAxis);
+float ws_seamClaim(int ownerShip, int hostShip) {
+    if (ownerShip == hostShip) return 1.0;
+    if (ownerShip <= 0 || hostShip <= 0) return 0.0;
+    vec4 claims = texelFetch(u_VsSeamShipDir, ownerShip * 6 + 2);
+    ivec4 partners = floatBitsToInt(texelFetch(u_VsSeamShipDir, ownerShip * 6 + 3));
+    if (partners.x == hostShip) return claims.x;
+    if (partners.y == hostShip) return claims.y;
+    if (partners.z == hostShip) return claims.z;
+    if (partners.w == hostShip) return claims.w;
+    return 0.0;
+}
 
-        // Manhattan-distance SDF of the voxel's face-plane box. Reproduces vanilla MC's exact AO shape
-        // for an isolated occluder:
-        //   - inside the voxel's 1x1 footprint: full 1/3 contribution.
-        //   - axially adjacent cells: linear 1/3 -> 0 ramp over 1 cell.
-        //   - diagonally adjacent cells: triangular falloff cut by the 45 degree Manhattan iso-line —
-        //     vanilla's clean-triangle corner.
-        //
-        // halfSize 0.5: voxel is a unit cell on the face plane. tent reaches 0 at distance 1 cell from
-        // the box (matching vanilla's 1-cell AO reach). Voxel position is continuous, so the shape
-        // translates AND rotates with voxels — no per-cell decomposition, no world-grid anchoring.
-        float dU = abs(du) - 0.5;
-        float dV = abs(dv) - 0.5;
-        float manhattan = max(0.0, 1.0 - max(dU, 0.0) - max(dV, 0.0));
+// Host slots live in built-in mat4/ivec4/vec4 (NOT arrays), so dynamic
+// indexing stays in registers instead of spilling to local memory. hostQ /
+// hostAnchor columns are the 4 slots' quats / (anchor,0); hostShip / hostR are
+// per-slot components.
+void ws_seamAddHost(int shipIdx, inout int hostCount,
+        inout ivec4 hostShip, inout mat4 hostQ, inout mat4 hostAnchor,
+        inout vec4 hostR) {
+    if (shipIdx <= 0) return;
+    for (int h = 0; h < WS_SEAM_MAX_HOSTS; h++) {
+        if (h >= hostCount) break;
+        if (hostShip[h] == shipIdx) return;
+    }
+    if (hostCount >= WS_SEAM_MAX_HOSTS) return;
 
-        // Diagonal corner-cell extra for the "X X" case (two voxels with a 1-cell gap between them).
-        // Manhattan alone falls to 0 along |du|+|dv|=1, so each X contributes 0 at the gap-front
-        // fragment (dU=0.5, dV=0.5 from each), leaving a bright wedge where vanilla has continuous AO.
-        // The corner-extra term promotes the tent to bilinear (1-dU)(1-dV) inside the diagonal cell,
-        // filling the gap to 1/12 per voxel. Factors clamp at 0/1 so distant voxels contribute nothing.
-        //
-        // Gated below by `cornerContributors >= 2`: the corner cell is filled only when at least two
-        // voxels are themselves landing a cornerExtra contribution at this fragment — the X-X-gap
-        // signature. An isolated voxel triggers at most one corner contributor (its own diagonal cell)
-        // so the fill is dropped and the clean Manhattan octagon is preserved. Adjacent voxels (XX, no
-        // gap) also drop the fill: only the diagonal voxel of the pair has cornerExtra > 0; the axial
-        // voxel's contribution goes to Manhattan, doesn't bump cornerContributors, so the single corner
-        // contributor isn't enough to fill.
-        float fU = clamp(1.0 - dU, 0.0, 1.0);
-        float fV = clamp(1.0 - dV, 0.0, 1.0);
-        float cornerExtra = max(0.0, fU * fV - manhattan);
+    vec4 ar = texelFetch(u_VsSeamShipDir, shipIdx * 6 + 1);
+    hostShip[hostCount] = shipIdx;
+    hostQ[hostCount] = texelFetch(u_VsSeamShipDir, shipIdx * 6);
+    hostAnchor[hostCount] = vec4(ar.xyz, 0.0);
+    hostR[hostCount] = ar.w;               // responsibility r, cached for pass 2
+    hostCount++;
+}
 
-        occlusionManhattan += (1.0 / 3.0) * fn * manhattan;
-        float contribC = (1.0 / 3.0) * fn * cornerExtra;
-        occlusionCorner += contribC;
-        if (contribC > 0.0) {
-            cornerContributors++;
+mat3 ws_seamStamp(vec3 c, int a, int u, int v, int cu, int cv) {
+    vec3 uCenter = vec3(float(cu) - 0.5, float(cu) + 0.5, float(cu) + 1.5);
+    vec3 vCenter = vec3(float(cv) - 0.5, float(cv) + 0.5, float(cv) + 1.5);
+    vec3 tu = max(vec3(0.0), vec3(1.0) - abs(vec3(c[u]) - uCenter));
+    vec3 tv = max(vec3(0.0), vec3(1.0) - abs(vec3(c[v]) - vCenter));
+    return mat3(tv * tu.x, tv * tu.y, tv * tu.z);
+}
+
+mat3 ws_seamClampOcc(mat3 m) {
+    m[0] = min(m[0], vec3(1.0));
+    m[1] = min(m[1], vec3(1.0));
+    m[2] = min(m[2], vec3(1.0));
+    return m;
+}
+
+float ws_seamCorner(float qA, float qB, float qC, float qD) {
+    float bonus = max(0.0, min(qA, qD) - max(qB, qC))
+                + max(0.0, min(qB, qC) - max(qA, qD));
+    return WS_SEAM_STRENGTH * (qA + qB + qC + qD + bonus);
+}
+
+vec4 ws_seamCorners(mat3 occ) {
+    return vec4(
+        ws_seamCorner(occ[0][0], occ[1][0], occ[0][1], occ[1][1]),
+        ws_seamCorner(occ[1][0], occ[2][0], occ[1][1], occ[2][1]),
+        ws_seamCorner(occ[0][1], occ[1][1], occ[0][2], occ[1][2]),
+        ws_seamCorner(occ[1][1], occ[2][1], occ[1][2], occ[2][2])
+    );
+}
+
+float ws_seamAoFrag(vec3 fragWorldPos, vec3 normal, int selfShipIndex, out float dbgVertex) {
+    dbgVertex = 0.0;
+
+    if (u_VsShipOccluderCount <= 0 || u_VsSeamRunCount <= 0) return 0.0;
+    float globalR = u_VsSeamBounds.w + WS_SEAM_SUPPORT;
+    if (ws_seamDistSq(fragWorldPos, u_VsSeamBounds.xyz) > globalR * globalR) return 0.0;
+
+    // ---- pass 1: nearby SHIPS -> host lattices ----------------------------
+    // Two-level cull: iterate the ship directory and reject each far ship with
+    // ONE bounding-sphere texel; a near ship (and its claim partners) becomes a
+    // host lattice. No per-run cache is kept (that array hurt occupancy) --
+    // pass 2 re-walks the same cheap two-level scan keyed by owner.
+    mat4 hostQ;
+    mat4 hostAnchor;
+    ivec4 hostShip = ivec4(0);
+    vec4 hostR = vec4(0.0);
+    int hostCount = 0;
+    // This fragment's grid cell + its sub-run list (offset,count).
+    ivec3 gi = ivec3(floor((fragWorldPos - u_VsSeamGridOrigin) * u_VsSeamGridInvCell));
+    if (any(lessThan(gi, ivec3(0))) || any(greaterThanEqual(gi, ivec3(WS_SEAM_GRID_DIM)))) return 0.0;
+    int cell = (gi.z * WS_SEAM_GRID_DIM + gi.y) * WS_SEAM_GRID_DIM + gi.x;
+    ivec2 cellOC = floatBitsToInt(texelFetch(u_VsSeamGrid, cell)).xy;  // (offset, count)
+
+    for (int i = 0; i < WS_SEAM_CELL_LOOP_CAP; i++) {
+        if (i >= cellOC.y) break;
+        int e = cellOC.x + i;
+        int ri = floatBitsToInt(texelFetch(u_VsSeamGrid, WS_SEAM_GRID_CELLS + (e >> 2)))[e & 3];
+
+        vec4 head = texelFetch(u_VsSeamRuns, ri * 2);
+        float runR = head.w + WS_SEAM_SUPPORT;
+        if (ws_seamDistSq(fragWorldPos, head.xyz) > runR * runR) continue;
+        int owner = floatBitsToInt(texelFetch(u_VsSeamRuns, ri * 2 + 1).z) & 0xFFFF;
+        if (owner <= 0) continue;
+        // owner already a host? then its partners are too -- skip the fetches
+        bool known = false;
+        for (int o = 0; o < WS_SEAM_MAX_HOSTS; o++) {
+            if (o >= hostCount) break;
+            if (hostShip[o] == owner) { known = true; break; }
+        }
+        if (known) continue;
+
+        ws_seamAddHost(owner, hostCount, hostShip, hostQ, hostAnchor, hostR);
+        vec4 claims = texelFetch(u_VsSeamShipDir, owner * 6 + 2);
+        ivec4 partners = floatBitsToInt(texelFetch(u_VsSeamShipDir, owner * 6 + 3));
+        if (claims.x > 0.0) ws_seamAddHost(partners.x, hostCount, hostShip, hostQ, hostAnchor, hostR);
+        if (claims.y > 0.0) ws_seamAddHost(partners.y, hostCount, hostShip, hostQ, hostAnchor, hostR);
+        if (claims.z > 0.0) ws_seamAddHost(partners.z, hostCount, hostShip, hostQ, hostAnchor, hostR);
+        if (claims.w > 0.0) ws_seamAddHost(partners.w, hostCount, hostShip, hostQ, hostAnchor, hostR);
+    }
+    if (hostCount == 0) return 0.0;
+
+    // Cache the claim of every host (as material OWNER) to every host (as
+    // lattice), so pass 2 needs zero ship-directory fetches. Owners with
+    // nearby runs are always among these hosts (they were added as sources);
+    // hostClaim[ownerSlot][hostSlot] = claim, with the diagonal = 1.
+    mat4 hostClaim = mat4(0.0);
+    for (int o = 0; o < WS_SEAM_MAX_HOSTS; o++) {
+        if (o >= hostCount) break;
+        int os = hostShip[o];
+        vec4 claims = texelFetch(u_VsSeamShipDir, os * 6 + 2);
+        ivec4 partners = floatBitsToInt(texelFetch(u_VsSeamShipDir, os * 6 + 3));
+        for (int h = 0; h < WS_SEAM_MAX_HOSTS; h++) {
+            if (h >= hostCount) break;
+            int hs = hostShip[h];
+            float c = 0.0;
+            if (hs == os) c = 1.0;
+            else if (partners.x == hs) c = claims.x;
+            else if (partners.y == hs) c = claims.y;
+            else if (partners.z == hs) c = claims.z;
+            else if (partners.w == hs) c = claims.w;
+            hostClaim[o][h] = c;
         }
     }
 
-    float occlusion = occlusionManhattan
-            + (cornerContributors >= 2 ? occlusionCorner : 0.0);
-    occlusion = clamp(occlusion, 0.0, 1.0);
-    return mix(0.2, 1.0, 1.0 - occlusion);
+    // ---- pass 2: one vanilla field per host lattice, summed ---------------
+    float total = 0.0;
+    for (int hi = 0; hi < WS_SEAM_MAX_HOSTS; hi++) {
+        if (hi >= hostCount) break;
+        vec4 q = hostQ[hi];
+        vec3 anchor = hostAnchor[hi].xyz;
+        mat3 Rinv = ws_seamRotInvMat(q);   // Rinv * v == vs_quatRotateInv(q, v)
+        // fragment in this lattice, shifted so VERTICES land on integers
+        // (voxel centers sit at k + 0.5)
+        vec3 fragL = Rinv * (fragWorldPos - anchor) + 0.5;
+        vec3 nL = Rinv * normal;
+
+        // dominant slice axis, epsilon-tiebroken (deterministic on exact
+        // ties; pops only if a ship pitches/rolls through 45 deg vs the face)
+        vec3 absN = abs(nL);
+        int a = 0;
+        if (absN.y > absN.x + 1e-6) a = 1;
+        if (absN.z > absN[a] + 1e-6) a = 2;
+        int u = (a + 1) % 3;
+        int v = (a + 2) % 3;
+        float s = nL[a] >= 0.0 ? 1.0 : -1.0;
+
+        // the unit slab directly in FRONT of the face along a; the (at most
+        // two) voxel bands overlapping it, weighted by overlap length
+        float pa = fragL[a];
+        float slabLo = s > 0.0 ? pa : pa - 1.0;
+        int b0 = int(floor(slabLo));
+        float w0 = clamp(float(b0) + 1.0 - slabLo, 0.0, 1.0);
+
+        int cu = int(floor(fragL[u]));
+        int cv = int(floor(fragL[v]));
+        vec2 uv = vec2(fragL[u] - float(cu), fragL[v] - float(cv));
+        // band centers along the slice axis, loop-invariant across the voxels
+        float bandC0 = float(b0) + 0.5;
+        float bandC1 = float(b0) + 1.5;
+
+        mat3 occ0 = mat3(0.0);
+        mat3 occ1 = mat3(0.0);
+        // Stamp the fragment's cell sub-runs into this host lattice, weighted
+        // by owner -> host claim. Iterating the CELL's runs (not each ship's
+        // whole run list) bounds the cost by nearby geometry, not ship size.
+        for (int i = 0; i < WS_SEAM_CELL_LOOP_CAP; i++) {
+            if (i >= cellOC.y) break;
+            int e = cellOC.x + i;
+            int ri = floatBitsToInt(texelFetch(u_VsSeamGrid, WS_SEAM_GRID_CELLS + (e >> 2)))[e & 3];
+
+            vec4 head = texelFetch(u_VsSeamRuns, ri * 2);
+            float runR = head.w + WS_SEAM_SUPPORT;
+            if (ws_seamDistSq(fragWorldPos, head.xyz) > runR * runR) continue;
+            vec4 meta = texelFetch(u_VsSeamRuns, ri * 2 + 1);
+            int owner = floatBitsToInt(meta.z) & 0xFFFF;
+            if (owner == selfShipIndex) continue;  // baked already
+            int os = -1;
+            for (int o = 0; o < WS_SEAM_MAX_HOSTS; o++) {
+                if (o >= hostCount) break;
+                if (hostShip[o] == owner) { os = o; break; }
+            }
+            float wBase;
+            if (os >= 0) {
+                wBase = hostR[os] * hostClaim[os][hi];
+            } else {
+                wBase = texelFetch(u_VsSeamShipDir, owner * 6 + 1).w
+                        * ws_seamClaim(owner, hostShip[hi]);
+            }
+            if (wBase <= 0.0) continue;
+
+            int start = floatBitsToInt(meta.x);
+            int cnt = floatBitsToInt(meta.y);
+            for (int k = 0; k < WS_SEAM_SUBRUN_LOOP_CAP; k++) {
+                if (k >= cnt) break;
+                vec4 vox = texelFetch(u_VsShipOccluders, (start + k) * 2);
+                // a voxel past SUPPORT of the fragment stamps exactly 0.
+                if (ws_seamDistSq(vox.xyz, fragWorldPos) > WS_SEAM_SUPPORT * WS_SEAM_SUPPORT) continue;
+                vec3 c = Rinv * (vox.xyz - anchor) + 0.5;
+                mat3 stamp = ws_seamStamp(c, a, u, v, cu, cv);
+                // fold the owner->host weight into the two scalar band tents so
+                // the mat3 is scaled once per band instead of once for wBase and
+                // again for each ta.
+                float ta0 = wBase * max(0.0, 1.0 - abs(c[a] - bandC0));
+                float ta1 = wBase * max(0.0, 1.0 - abs(c[a] - bandC1));
+                occ0 += stamp * ta0;
+                occ1 += stamp * ta1;
+            }
+        }
+        occ0 = ws_seamClampOcc(occ0);
+        occ1 = ws_seamClampOcc(occ1);
+
+        vec4 corner = ws_seamCorners(occ0) * w0 + ws_seamCorners(occ1) * (1.0 - w0);
+        total += ws_seamInterp(corner, uv);
+#ifdef VS_DEBUG_SEAM_AO
+        // dots at the 4 sampled lattice corners of this host on the face
+        if (any(greaterThan(corner, vec4(0.001)))) {
+            for (int ci = 0; ci < 4; ci++) {
+                vec3 lp;
+                lp[a] = pa;
+                lp[u] = float(cu + (ci & 1));
+                lp[v] = float(cv + (ci >> 1));
+                vec3 wp = anchor + ws_seamQuatRotate(q, lp - 0.5);
+                if (distance(fragWorldPos, wp) < WS_DBG_VERTEX_RADIUS) dbgVertex = 1.0;
+            }
+        }
+#endif
+    }
+    return min(total, WS_SEAM_MAX_TOTAL);
 }
 #endif // VS_SHIP_AO
 
@@ -434,20 +679,22 @@ void main() {
     // independently.
     diffuseColor.rgb *= v_Color.rgb * lightSample.rgb;
 
-    // Combined AO + shade. v_Color.a is PURE vanilla AO (no shade); ship AO comes from per-fragment
-    // ws_shipAo(). Combine the two AO sources additively — vanilla's per-vertex averaging compounds
-    // overlap that way (two op cells at a corner -> loss 0.2 + 0.2 = 0.4, not 0.8 x 0.8 = 0.64). Floor
-    // 0.2 matches sodium's deepest AO value for opaque blocks. Face shade (UP=1, DOWN=0.5, N/S=0.8,
+    // Combined AO + shade. v_Color.a is PURE vanilla AO (no shade); the ship-to-world seam AO is
+    // computed per-fragment by ws_seamAoFrag and SUBTRACTED in — vanilla's per-vertex averaging
+    // compounds overlap that way (two op cells at a corner -> loss 0.2 + 0.2 = 0.4, not
+    // 0.8 x 0.8 = 0.64). Floor 0.2 matches sodium's deepest AO value for opaque blocks. Face shade (UP=1, DOWN=0.5, N/S=0.8,
     // E/W=0.6) is applied after, mirroring sodium's applySidedBrightness step. Slot 6/7
     // (unshaded/fullbright) skip both AO and shade via v_IsShaded.
     float ao = v_Color.a;
+    float dbgSeamVertex = 0.0;
     if (v_IsShaded == 1) {
 #ifdef VS_SHIP_AO
-        float shipAo = ws_shipAo(worldPos, v_WorldNormal);
-#else
-        float shipAo = 1.0;   // ship AO compiled out; see VSGameConfig.shipAmbientOcclusion
-#endif
-        float combined = max(0.2, ao - (1.0 - shipAo));
+        float seamVertex = 0.0;
+        float seamLoss = ws_seamAoFrag(worldPos, v_WorldNormal, -1, seamVertex);
+        ao = max(0.2, ao - seamLoss);
+        dbgSeamVertex = seamVertex;
+#endif // VS_SHIP_AO
+        float combined = ao;
         float shade = 1.0;
         if (v_WorldNormal.y < -0.5)          shade = 0.5; // DOWN
         else if (abs(v_WorldNormal.y) > 0.5) shade = 1.0; // UP
@@ -458,6 +705,21 @@ void main() {
         diffuseColor.rgb *= ao;
     }
 
+
+#ifdef VS_DEBUG_SEAM_AO
+    // BLUE dot = this fragment sits on a seam-square vertex (for manual
+    // checking). RED elsewhere = the AO loss applied. The tiny lightSample term
+    // keeps u_LightTex referenced so GLSL dead-code elimination doesn't strip
+    // the sampler (sodium's bindUniform NPEs at link time if an active uniform
+    // is optimized out).
+    float dbgTotalLoss = clamp((1.0 - ao) * 1.25, 0.0, 1.0);
+    vec3 dbgCol = vec3(dbgTotalLoss, 0.0, 0.0);
+    if (dbgSeamVertex > 3.5)      dbgCol = vec3(1.0, 0.4, 0.7); // pink   = half-step point
+    else if (dbgSeamVertex > 2.5) dbgCol = vec3(0.0, 1.0, 0.0); // green  = subtended line
+    else if (dbgSeamVertex > 1.5) dbgCol = vec3(1.0, 0.5, 0.0); // orange = subtended ship square
+    else if (dbgSeamVertex > 0.5) dbgCol = vec3(0.0, 0.0, 1.0); // blue   = self vertex
+    diffuseColor.rgb = dbgCol + lightSample.rgb * 1e-3;
+#endif
 
     fragColor = _linearFog(diffuseColor, v_FragDistance, u_FogColor, u_EnvironmentFog, u_RenderFog, v_FadeFactor);
 

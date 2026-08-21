@@ -119,6 +119,8 @@ public class SodiumCompat {
     static final int FEATURE_DEBUG_SHIP_LIGHT = 128;
     /** Ship-cast ambient occlusion. Off by default -- the per-fragment occluder scan dominates. */
     static final int FEATURE_SHIP_AO = 512;
+    // debugFloodPaint = 5: paint the seam-AO loss instead of the shaded colour, as on the 0.5 path.
+    static final int FEATURE_DEBUG_SEAM_AO = 1024;
 
     private static final Map<ShaderCacheKey, GlProgram<ShipThing>> cachedPrograms = new HashMap<>();
     private static final Map<ShaderCacheKey, GlProgram<WorldThing>> cachedWorldPrograms = new HashMap<>();
@@ -143,6 +145,9 @@ public class SodiumCompat {
     public static final int WORLD_FROM_SHIP_LUT_TEXTURE_UNIT = VsDynamicLight.WORLD_FROM_SHIP_LUT_TEXTURE_UNIT;
     public static final int SHIP_EMITTER_LIST_TEXTURE_UNIT = VsDynamicLight.SHIP_EMITTER_LIST_TEXTURE_UNIT;
     public static final int SHIP_OCCLUDER_LIST_TEXTURE_UNIT = VsDynamicLight.SHIP_OCCLUDER_LIST_TEXTURE_UNIT;
+    public static final int SEAM_RUN_HEADERS_TEXTURE_UNIT = VsDynamicLight.SEAM_RUN_HEADERS_TEXTURE_UNIT;
+    public static final int SEAM_SHIP_DIR_TEXTURE_UNIT = VsDynamicLight.SEAM_SHIP_DIR_TEXTURE_UNIT;
+    public static final int SEAM_GRID_TEXTURE_UNIT = VsDynamicLight.SEAM_GRID_TEXTURE_UNIT;
 
     private static final double WORLD_FROM_SHIP_VISIBILITY_PADDING = 32.0;
 
@@ -269,8 +274,12 @@ public class SodiumCompat {
     @SuppressWarnings("unchecked")
     public static GlProgram<ChunkShaderInterface> getOrCreateShipProgram(final ChunkShaderOptions options) {
         int features = computeFeatureBits();
-        if (VSGameConfig.CLIENT.getDebugFloodPaint() >= 3) {
+        final int paint = VSGameConfig.CLIENT.getDebugFloodPaint();
+        if (paint == 3 || paint == 4) {
             features |= FEATURE_DEBUG_SHIP_LIGHT;
+        }
+        if (paint == 5) {
+            features |= FEATURE_DEBUG_SEAM_AO;
         }
         final ShaderCacheKey key = new ShaderCacheKey(options, features);
         GlProgram<ShipThing> program = cachedPrograms.get(key);
@@ -297,6 +306,8 @@ public class SodiumCompat {
             final int paint = VSGameConfig.CLIENT.getDebugFloodPaint();
             if (paint == 1) {
                 features |= FEATURE_DEBUG_FLOOD_1;
+            } else if (paint == 5) {
+                features |= FEATURE_DEBUG_SEAM_AO;
             } else if (paint >= 2) {
                 features |= FEATURE_DEBUG_FLOOD_2;
             }
@@ -435,6 +446,9 @@ public class SodiumCompat {
         if ((features & FEATURE_DEBUG_FLOOD_2) != 0) {
             builder.add("VS_DEBUG_FLOOD", "2");
         }
+        if ((features & FEATURE_DEBUG_SEAM_AO) != 0) {
+            builder.add("VS_DEBUG_SEAM_AO");
+        }
         if ((features & FEATURE_SHIP_AO) != 0) {
             builder.add("VS_SHIP_AO");
         }
@@ -469,6 +483,15 @@ public class SodiumCompat {
         shipInterface.setBiomeLutSampler(BIOME_LUT_TEXTURE_UNIT);
         shipInterface.setShipEmitters(SHIP_EMITTER_LIST_TEXTURE_UNIT, getShipEmitterList().size());
         shipInterface.setShipOccluders(SHIP_OCCLUDER_LIST_TEXTURE_UNIT, getShipOccluderList().size());
+        shipInterface.setSeamData(SEAM_RUN_HEADERS_TEXTURE_UNIT, getShipOccluderList().headerCount(),
+            SEAM_SHIP_DIR_TEXTURE_UNIT,
+            getShipOccluderList().boundsCenterX(), getShipOccluderList().boundsCenterY(),
+            getShipOccluderList().boundsCenterZ(), getShipOccluderList().boundsRadius());
+        shipInterface.setSeamGrid(SEAM_GRID_TEXTURE_UNIT,
+            getShipOccluderList().gridOriginX(), getShipOccluderList().gridOriginY(),
+            getShipOccluderList().gridOriginZ(), getShipOccluderList().gridInvCellX(),
+            getShipOccluderList().gridInvCellY(), getShipOccluderList().gridInvCellZ());
+
         shipInterface.setWorldFromShipSamplers(
             WORLD_FROM_SHIP_SECTIONS_TEXTURE_UNIT, WORLD_FROM_SHIP_LUT_TEXTURE_UNIT);
         shipInterface.setFloodGridValid(VsDynamicLight.isFloodGridValid());
@@ -495,6 +518,15 @@ public class SodiumCompat {
             (float) (cameraPos.z - oz));
         wt.setShipEmitters(SHIP_EMITTER_LIST_TEXTURE_UNIT, getShipEmitterList().size());
         wt.setShipOccluders(SHIP_OCCLUDER_LIST_TEXTURE_UNIT, getShipOccluderList().size());
+        wt.setSeamData(SEAM_RUN_HEADERS_TEXTURE_UNIT, getShipOccluderList().headerCount(),
+            SEAM_SHIP_DIR_TEXTURE_UNIT,
+            getShipOccluderList().boundsCenterX(), getShipOccluderList().boundsCenterY(),
+            getShipOccluderList().boundsCenterZ(), getShipOccluderList().boundsRadius());
+        wt.setSeamGrid(SEAM_GRID_TEXTURE_UNIT,
+            getShipOccluderList().gridOriginX(), getShipOccluderList().gridOriginY(),
+            getShipOccluderList().gridOriginZ(), getShipOccluderList().gridInvCellX(),
+            getShipOccluderList().gridInvCellY(), getShipOccluderList().gridInvCellZ());
+
         wt.setWorldFromShipSamplers(
             WORLD_FROM_SHIP_SECTIONS_TEXTURE_UNIT, WORLD_FROM_SHIP_LUT_TEXTURE_UNIT);
         wt.setFloodGridValid(VsDynamicLight.isFloodGridValid());
@@ -832,6 +864,9 @@ public class SodiumCompat {
                     // that binds, and anything missing here would be left unbound for both.
                     getShipEmitterList().bind(SHIP_EMITTER_LIST_TEXTURE_UNIT);
                     getShipOccluderList().bind(SHIP_OCCLUDER_LIST_TEXTURE_UNIT);
+                    getShipOccluderList().bindHeaders(SEAM_RUN_HEADERS_TEXTURE_UNIT);
+                    getShipOccluderList().bindShipDir(SEAM_SHIP_DIR_TEXTURE_UNIT);
+                    getShipOccluderList().bindGrid(SEAM_GRID_TEXTURE_UNIT);
                     getWorldFromShipStorage().bind(
                         WORLD_FROM_SHIP_SECTIONS_TEXTURE_UNIT, WORLD_FROM_SHIP_LUT_TEXTURE_UNIT);
                 }
