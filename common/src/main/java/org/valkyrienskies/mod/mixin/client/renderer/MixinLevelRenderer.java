@@ -4,10 +4,13 @@ import static org.valkyrienskies.mod.common.VSClientGameUtils.transformRenderWit
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import net.minecraft.client.Camera;
 import net.minecraft.client.multiplayer.ClientLevel;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.LevelRenderer;
+import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -15,6 +18,7 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jetbrains.annotations.Nullable;
+import org.joml.Matrix4f;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -25,6 +29,8 @@ import org.spongepowered.asm.mixin.injection.ModifyConstant;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.valkyrienskies.core.api.ships.ClientShip;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
+import org.valkyrienskies.mod.common.hooks.VSGameEvents;
+import org.valkyrienskies.mod.common.render.batched.ShipBatchRenderer;
 
 @Mixin(LevelRenderer.class)
 public abstract class MixinLevelRenderer {
@@ -81,6 +87,16 @@ public abstract class MixinLevelRenderer {
                 (double) blockPos.getZ() - camZ,
                 0.0F, 0.0F, 0.0F, 0.4F);
         }
+    }
+
+    @Inject(method = "renderLevel", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/LevelRenderer;renderChunkLayer(Lnet/minecraft/client/renderer/RenderType;Lcom/mojang/blaze3d/vertex/PoseStack;DDDLorg/joml/Matrix4f;)V", ordinal = 0))
+    private void preRenderLevel(PoseStack poseStack, float f, long l, boolean bl, Camera camera,
+        GameRenderer gameRenderer, LightTexture lightTexture, Matrix4f matrix4f, CallbackInfo ci) {
+        Vec3 cameraPos = camera.getPosition();
+        VSGameEvents.INSTANCE.getShipsStartRendering().emit(new VSGameEvents.ShipStartRenderEvent(
+            LevelRenderer.class.cast(this), poseStack, cameraPos.x, cameraPos.y, cameraPos.z, matrix4f
+        ));
+        ShipBatchRenderer.INSTANCE.beginFrame(level);
     }
 
 

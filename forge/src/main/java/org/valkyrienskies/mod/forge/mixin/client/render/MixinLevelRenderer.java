@@ -39,7 +39,7 @@ public class MixinLevelRenderer {
     @Redirect(method = "renderLevel", at = @At(value = "INVOKE",
         target = "Lnet/minecraft/client/renderer/culling/Frustum;isVisible(Lnet/minecraft/world/phys/AABB;)Z"))
     public boolean dontClipTileEntities(final Frustum receiver, final AABB aabb) {
-        return true;
+        return receiver.isVisible(VSGameUtilsKt.transformAabbToWorld(level, aabb));
     }
 
     /**

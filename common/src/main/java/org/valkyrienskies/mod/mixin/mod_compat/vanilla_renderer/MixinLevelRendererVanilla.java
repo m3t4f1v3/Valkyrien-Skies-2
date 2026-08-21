@@ -123,8 +123,6 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
     @Unique
     private int vs$lastSetupShipVisibilityCount = -1;
     @Unique
-    private boolean vs$emittedShipsStartRenderingThisFrame = false;
-    @Unique
     private boolean vs$didApplyFrustumThisFrame = false;
     @Unique
     private int vs$lastShipFrustumTailCount = 0;
@@ -258,16 +256,6 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
         // This mixin never gets called for IP dimensions, instead we'll call it manually
         vs$addShipVisibleChunks(frustum);
         this.vs$didApplyFrustumThisFrame = true;
-    }
-
-    @Inject(
-        method = "renderLevel",
-        at = @At("HEAD")
-    )
-    private void vs$resetShipRenderFrameState(final PoseStack poseStack, final float partialTick, final long finishNanoTime,
-        final boolean renderBlockOutline, final Camera camera, final GameRenderer gameRenderer,
-        final LightTexture lightTexture, final Matrix4f projectionMatrix, final CallbackInfo ci) {
-        this.vs$emittedShipsStartRenderingThisFrame = false;
     }
 
     @Inject(
@@ -479,14 +467,6 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
     private void redirectRenderChunkLayer(final LevelRenderer receiver,
         final RenderType renderType, final PoseStack poseStack, final double camX, final double camY, final double camZ,
         final Matrix4f matrix4f, final Operation<Void> renderChunkLayer) {
-
-        if (!this.vs$emittedShipsStartRenderingThisFrame) {
-            this.vs$emittedShipsStartRenderingThisFrame = true;
-            VSGameEvents.INSTANCE.getShipsStartRendering().emit(new VSGameEvents.ShipStartRenderEvent(
-                receiver, renderType, poseStack, camX, camY, camZ, matrix4f
-            ));
-            ShipBatchRenderer.INSTANCE.beginFrame(level);
-        }
 
         VsShipWorldLightRenderContext.beginWorldTerrainLayer(camX, camY, camZ);
         try {

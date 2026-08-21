@@ -35,6 +35,7 @@ import net.caffeinemc.mods.sodium.client.util.iterator.ByteIterator;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.resources.ResourceLocation;
 import org.joml.Matrix4d;
 import org.joml.Matrix4dc;
@@ -48,7 +49,6 @@ import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.config.ShipRendererKt;
 import org.valkyrienskies.mod.common.config.VSGameConfig;
 import org.valkyrienskies.mod.common.render.batched.ShipBatchRenderer;
-import org.valkyrienskies.mod.common.render.batched.ShipSectionMesh;
 import org.valkyrienskies.mod.common.hooks.VSGameEvents;
 import org.valkyrienskies.mod.common.hooks.VSGameEvents.ShipRenderEventSodium;
 import org.valkyrienskies.mod.common.render.light.VsDynamicLight;
@@ -63,6 +63,7 @@ import org.valkyrienskies.mod.compat.sodium.shader.VsShipLightStorage;
 import org.valkyrienskies.mod.compat.sodium.shader.VsShipOccluderList;
 import org.valkyrienskies.mod.compat.sodium.shader.VsWorldFromShipLightStorage;
 import org.valkyrienskies.mod.mixin.ValkyrienCommonMixinConfigPlugin;
+import org.valkyrienskies.mod.mixin.accessors.client.render.LevelRendererAccessor;
 import org.valkyrienskies.mod.mixin.mod_compat.sodium09.SodiumWorldRendererAccessor;
 import org.valkyrienskies.mod.mixin.mod_compat.sodium09.UniformBufferManagerAccessor;
 import org.valkyrienskies.mod.mixinducks.mod_compat.sodium09.RenderSectionManagerDuck;
@@ -727,18 +728,8 @@ public class SodiumCompat {
         final PoseStack poseStack = new PoseStack();
         poseStack.last().pose().set(new Matrix4f(matrices.modelView()));
         final Matrix4f projection = new Matrix4f(matrices.projection());
-
-        if (renderLayer == RenderType.solid()) {
-            ShipBatchRenderer.INSTANCE.beginFrame(Minecraft.getInstance().level);
-            for (final RenderType layer : ShipSectionMesh.CHUNK_LAYERS) {
-                if (layer == RenderType.translucent()) {
-                    continue;
-                }
-                ShipBatchRenderer.INSTANCE.drawLayer(layer, poseStack, x, y, z, projection, null);
-            }
-        } else if (renderLayer == RenderType.translucent()) {
-            ShipBatchRenderer.INSTANCE.drawLayer(RenderType.translucent(), poseStack, x, y, z, projection, null);
-        }
+        Frustum frustum = ((LevelRendererAccessor) Minecraft.getInstance().levelRenderer).getCullingFrustum();
+        ShipBatchRenderer.INSTANCE.drawLayer(renderLayer, poseStack, x, y, z, projection, frustum);
     }
 
     private static void renderShipsForPass(final SodiumWorldRenderer renderer, final RenderSectionManager manager,

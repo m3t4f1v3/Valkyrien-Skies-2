@@ -19,8 +19,8 @@ public abstract class MixinSodiumWorldRenderer {
     @Shadow
     private RenderSectionManager renderSectionManager;
 
-    @Inject(method = "drawChunkLayer", at = @At("TAIL"))
-    private void afterChunkLayer(RenderType renderLayer, PoseStack matrixStack, double x, double y, double z,
+    @Inject(method = "drawChunkLayer", at = @At("HEAD"))
+    private void beforeChunkLayer(RenderType renderLayer, PoseStack matrixStack, double x, double y, double z,
             CallbackInfo ci) {
         SodiumCompat.renderShips(renderSectionManager, renderLayer, ChunkRenderMatrices.from(matrixStack), x, y, z);
     }

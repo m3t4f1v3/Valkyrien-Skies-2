@@ -68,8 +68,8 @@ public abstract class MixinSodiumWorldRenderer {
         throw new AssertionError();
     }
 
-    @Inject(method = "drawChunkLayer", at = @At("TAIL"))
-    private void vs$afterChunkLayer(final RenderType renderLayer, final ChunkRenderMatrices matrices, final double x,
+    @Inject(method = "drawChunkLayer", at = @At("HEAD"))
+    private void vs$beforeChunkLayer(final RenderType renderLayer, final ChunkRenderMatrices matrices, final double x,
         final double y, final double z, final CallbackInfo ci) {
         SodiumCompat.renderShips((SodiumWorldRenderer) (Object) this, this.renderSectionManager, renderLayer, matrices,
             x, y, z);
