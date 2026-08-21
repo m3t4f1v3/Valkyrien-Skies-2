@@ -154,10 +154,12 @@ def main():
                 [{"yaw_deg": float(d)} for d in degs],
                 0.05)
     # Off-grid translation. o_trans is the product over axes of 1 - |fract(anchor) - 0.5|, so half a
-    # block is the worst case and the claim should decay smoothly to it.
-    offs = [0.1, 0.2, 0.3, 0.4, 0.5]
-    ok &= curve("off-grid 0.1-0.5 blocks",
-                [f"aox_off_{int(o * 10):02d}" for o in offs],
+    # block is the worst case and the claim should decay smoothly to it. Anchored on the ALIGNED
+    # configuration -- aox_rot_00 is that same scene (yaw 0, offset 0) -- so a discontinuity right at
+    # alignment, where the claim is exactly 1 and the merge is exact, cannot hide outside the sweep.
+    offs = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
+    ok &= curve("off-grid 0-0.5 blocks",
+                ["aox_rot_00"] + [f"aox_off_{int(o * 10):02d}" for o in offs[1:]],
                 [{"off_z": float(o)} for o in offs],
                 0.05)
     print()
