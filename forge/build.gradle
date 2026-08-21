@@ -195,6 +195,15 @@ dependencies {
         modRuntimeOnly("curse.maven:vanillin-965702:6446560")
         modRuntimeOnly("dev.engine-room.flywheel:flywheel-forge-${minecraft_version}:${flywheel_version}")
         modRuntimeOnly("com.tterrag.registrate:Registrate:${registrate_version}")
+    } else {
+        // Architectury's dev-launch transformer walks VS2's own bytecode to recompute stack frames,
+        // and that needs the TYPES the Create compat classes mention to be resolvable -- not the mods
+        // themselves. Without this it dies before the game starts:
+        //     NoClassDefFoundError: dev/engine_room/flywheel/api/visual/Effect
+        //     at dev.architectury.transformer.handler.SimpleTransformerHandler.applyTransforms
+        // The API artifacts are types only, so FML has no mod to initialise and none of the load time
+        // this switch exists to avoid comes back.
+        runtimeOnly("dev.engine-room.flywheel:flywheel-forge-api-${minecraft_version}:${flywheel_version}")
     }
 
     // Weather2 1.20.1
