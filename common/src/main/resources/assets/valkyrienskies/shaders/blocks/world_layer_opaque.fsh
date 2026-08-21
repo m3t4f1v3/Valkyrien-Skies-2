@@ -551,12 +551,17 @@ float ws_seamAoFrag(vec3 fragWorldPos, vec3 normal, int selfShipIndex, out float
         if (known) continue;
 
         ws_seamAddHost(owner, hostCount, hostShip, hostQ, hostAnchor, hostR);
+#ifndef VS_SEAM_NO_MERGE
+        // Partner hosts exist only to receive another ship's material. With merging off nothing is
+        // claimed, so this skips two directory fetches per new host plus up to four more inside the
+        // addHost calls.
         vec4 claims = texelFetch(u_VsSeamShipDir, owner * 6 + 2);
         ivec4 partners = floatBitsToInt(texelFetch(u_VsSeamShipDir, owner * 6 + 3));
         if (claims.x > 0.0) ws_seamAddHost(partners.x, hostCount, hostShip, hostQ, hostAnchor, hostR);
         if (claims.y > 0.0) ws_seamAddHost(partners.y, hostCount, hostShip, hostQ, hostAnchor, hostR);
         if (claims.z > 0.0) ws_seamAddHost(partners.z, hostCount, hostShip, hostQ, hostAnchor, hostR);
         if (claims.w > 0.0) ws_seamAddHost(partners.w, hostCount, hostShip, hostQ, hostAnchor, hostR);
+#endif
     }
     if (hostCount == 0) return 0.0;
 #if defined(VS_AOPROF) && VS_AOPROF == 3
@@ -566,6 +571,11 @@ float ws_seamAoFrag(vec3 fragWorldPos, vec3 normal, int selfShipIndex, out float
     // Cache the claim of every host (as material OWNER) to every host (as
     // lattice), so pass 2 needs zero ship-directory fetches. Owners with
     // nearby runs are always among these hosts (they were added as sources);
+#ifdef VS_SEAM_NO_MERGE
+    // No merging: every off-diagonal claim is zero, so the matrix is the identity and
+    // building it would be O(hostCount^2) fetches to write constants.
+    mat4 hostClaim = mat4(1.0);
+#else
     // hostClaim[ownerSlot][hostSlot] = claim, with the diagonal = 1.
     mat4 hostClaim = mat4(0.0);
     for (int o = 0; o < WS_SEAM_MAX_HOSTS; o++) {
@@ -585,6 +595,7 @@ float ws_seamAoFrag(vec3 fragWorldPos, vec3 normal, int selfShipIndex, out float
             hostClaim[o][h] = c;
         }
     }
+#endif
 
     // ---- pass 2: one vanilla field per host lattice, summed ---------------
     float total = 0.0;
@@ -637,6 +648,13 @@ float ws_seamAoFrag(vec3 fragWorldPos, vec3 normal, int selfShipIndex, out float
             if (ws_seamDistSq(fragWorldPos, head.xyz) > runR * runR) continue;
             vec4 meta = texelFetch(u_VsSeamRuns, ri * 2 + 1);
             int owner = floatBitsToInt(meta.z) & 0xFFFF;
+#ifdef VS_SEAM_NO_MERGE
+            // THE early-out for the unmerged path: a run can only contribute to its own ship's
+            // lattice, so every run belonging to another ship is rejected here on one integer
+            // compare -- before the host-slot search, the weight lookup and the whole per-voxel
+            // loop below.
+            if (owner != hostShip[hi]) continue;
+#endif
             if (owner == selfShipIndex) continue;  // baked already
             int os = -1;
             for (int o = 0; o < WS_SEAM_MAX_HOSTS; o++) {

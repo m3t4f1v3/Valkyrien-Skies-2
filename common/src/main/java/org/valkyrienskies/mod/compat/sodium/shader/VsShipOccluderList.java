@@ -346,11 +346,19 @@ public class VsShipOccluderList {
         MemoryUtil.memPutFloat(shipDirPtr, Float.intBitsToFloat(shipCap - 1));
         float[] bestClaim = new float[MAX_PARTNERS];
         int[] bestShip = new int[MAX_PARTNERS];
+        // Cross-ship merging, switchable. Leaving every claim at zero is exactly "no merging" and
+        // needs no shader change: responsibility r = 1/(1 + sum claims) becomes 1, no partner is added
+        // as a host in pass 1 (that is gated on claims > 0), and hostClaim degenerates to the
+        // identity, so each ship stamps only into its own lattice and the fields are summed. That is
+        // the pre-merge behaviour, and it leaves the merging maths below untouched rather than
+        // maintaining a second version of it.
+        final boolean merge = org.valkyrienskies.mod.common.config.VSGameConfig.CLIENT
+            .getShipAmbientOcclusionMerging();
         for (int s = 1; s < shipCap; s++) {
             if (!seen[s]) continue;
             java.util.Arrays.fill(bestClaim, 0f);
             java.util.Arrays.fill(bestShip, 0);
-            for (int t = 1; t < shipCap; t++) {
+            for (int t = 1; merge && t < shipCap; t++) {
                 if (t == s || !seen[t]) continue;
                 float c = pairClaim(s, t, aabb, anchor, quat);
                 if (c <= 0f) continue;

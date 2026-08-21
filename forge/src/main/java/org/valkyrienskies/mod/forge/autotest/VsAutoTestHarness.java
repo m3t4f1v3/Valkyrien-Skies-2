@@ -238,6 +238,13 @@ public final class VsAutoTestHarness {
                 LOGGER.info("[autotest] shipAmbientOcclusion -> {}",
                     org.valkyrienskies.mod.common.config.VSGameConfig.CLIENT.getShipAmbientOcclusion());
             }
+            case "aomerge" -> {
+                org.valkyrienskies.mod.common.config.VSGameConfig.CLIENT
+                    .setShipAmbientOcclusionMerging("on".equalsIgnoreCase(inst[1]));
+                LOGGER.info("[autotest] shipAmbientOcclusionMerging -> {}",
+                    org.valkyrienskies.mod.common.config.VSGameConfig.CLIENT
+                        .getShipAmbientOcclusionMerging());
+            }
             case "hud" -> minecraft.options.hideGui = !"on".equalsIgnoreCase(inst[1]);
             // Switch the debug paint at runtime. Fixtures use this to take a masking shot (paint 0,
             // ordinary render, ships identifiable as stone) and a measuring shot (paint 5, the AO loss

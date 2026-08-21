@@ -98,6 +98,14 @@ public class SodiumCompat {
     // world and ship shaders. Red = loss applied; the coloured dots mark sampled corners.
     static final int FEATURE_DEBUG_SEAM_AO = 1024;
     /**
+     * Cross-ship AO merging compiled OUT. Zeroing the claims alone already produces the unmerged
+     * FIELD, but the shader would still walk every host's partner list, build the claim matrix and
+     * test every run against every host to reach that result. This bit lets it skip all of it -- most
+     * importantly the per-run early-out in pass 2, where a run not owned by the host being processed
+     * is rejected before the weight lookup and the per-voxel loop.
+     */
+    static final int FEATURE_SEAM_NO_MERGE = 2048;
+    /**
      * -Pvs.aoprof=N: make the per-fragment seam AO return early at stage N, so its cost can be
      * bisected in a running client. 0 (or unset) is the normal shader. Constant for the process, so
      * it needs no place in the shader cache key.
@@ -268,6 +276,7 @@ public class SodiumCompat {
         if (VSGameConfig.CLIENT.getBetterVanillaShipShading()) bits |= FEATURE_SHADE;
         if (VSGameConfig.CLIENT.getShipAmbientOcclusion()) {
             bits |= FEATURE_SHIP_AO;
+            if (!VSGameConfig.CLIENT.getShipAmbientOcclusionMerging()) bits |= FEATURE_SEAM_NO_MERGE;
         }
         // The seam-AO pass needs u_TransformMatrix and the world-relative varyings, which ride on
         // this bit, so it is set for any feature that draws through the ship shader.
@@ -740,6 +749,7 @@ public class SodiumCompat {
         if (VSGameConfig.CLIENT.getShipAmbientOcclusion()
             && (!AO_GATE || VsDynamicLight.getShipOccluderList().size() > 0)) {
             features |= FEATURE_SHIP_AO;
+            if (!VSGameConfig.CLIENT.getShipAmbientOcclusionMerging()) features |= FEATURE_SEAM_NO_MERGE;
         }
         if (features != 0) {
             int paint = VSGameConfig.CLIENT.getDebugFloodPaint();
@@ -841,6 +851,7 @@ public class SodiumCompat {
         if ((features & FEATURE_DEBUG_FLOOD_1) != 0) builder.add("VS_DEBUG_FLOOD", "1");
         if ((features & FEATURE_DEBUG_FLOOD_2) != 0) builder.add("VS_DEBUG_FLOOD", "2");
         if ((features & FEATURE_SHIP_AO) != 0) builder.add("VS_SHIP_AO");
+        if ((features & FEATURE_SEAM_NO_MERGE) != 0) builder.add("VS_SEAM_NO_MERGE");
         if ((features & FEATURE_DEBUG_SEAM_AO) != 0) builder.add("VS_DEBUG_SEAM_AO");
         if (AO_PROF != 0) builder.add("VS_AOPROF", Integer.toString(AO_PROF));
         if ((features & FEATURE_DEBUG_SHIP_LIGHT) != 0) builder.add("VS_DEBUG_SHIP_LIGHT", VSGameConfig.CLIENT.getDebugFloodPaint() == 4 ? "4" : "3");
@@ -916,6 +927,7 @@ public class SodiumCompat {
         // Every feature bit ShipThing gates a uniform binding on has to be emitted as a define here,
         // or the FSH compiles without the reader, GLSL drops the uniform, and bindUniform NPEs.
         if ((features & FEATURE_SHIP_AO) != 0) builder.add("VS_SHIP_AO");
+        if ((features & FEATURE_SEAM_NO_MERGE) != 0) builder.add("VS_SEAM_NO_MERGE");
         if ((features & FEATURE_DEBUG_SEAM_AO) != 0) builder.add("VS_DEBUG_SEAM_AO");
         if (AO_PROF != 0) builder.add("VS_AOPROF", Integer.toString(AO_PROF));
         // getOrCreateShipProgram sets this bit from debugFloodPaint, so it has to be emitted here too

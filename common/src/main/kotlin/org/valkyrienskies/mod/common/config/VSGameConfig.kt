@@ -144,6 +144,9 @@ object VSGameConfig {
         @ConfigEntry(description = "Ambient occlusion cast by ship blocks onto the world. Off by default: it is evaluated per fragment against a list of ship voxels, which is by far the most expensive part of ship rendering, and it is independent of the lighting itself.")
         var shipAmbientOcclusion = false
 
+        @ConfigEntry(description = "Merge the ambient occlusion of ships that are touching, so blocks of separate ships shade like blocks of one ship. With this off, each ship's occlusion is evaluated independently and summed, so a seam between two hulls shows a visible double-darkened line where their shadows overlap. Requires shipAmbientOcclusion.")
+        var shipAmbientOcclusionMerging = true
+
         @ConfigEntry(description = "Flood ship-to-world light on the GPU with compute shaders instead of on the CPU. Runs every frame instead of every 15th, and lets hulls and terrain actually block ship light. Requires OpenGL 4.3; falls back to the CPU flood automatically when unavailable.")
         var gpuDynamicLightFlood = true
 

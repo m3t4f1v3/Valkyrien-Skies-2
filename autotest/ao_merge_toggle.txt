@@ -1,0 +1,48 @@
+# Does shipAmbientOcclusionMerging actually switch the merge off?
+#
+# The defining property of the merge is that an aligned layout split across SEPARATE ships produces
+# the same field as the same layout built as ONE ship (verify5:scene_aligned; ao_parity measures it
+# and gets 0 difference). So the switch is testable directly:
+#
+#   merging ON  -> split == single      (0 px difference)
+#   merging OFF -> split != single      (each ship stamps independently, and the shadows double up
+#                                        where they overlap)
+#
+# Both built at the same place, from one client, so nothing but the switch differs.
+world autotest
+wait-level
+wait 100
+hud off
+cmd gamemode spectator
+cmd time set noon
+cmd gamerule doDaylightCycle false
+cmd kill @e[type=!player]
+wait 20
+cmd tp @s 3 -52 3.5 0 90
+wait 60
+
+# ---- reference: the three cells as ONE ship -----------------------------
+run ao_ship 0 2 -60 3 0:0:0,1:0:0,2:0:0
+wait 100
+screenshot aomg_single
+run ao_clear
+wait 40
+
+# ---- the same three cells as THREE ships, merging ON --------------------
+aomerge on
+wait 20
+run ao_ship 1 2 -60 3 0:0:0
+run ao_ship 2 3 -60 3 0:0:0
+run ao_ship 3 4 -60 3 0:0:0
+wait 120
+screenshot aomg_split_on
+wait 20
+
+# ---- same ships, merging OFF -------------------------------------------
+aomerge off
+wait 80
+screenshot aomg_split_off
+wait 20
+run ao_clear
+wait 40
+quit

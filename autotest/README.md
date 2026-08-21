@@ -41,6 +41,7 @@ a few levels of darkening in a shaded frame.
 | `ao_contact.txt` | flush → hover sweep → past support radius; sunk | seam3 band rule, `probe_support.py` |
 | `ao_misalign.txt` | neighbour a few degrees off / a fraction of a block off the lattice | `seam5.pair_claim` (partial-claim regime) |
 | `ao_shipship.txt` | cross-ship AO applies, self-occlusion does not | the ship path's two halves |
+| `ao_merge_toggle.txt` | `shipAmbientOcclusionMerging` on vs off | the merge's defining property |
 | `ao_ab.txt` | plain on/off A/B of `shipAmbientOcclusion` in one client | — |
 
 What each group is actually asserting:
@@ -61,6 +62,10 @@ What each group is actually asserting:
   built as *one* ship must not (0 px), because the mesher already baked that occlusion into
   `v_Color.a`. The cross case is what stops the self case passing vacuously — a dead render path or a
   compiled-out shader would zero both, and this pair catches that.
+- **merge toggle** — `shipAmbientOcclusionMerging=false` must actually change the field, not just the
+  code path: with merging on, an aligned split matches the single ship exactly (0 px); with it off the
+  ships stamp independently and their shadows double up (56,408 px). A switch that silently did
+  nothing would pass the first half and fail the second.
 - **contact** — the band weighting through flush → hover → past support. A flush ship casts full AO
   and it fades linearly to exactly zero one block up.
 - **misalignment vs the reference** (`autotest/ref_merge.py`) — the checks above are all
