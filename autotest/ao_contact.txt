@@ -1,0 +1,59 @@
+# CONTACT CONTINUITY and the support cutoff.
+#
+# From the seam3/seam4 notes: the band weighting must be continuous through hover -> flush -> sunk
+# (contact = full weight, hover fades linearly, behind-the-face = 0), a ceiling BEHIND the receiving
+# face must cast nothing, and a voxel past SEAM_SUPPORT (3.7, see probe_support.py) must contribute
+# exactly zero rather than being clipped mid-fade.
+#
+# This is also the situation that made the first ao_ab fixture measure nothing: a ship one block up
+# casts no AO at all, which is correct vanilla behaviour and not a bug.
+world autotest
+wait-level
+wait 100
+hud off
+cmd gamemode spectator
+cmd time set noon
+cmd gamerule doDaylightCycle false
+cmd kill @e[type=!player]
+wait 20
+cmd tp @s 3 -47 3 0 90
+wait 60
+
+# ---- hover sweep: flush on the surface, then lifted in quarter blocks ---
+# Flush is the vanilla-parity point; each step up must fade, never jump.
+run ao_ship 0 3 -60 3 0:0:0
+wait 80
+screenshot aoc_h_000
+run ao_pose 0 0 0.25 0 0
+wait 60
+screenshot aoc_h_025
+run ao_pose 0 0 0.5 0 0
+wait 60
+screenshot aoc_h_050
+run ao_pose 0 0 0.75 0 0
+wait 60
+screenshot aoc_h_075
+run ao_pose 0 0 1.0 0 0
+wait 60
+screenshot aoc_h_100
+
+# ---- past the support radius: must be exactly zero, not a faint tail ----
+run ao_pose 0 0 4.0 0 0
+wait 60
+screenshot aoc_h_400
+run ao_clear
+wait 40
+
+# ---- sunk: the ship pushed BELOW the surface plane -----------------------
+run ao_ship 0 3 -60 3 0:0:0
+wait 80
+run ao_pose 0 0 -0.5 0 0
+wait 60
+screenshot aoc_sunk_050
+run ao_clear
+wait 40
+
+# ---- empty scene: the zero reference every case above is measured against
+wait 60
+screenshot aoc_empty
+quit

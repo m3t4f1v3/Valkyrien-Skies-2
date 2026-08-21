@@ -1,0 +1,126 @@
+# SLIGHT misalignment: the regime where the cross-ship merge is PARTIAL.
+#
+# At exact grid alignment the merge is exact by construction and ao_parity already shows it lands on
+# the single-ship field to the pixel. The interesting behaviour is just off that point, where
+# seam5's pair claim
+#     claim(s->t) = gate(AABB gap) x o_rot(rotation alignment) x o_trans(lattice offset)
+# is a fraction, responsibility r = 1/(1 + sum claims) redistributes, and each host carries only part
+# of the merged pattern. This fixture sweeps a neighbouring ship through small yaws and small
+# off-grid offsets so the measured curve can be compared against seam5's own prediction
+# (autotest/ref_merge.py) rather than only against itself.
+#
+# Two shots per configuration: `paint 0` is an ordinary render used only to find the ships' own
+# pixels, `paint 5` is the AO loss field. The floor integral is taken outside the ship pixels, which
+# is what the reference integrates too -- without the mask the ships' own top faces would be counted
+# as if they were floor.
+world autotest
+wait-level
+wait 100
+hud off
+cmd gamemode spectator
+cmd time set noon
+cmd gamerule doDaylightCycle false
+cmd kill @e[type=!player]
+wait 20
+cmd tp @s 3 -47 3 0 90
+wait 60
+
+# Two adjacent single-block ships. Slot 0 stays put and slot 1 is the one that goes off-alignment.
+run ao_ship 0 2 -60 3 0:0:0
+run ao_ship 1 3 -60 3 0:0:0
+wait 90
+
+# ---- slight ROTATIONAL misalignment: 0 -> 15 degrees --------------------
+paint 0
+wait 40
+screenshot aox_rot_00_mask
+paint 5
+wait 40
+screenshot aox_rot_00
+run ao_pose 1 0 0 0 3
+wait 60
+paint 0
+wait 40
+screenshot aox_rot_03_mask
+paint 5
+wait 40
+screenshot aox_rot_03
+run ao_pose 1 0 0 0 6
+wait 60
+paint 0
+wait 40
+screenshot aox_rot_06_mask
+paint 5
+wait 40
+screenshot aox_rot_06
+run ao_pose 1 0 0 0 9
+wait 60
+paint 0
+wait 40
+screenshot aox_rot_09_mask
+paint 5
+wait 40
+screenshot aox_rot_09
+run ao_pose 1 0 0 0 12
+wait 60
+paint 0
+wait 40
+screenshot aox_rot_12_mask
+paint 5
+wait 40
+screenshot aox_rot_12
+run ao_pose 1 0 0 0 15
+wait 60
+paint 0
+wait 40
+screenshot aox_rot_15_mask
+paint 5
+wait 40
+screenshot aox_rot_15
+
+# ---- slight OFF-GRID translation: 0 -> 0.5 blocks laterally -------------
+run ao_pose 1 0 0 0 0
+wait 60
+run ao_pose 1 0 0 0.1 0
+wait 60
+paint 0
+wait 40
+screenshot aox_off_01_mask
+paint 5
+wait 40
+screenshot aox_off_01
+run ao_pose 1 0 0 0.2 0
+wait 60
+paint 0
+wait 40
+screenshot aox_off_02_mask
+paint 5
+wait 40
+screenshot aox_off_02
+run ao_pose 1 0 0 0.3 0
+wait 60
+paint 0
+wait 40
+screenshot aox_off_03_mask
+paint 5
+wait 40
+screenshot aox_off_03
+run ao_pose 1 0 0 0.4 0
+wait 60
+paint 0
+wait 40
+screenshot aox_off_04_mask
+paint 5
+wait 40
+screenshot aox_off_04
+run ao_pose 1 0 0 0.5 0
+wait 60
+paint 0
+wait 40
+screenshot aox_off_05_mask
+paint 5
+wait 40
+screenshot aox_off_05
+run ao_clear
+wait 40
+quit

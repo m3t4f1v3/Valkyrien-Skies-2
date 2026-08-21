@@ -97,6 +97,14 @@ public final class VsAutoTestHarness {
     private static Block lightShipEmitter;
     /** Where light_ship parked the ship, so move_ship can offset from it instead of accumulating. */
     private static org.joml.Vector3dc lightShipSpawnPos;
+    /**
+     * Scene ships for the AO fixtures. The seam-AO situations in claude-scratchpad (verify4/verify5,
+     * scenes.py) are all comparisons between arrangements of SEVERAL small ships -- cross-ship splits
+     * of one layout, a pair at sub-block lateral offsets, one ship yawed against a straight one -- so
+     * they need per-ship control that the single `lightShip` slot cannot express.
+     */
+    private static final ServerShip[] sceneShips = new ServerShip[8];
+    private static final org.joml.Vector3dc[] sceneSpawnPos = new org.joml.Vector3dc[8];
     /** Per-tick drag delta, applied every tick while non-null; see {@link #dragShip}. */
     private static org.joml.Vector3dc dragDelta;
 
@@ -231,6 +239,15 @@ public final class VsAutoTestHarness {
                     org.valkyrienskies.mod.common.config.VSGameConfig.CLIENT.getShipAmbientOcclusion());
             }
             case "hud" -> minecraft.options.hideGui = !"on".equalsIgnoreCase(inst[1]);
+            // Switch the debug paint at runtime. Fixtures use this to take a masking shot (paint 0,
+            // ordinary render, ships identifiable as stone) and a measuring shot (paint 5, the AO loss
+            // field) of the SAME frame, so the ships' own pixels can be excluded from a floor integral.
+            case "paint" -> {
+                org.valkyrienskies.mod.common.config.VSGameConfig.CLIENT
+                    .setDebugFloodPaint(Integer.parseInt(inst[1]));
+                LOGGER.info("[autotest] debugFloodPaint -> {}",
+                    org.valkyrienskies.mod.common.config.VSGameConfig.CLIENT.getDebugFloodPaint());
+            }
             case "screenshot" -> screenshot(minecraft, inst[1]);
             case "log" -> LOGGER.info("[autotest] MARK: {}", join(inst, 1));
             case "quit" -> this.finish(minecraft, "OK");
@@ -260,6 +277,13 @@ public final class VsAutoTestHarness {
             case "drag_ship" -> dragDelta = new org.joml.Vector3d(
                 Double.parseDouble(inst[2]), Double.parseDouble(inst[3]), Double.parseDouble(inst[4]));
             case "drag_stop" -> dragDelta = null;
+            case "ao_ship" -> spawnSceneShip(minecraft, Integer.parseInt(inst[2]),
+                Integer.parseInt(inst[3]), Integer.parseInt(inst[4]), Integer.parseInt(inst[5]),
+                inst[6]);
+            case "ao_pose" -> poseSceneShip(minecraft, Integer.parseInt(inst[2]),
+                Double.parseDouble(inst[3]), Double.parseDouble(inst[4]), Double.parseDouble(inst[5]),
+                inst.length > 6 ? Double.parseDouble(inst[6]) : 0.0);
+            case "ao_clear" -> clearSceneShips(minecraft);
             case "drift_ship" -> driftShip(minecraft,
                 Double.parseDouble(inst[2]), Double.parseDouble(inst[3]), Double.parseDouble(inst[4]));
             case "move_ship" -> moveShip(minecraft,
@@ -796,4 +820,133 @@ public final class VsAutoTestHarness {
     private static String join(final String[] parts, final int from) {
         return String.join(" ", java.util.Arrays.copyOfRange(parts, from, parts.length));
     }
+    /**
+     * Build a scene ship out of an explicit cell list, so the fixtures can reproduce the exact
+     * layouts the scratchpad verifies (single, s_s gap, row3, L, 2x2) and split them across ships.
+     *
+     * <p>{@code cells} is a comma-separated list of {@code dx:dy:dz} offsets from (ox, oy, oz), e.g.
+     * {@code 0:0:0,1:0:0} for a two-block ship. Stone throughout -- these fixtures measure AO, not
+     * light, so no emitter is placed.
+     */
+    private static void spawnSceneShip(final Minecraft minecraft, final int slot, final int ox,
+        final int oy, final int oz, final String cells) {
+        if (slot < 0 || slot >= sceneShips.length) {
+            throw new IllegalArgumentException("ao_ship: slot out of range: " + slot);
+        }
+        final MinecraftServer server = minecraft.getSingleplayerServer();
+        if (server == null) {
+            throw new IllegalStateException("ao_ship: no integrated server");
+        }
+        final ResourceKey<Level> dimension = minecraft.level.dimension();
+        final String cellSpec = cells;
+        server.execute(() -> {
+            final ServerLevel level = server.getLevel(dimension);
+            final DenseBlockPosSet blocks = new DenseBlockPosSet();
+            int count = 0;
+            for (final String cell : cellSpec.split(",")) {
+                final String[] parts = cell.split(":");
+                if (parts.length != 3) {
+                    throw new IllegalArgumentException("ao_ship: bad cell '" + cell + "' (want dx:dy:dz)");
+                }
+                final BlockPos pos = new BlockPos(ox + Integer.parseInt(parts[0]),
+                    oy + Integer.parseInt(parts[1]), oz + Integer.parseInt(parts[2]));
+                level.setBlock(pos, Blocks.STONE.defaultBlockState(), 3);
+                blocks.add(pos.getX(), pos.getY(), pos.getZ());
+                count++;
+            }
+            final ServerShip ship =
+                ShipAssemblyKt.createNewShipWithBlocks(new BlockPos(ox, oy, oz), blocks, level);
+            ship.setStatic(true);
+            sceneShips[slot] = ship;
+            sceneSpawnPos[slot] = new org.joml.Vector3d(ship.getTransform().getPositionInWorld());
+            LOGGER.info("[autotest] ao_ship slot={} id={} origin=({},{},{}) cells={} spawnPos={}",
+                slot, ship.getId(), ox, oy, oz, count, sceneSpawnPos[slot]);
+        });
+    }
+
+    /**
+     * Offset a scene ship from where it spawned and yaw it. Sub-block offsets are the whole point:
+     * the scratchpad's rigidity checks sweep 0 / 0.25 / 0.5 of a block and require the shadow to
+     * translate rigidly rather than redistribute over world vertices.
+     */
+    private static void poseSceneShip(final Minecraft minecraft, final int slot, final double dx,
+        final double dy, final double dz, final double yawDeg) {
+        if (slot < 0 || slot >= sceneShips.length || sceneShips[slot] == null) {
+            throw new IllegalStateException("ao_pose: nothing in slot " + slot);
+        }
+        final MinecraftServer server = minecraft.getSingleplayerServer();
+        if (server == null) {
+            throw new IllegalStateException("ao_pose: no integrated server");
+        }
+        final ResourceKey<Level> dimension = minecraft.level.dimension();
+        final ServerShip ship = sceneShips[slot];
+        final org.joml.Vector3dc spawn = sceneSpawnPos[slot];
+        server.execute(() -> {
+            try {
+                final ServerLevel serverLevel = server.getLevel(dimension);
+                final String dimensionId =
+                    org.valkyrienskies.mod.common.VSGameUtilsKt.getDimensionId(serverLevel);
+                final org.joml.Vector3d target = new org.joml.Vector3d(spawn).add(dx, dy, dz);
+                final org.joml.Quaterniond rot =
+                    new org.joml.Quaterniond().rotateY(java.lang.Math.toRadians(yawDeg));
+                final org.valkyrienskies.core.api.world.ServerShipWorld shipWorld =
+                    (org.valkyrienskies.core.api.world.ServerShipWorld)
+                        org.valkyrienskies.mod.common.VSGameUtilsKt.getShipObjectWorld(server);
+                final var core = org.valkyrienskies.mod.common.VSGameUtilsKt.getVsCore();
+                // newVel / newOmega are @NotNull in the core API: passing null throws inside the
+                // teleport and every later screenshot silently measures the un-posed ship.
+                core.teleportShip(shipWorld, ship, core.newShipTeleportData(
+                    target, rot, new org.joml.Vector3d(), new org.joml.Vector3d(),
+                    dimensionId, null, null));
+                LOGGER.info("[autotest] ao_pose slot={} id={} delta=({},{},{}) yaw={} -> {}",
+                    slot, ship.getId(), dx, dy, dz, yawDeg, target);
+            } catch (final Throwable t) {
+                LOGGER.error("[autotest] ao_pose FAILED -- later screenshots are of an un-posed ship", t);
+                throw t;
+            }
+        });
+    }
+
+    /**
+     * Take every scene ship out of the frame, so consecutive cases in one fixture cannot contaminate
+     * each other.
+     *
+     * <p>The core API exposes no ship deletion, so this teleports them far away instead. That is
+     * genuinely sufficient here rather than a fudge: population is filtered by
+     * {@code isShipRelevantToWorldFromShipFrame}, which drops any ship whose render AABB is outside
+     * the viewport, so a moved-away ship contributes no occluders at all -- it cannot widen the seam
+     * global bounds or the spatial grid either.
+     */
+    private static void clearSceneShips(final Minecraft minecraft) {
+        final MinecraftServer server = minecraft.getSingleplayerServer();
+        if (server == null) {
+            throw new IllegalStateException("ao_clear: no integrated server");
+        }
+        final ResourceKey<Level> dimension = minecraft.level.dimension();
+        server.execute(() -> {
+            final ServerLevel serverLevel = server.getLevel(dimension);
+            final String dimensionId =
+                org.valkyrienskies.mod.common.VSGameUtilsKt.getDimensionId(serverLevel);
+            final org.valkyrienskies.core.api.world.ServerShipWorld shipWorld =
+                (org.valkyrienskies.core.api.world.ServerShipWorld)
+                    org.valkyrienskies.mod.common.VSGameUtilsKt.getShipObjectWorld(server);
+            final var core = org.valkyrienskies.mod.common.VSGameUtilsKt.getVsCore();
+            int moved = 0;
+            for (int i = 0; i < sceneShips.length; i++) {
+                if (sceneShips[i] == null) {
+                    continue;
+                }
+                final org.joml.Vector3d away =
+                    new org.joml.Vector3d(sceneSpawnPos[i]).add(0.0, 0.0, 4096.0);
+                core.teleportShip(shipWorld, sceneShips[i], core.newShipTeleportData(
+                    away, sceneShips[i].getTransform().getShipToWorldRotation(),
+                    new org.joml.Vector3d(), new org.joml.Vector3d(), dimensionId, null, null));
+                sceneShips[i] = null;
+                sceneSpawnPos[i] = null;
+                moved++;
+            }
+            LOGGER.info("[autotest] ao_clear moved {} scene ships out of frame", moved);
+        });
+    }
+
 }

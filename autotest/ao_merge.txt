@@ -1,0 +1,63 @@
+# CROSS-SHIP MERGING, from claude-scratchpad/verify5.py:scene_pair and :scene_rot.
+#
+# Two SEPARATE single-block ships must merge into one AO pattern the way two blocks of the SAME ship
+# do -- that is the feature seam4 exists for. seam3 (no merging) sums them independently and reads as
+# two overlapping shadows. Cases:
+#   pair_z000/025/050  neighbouring ships at lateral offsets 0 / 0.25 / 0.5 (scene_pair)
+#   gaprot_00/225/45   ship at 0 deg | one-block gap | ship yawed 0 / 22.5 / 45 (scene_rot)
+# The one-block-gap case is also the "merge bridge" the user protected when they rejected CUTOFF=0.5.
+world autotest
+wait-level
+wait 100
+hud off
+cmd gamemode spectator
+cmd time set noon
+cmd gamerule doDaylightCycle false
+cmd kill @e[type=!player]
+wait 20
+cmd tp @s 3 -47 3 0 90
+wait 60
+
+# ---- adjacent pair at sub-block lateral offsets -------------------------
+run ao_ship 0 2 -60 3 0:0:0
+run ao_ship 1 3 -60 3 0:0:0
+wait 80
+screenshot aom_pair_z000
+run ao_pose 1 0 0 0.25 0
+wait 60
+screenshot aom_pair_z025
+run ao_pose 1 0 0 0.5 0
+wait 60
+screenshot aom_pair_z050
+run ao_clear
+wait 40
+
+# ---- straight ship | one-block gap | yawed ship -------------------------
+run ao_ship 0 2 -60 3 0:0:0
+run ao_ship 1 4 -60 3 0:0:0
+wait 80
+screenshot aom_gaprot_00
+run ao_pose 1 0 0 0 22.5
+wait 60
+screenshot aom_gaprot_225
+run ao_pose 1 0 0 0 45
+wait 60
+screenshot aom_gaprot_45
+run ao_clear
+wait 40
+
+# ---- references the merge cases are judged against ----------------------
+# aom_single: one block alone. aom_two_one_ship: the SAME two cells as one ship -- which is exactly
+# what the touching pair is supposed to look like once merged, so this is the direct test of the
+# feature rather than an inference from areas.
+run ao_ship 0 2 -60 3 0:0:0
+wait 80
+screenshot aom_single
+run ao_clear
+wait 40
+run ao_ship 0 2 -60 3 0:0:0,1:0:0
+wait 80
+screenshot aom_two_one_ship
+run ao_clear
+wait 40
+quit

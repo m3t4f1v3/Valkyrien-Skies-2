@@ -1,0 +1,63 @@
+# Shadow RIGIDITY, from claude-scratchpad/verify4.py:scene_translate and :scene_rotate.
+#
+# The rejected receiver-anchored variant (seam2) sampled AO on the WORLD grid, so an off-grid ship
+# made the shadow redistribute over world vertices -- it "dragged" as the ship slid. The shipped
+# algorithm evaluates in the OCCLUDER ship's own lattice, so the field must translate and rotate
+# RIGIDLY with the ship: same shape, just moved.
+#
+# The scorer does not try to re-register the images -- a resample would blur exactly the drift being
+# looked for. It measures what verify4 measured: the total AO in the frame across a sub-block sweep.
+# A rigid field keeps its total as the ship slides (verify4: <=0.02 for the shipped algorithm), while
+# a receiver-anchored one snaps between world-vertex configurations and the total JUMPS between
+# consecutive offsets (0.16-0.20 for the drifted variant). The sweep is fine enough that a jump has
+# to show up between two adjacent steps.
+world autotest
+wait-level
+wait 100
+hud off
+cmd gamemode spectator
+cmd time set noon
+cmd gamerule doDaylightCycle false
+cmd kill @e[type=!player]
+wait 20
+cmd tp @s 3 -47 3 0 90
+wait 60
+
+# ---- sub-block translation sweep: 0 / 0.25 / 0.5 of a block in x -------
+run ao_ship 0 3 -60 3 0:0:0
+wait 80
+screenshot aor_tx_000
+run ao_pose 0 0.125 0 0 0
+wait 60
+screenshot aor_tx_0125
+run ao_pose 0 0.25 0 0 0
+wait 60
+screenshot aor_tx_025
+run ao_pose 0 0.375 0 0 0
+wait 60
+screenshot aor_tx_0375
+run ao_pose 0 0.5 0 0 0
+wait 60
+screenshot aor_tx_050
+run ao_pose 0 0 0 0 0
+wait 60
+
+# ---- yaw sweep at contact: 0 -> 45 degrees ------------------------------
+# 45 is the hard case: the dominant-slice-axis pick is closest to tying there, and a pop would show
+# as a jump between the last two steps.
+screenshot aor_yaw_00
+run ao_pose 0 0 0 0 11.25
+wait 60
+screenshot aor_yaw_1125
+run ao_pose 0 0 0 0 22.5
+wait 60
+screenshot aor_yaw_225
+run ao_pose 0 0 0 0 33.75
+wait 60
+screenshot aor_yaw_3375
+run ao_pose 0 0 0 0 45
+wait 60
+screenshot aor_yaw_45
+run ao_clear
+wait 40
+quit
