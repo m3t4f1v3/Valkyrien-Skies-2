@@ -1,0 +1,31 @@
+# The common frame that was paying for AO it could not use: ships loaded, but none in view.
+#
+# Profiling put ~1.27ms/frame at 1080p into the mere presence of the seam code in the world shader --
+# occupancy lost to register pressure, charged to every terrain fragment whether or not any occluder
+# is in frame. This fixture looks AWAY from the ships, so the occluder list is empty and the frame can
+# legitimately use the world program that does not carry the AO at all.
+world autotest
+wait-level
+wait 100
+hud off
+cmd gamemode spectator
+cmd time set noon
+cmd gamerule doDaylightCycle false
+cmd kill @e[type=!player]
+wait 20
+
+run ao_ship 0 0 -60 0 0:0:0,1:0:0,0:0:1,1:0:1
+wait 120
+
+# Stand well away and face the opposite direction: the ships are loaded and lit, just not on screen.
+cmd tp @s 60 -55 60 45 10
+wait 140
+run fps SETTLED
+wait 40
+run fps SETTLED
+wait 40
+run fps SETTLED
+wait 40
+run fps SETTLED
+screenshot ao_noship
+quit

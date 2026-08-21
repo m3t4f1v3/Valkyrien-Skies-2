@@ -130,7 +130,11 @@ dependencies {
     //    exclude group: 'com.github.AlphaMode', module: 'fakeconfigtoml'
     //}
     modCompileOnly("com.simibubi.create:create-fabric:$create_fabric_version")
-    modRuntimeOnly("com.simibubi.create:create-fabric:$create_fabric_version")
+    // See create_runtime in gradle.properties: off by default so dev launches (and every autotest
+    // client start) do not pay for a mod nothing under test uses.
+    if (project.findProperty("create_runtime") == "true") {
+        modRuntimeOnly("com.simibubi.create:create-fabric:$create_fabric_version")
+    }
     //modImplementation("com.tterrag.registrate_fabric:Registrate:${registrate_version}")
 
     //modImplementation("io.github.fabricators_of_create.Porting-Lib:Porting-Lib:$port_lib_version")

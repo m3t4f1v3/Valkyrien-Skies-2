@@ -96,6 +96,18 @@ public class SodiumCompat {
     // debugFloodPaint = 5: paint the seam-AO loss instead of the shaded color, in both the
     // world and ship shaders. Red = loss applied; the coloured dots mark sampled corners.
     static final int FEATURE_DEBUG_SEAM_AO = 1024;
+    /**
+     * -Pvs.aoprof=N: make the per-fragment seam AO return early at stage N, so its cost can be
+     * bisected in a running client. 0 (or unset) is the normal shader. Constant for the process, so
+     * it needs no place in the shader cache key.
+     */
+    private static final int AO_PROF = Integer.getInteger("vs.aoprof", 0);
+    /**
+     * -Pvs_aogate=off disables the "no occluders in frame, so compile the AO out" gate below. Exists
+     * to measure what that gate is worth: with it on, a frame with no ship in view uses the world
+     * program that does not carry the seam code at all.
+     */
+    private static final boolean AO_GATE = !"off".equals(System.getProperty("vs.aogate", "on"));
 
     static Map<ShaderCacheKey, GlProgram<ShipThing>> cachedPrograms = new HashMap<>();
     private static final ThreadLocal<Matrix4f> CURRENT_TRANSFORM = new ThreadLocal<>();
@@ -721,9 +733,18 @@ public class SodiumCompat {
         int features = VsDynamicLight.isGpuFloodActive() ? FEATURE_FLOOD_GRID : 0;
         // The world program builds its own feature bits rather than calling computeFeatureBits(), so
         // every world-shader feature has to be added HERE as well. Ship-cast AO lives in the world
-        // shader (ws_shipAo shades world terrain under a ship), and omitting it here compiled the AO
-        // out unconditionally -- the config appeared to do nothing at all.
-        if (VSGameConfig.CLIENT.getShipAmbientOcclusion()) {
+        // shader (it shades world terrain under a ship), and omitting it here compiled the AO out
+        // unconditionally -- the config appeared to do nothing at all.
+        //
+        // The occluder-count test is a performance one, and it is worth more than it looks. Profiling
+        // (autotest/perf_aoprof.sh) found that merely HAVING the seam code in the world shader costs
+        // ~1.27ms/frame at 1080p in a stage that executes none of it -- occupancy lost to register
+        // pressure, paid by every terrain fragment. With no occluders in the frame the AO provably
+        // contributes nothing (ws_seamAoFrag returns 0 on its first test), so those frames can use the
+        // program that does not carry the code at all. Both variants stay in cachedWorldPrograms, so
+        // ships entering and leaving view is a bind, not a recompile.
+        if (VSGameConfig.CLIENT.getShipAmbientOcclusion()
+            && (!AO_GATE || VsDynamicLight.getShipOccluderList().size() > 0)) {
             features |= FEATURE_SHIP_AO;
         }
         if (features != 0) {
@@ -827,6 +848,7 @@ public class SodiumCompat {
         if ((features & FEATURE_DEBUG_FLOOD_2) != 0) builder.add("VS_DEBUG_FLOOD", "2");
         if ((features & FEATURE_SHIP_AO) != 0) builder.add("VS_SHIP_AO");
         if ((features & FEATURE_DEBUG_SEAM_AO) != 0) builder.add("VS_DEBUG_SEAM_AO");
+        if (AO_PROF != 0) builder.add("VS_AOPROF", Integer.toString(AO_PROF));
         if ((features & FEATURE_DEBUG_SHIP_LIGHT) != 0) builder.add("VS_DEBUG_SHIP_LIGHT", VSGameConfig.CLIENT.getDebugFloodPaint() == 4 ? "4" : "3");
         return builder.build();
     }
@@ -901,6 +923,7 @@ public class SodiumCompat {
         // or the FSH compiles without the reader, GLSL drops the uniform, and bindUniform NPEs.
         if ((features & FEATURE_SHIP_AO) != 0) builder.add("VS_SHIP_AO");
         if ((features & FEATURE_DEBUG_SEAM_AO) != 0) builder.add("VS_DEBUG_SEAM_AO");
+        if (AO_PROF != 0) builder.add("VS_AOPROF", Integer.toString(AO_PROF));
         // getOrCreateShipProgram sets this bit from debugFloodPaint, so it has to be emitted here too
         // -- without it the debug paint is silently a no-op on ship chunks.
         if ((features & FEATURE_DEBUG_SHIP_LIGHT) != 0) {

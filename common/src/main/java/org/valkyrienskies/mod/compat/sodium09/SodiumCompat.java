@@ -299,7 +299,10 @@ public class SodiumCompat {
         // every world-shader feature has to be added HERE as well. Ship-cast AO lives in the world
         // shader (ws_shipAo shades world terrain under a ship), and omitting it here compiled the AO
         // out unconditionally -- the config appeared to do nothing at all.
-        if (VSGameConfig.CLIENT.getShipAmbientOcclusion()) {
+        // See the 0.5 copy: with no occluders in frame the seam AO provably contributes nothing, and
+        // simply having its code in the world shader costs ~1.27ms/frame at 1080p in occupancy.
+        if (VSGameConfig.CLIENT.getShipAmbientOcclusion()
+            && VsDynamicLight.getShipOccluderList().size() > 0) {
             features |= FEATURE_SHIP_AO;
         }
         if (features != 0) {

@@ -70,6 +70,28 @@ loom {
         }
     }
 
+    // `-Pvs_aogate=off` — disable the no-occluders AO gate, to measure what it is worth.
+    if (project.hasProperty('vs_aogate')) {
+        runs.configureEach {
+            property("vs.aogate", project.property('vs_aogate').toString())
+        }
+    }
+
+    // `-Pvs_aotime` — report the seam AO's CPU cost per frame. See VsDynamicLight.AO_TIME.
+    if (project.hasProperty('vs_aotime')) {
+        runs.configureEach {
+            property("vs.aotime", "true")
+        }
+    }
+
+    // `-Pvs_aoprof=N` — bisect the per-fragment seam AO by making it return early at stage N.
+    // See VS_AOPROF in the chunk fragment shaders.
+    if (project.hasProperty('vs_aoprof')) {
+        runs.configureEach {
+            property("vs.aoprof", project.property('vs_aoprof').toString())
+        }
+    }
+
     if (vsSodiumRuntime == "backport") {
         // Sodium refuses to start when the running LWJGL differs from the one it was compiled against.
         // The version pin below reaches this module's runtimeClasspath, but Forge's dev launch classpath
@@ -160,17 +182,20 @@ dependencies {
     //modRuntimeOnly("com.rbasamoyai:ritchiesprojectilelib:${rpl_version}+mc.${minecraft_version}-forge")
 
 
-    // Create compat
+    // Create compat. Compiling against it is unconditional; LOADING it in the dev runtime is not --
+    // see create_runtime in gradle.properties for why (dev launch time, paid on every autotest run).
     modCompileOnly("com.simibubi.create:create-${minecraft_version}:${create_version}:slim") { transitive = false }
-    modRuntimeOnly("com.simibubi.create:create-${minecraft_version}:${create_version}:slim") { transitive = false }
     modCompileOnly("net.createmod.ponder:Ponder-Forge-${minecraft_version}:${ponder_version}")
-    modRuntimeOnly("net.createmod.ponder:Ponder-Forge-${minecraft_version}:${ponder_version}")
     modCompileOnly("curse.maven:vanillin-965702:6446560")
-    modRuntimeOnly("curse.maven:vanillin-965702:6446560")
     modCompileOnly("dev.engine-room.flywheel:flywheel-forge-api-${minecraft_version}:${flywheel_version}")
-    modRuntimeOnly("dev.engine-room.flywheel:flywheel-forge-${minecraft_version}:${flywheel_version}")
     modCompileOnly("com.tterrag.registrate:Registrate:${registrate_version}")
-    modRuntimeOnly("com.tterrag.registrate:Registrate:${registrate_version}")
+    if (project.findProperty("create_runtime") == "true") {
+        modRuntimeOnly("com.simibubi.create:create-${minecraft_version}:${create_version}:slim") { transitive = false }
+        modRuntimeOnly("net.createmod.ponder:Ponder-Forge-${minecraft_version}:${ponder_version}")
+        modRuntimeOnly("curse.maven:vanillin-965702:6446560")
+        modRuntimeOnly("dev.engine-room.flywheel:flywheel-forge-${minecraft_version}:${flywheel_version}")
+        modRuntimeOnly("com.tterrag.registrate:Registrate:${registrate_version}")
+    }
 
     // Weather2 1.20.1
     //modRuntimeOnly("curse.maven:weather-storms-tornadoes-237746:5244118")

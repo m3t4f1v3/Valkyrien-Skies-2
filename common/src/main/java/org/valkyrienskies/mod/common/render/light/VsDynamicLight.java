@@ -223,6 +223,29 @@ public final class VsDynamicLight {
      *               Sodium-generation-specific callers pass a frustum test built from their own
      *               viewport type, which is the only part of this that differs between them.
      */
+    /**
+     * -Dvs.aotime=true: report what the seam AO costs on the CPU each frame -- buildSeamData plus the
+     * three buffer uploads. Turning the AO on was measured to cost 1.27ms/frame in a profiling stage
+     * that executes NO shader code, and fps-based attribution could not tell whether that was GPU
+     * occupancy or this. Timed directly, it is an answer instead of an inference.
+     */
+    private static final boolean AO_TIME = Boolean.getBoolean("vs.aotime");
+    private static long aoTimeNanos = 0L;
+    private static long aoTimeFrames = 0L;
+
+    private static void reportAoTime(final long startNanos) {
+        if (!AO_TIME) {
+            return;
+        }
+        aoTimeNanos += System.nanoTime() - startNanos;
+        if (++aoTimeFrames >= 120) {
+            org.slf4j.LoggerFactory.getLogger("VS2-aotime").info("seam AO CPU: {} ms/frame over {} frames",
+                String.format("%.3f", aoTimeNanos / 1.0e6 / aoTimeFrames), aoTimeFrames);
+            aoTimeNanos = 0L;
+            aoTimeFrames = 0L;
+        }
+    }
+
     public static void populateWorldFromShipsForFrame(final ClientLevel level,
         final Predicate<ClientShip> filter) {
         if (!VSGameConfig.CLIENT.getDynamicShipToWorldLighting()) {
@@ -243,9 +266,11 @@ public final class VsDynamicLight {
                 getShipVoxelCache(), storage, emitters, occluders);
             // Seam-AO acceleration data (sub-run headers, per-ship directory, global bounds) has to
             // be built after the last appendOccluder and before upload, on every path that uploads.
+            final long aoStart = System.nanoTime();
             occluders.buildSeamData();
             emitters.upload();
             occluders.upload();
+            reportAoTime(aoStart);
             return;
         }
 

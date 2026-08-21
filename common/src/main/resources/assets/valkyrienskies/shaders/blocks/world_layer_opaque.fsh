@@ -490,12 +490,28 @@ vec4 ws_seamCorners(mat3 occ) {
     );
 }
 
+#ifdef VS_AOPROF
+// Profiling stages, -Pvs_aoprof=N: return before stage N+1 runs. Each cut returns under a condition
+// that is always true at runtime and not provable at compile time, so the code below stays live --
+// no uniform is eliminated (sodium's bindUniform would throw) and register allocation is identical
+// in every stage -- but never executes. An earlier version returned a "keepalive" expression that
+// touched each uniform instead; its 4 texel fetches cost ~2.2ms at full coverage, several times the
+// stages being measured, and the calibration row came out slower than the stages containing it.
+#define VS_AOPROF_CUT if (u_VsSeamRunCount >= 0) return 0.0;
+#endif
+
 float ws_seamAoFrag(vec3 fragWorldPos, vec3 normal, int selfShipIndex, out float dbgVertex) {
     dbgVertex = 0.0;
+#if defined(VS_AOPROF) && VS_AOPROF == 4
+    VS_AOPROF_CUT   // stage 0: AO present but nothing runs -- the floor
+#endif
 
     if (u_VsShipOccluderCount <= 0 || u_VsSeamRunCount <= 0) return 0.0;
     float globalR = u_VsSeamBounds.w + WS_SEAM_SUPPORT;
     if (ws_seamDistSq(fragWorldPos, u_VsSeamBounds.xyz) > globalR * globalR) return 0.0;
+#if defined(VS_AOPROF) && VS_AOPROF == 1
+    VS_AOPROF_CUT   // stage 1: + global bounds cull
+#endif
 
     // ---- pass 1: nearby SHIPS -> host lattices ----------------------------
     // Two-level cull: iterate the ship directory and reject each far ship with
@@ -512,6 +528,9 @@ float ws_seamAoFrag(vec3 fragWorldPos, vec3 normal, int selfShipIndex, out float
     if (any(lessThan(gi, ivec3(0))) || any(greaterThanEqual(gi, ivec3(WS_SEAM_GRID_DIM)))) return 0.0;
     int cell = (gi.z * WS_SEAM_GRID_DIM + gi.y) * WS_SEAM_GRID_DIM + gi.x;
     ivec2 cellOC = floatBitsToInt(texelFetch(u_VsSeamGrid, cell)).xy;  // (offset, count)
+#if defined(VS_AOPROF) && VS_AOPROF == 2
+    VS_AOPROF_CUT   // stage 2: + grid cell lookup
+#endif
 
     for (int i = 0; i < WS_SEAM_CELL_LOOP_CAP; i++) {
         if (i >= cellOC.y) break;
@@ -540,6 +559,9 @@ float ws_seamAoFrag(vec3 fragWorldPos, vec3 normal, int selfShipIndex, out float
         if (claims.w > 0.0) ws_seamAddHost(partners.w, hostCount, hostShip, hostQ, hostAnchor, hostR);
     }
     if (hostCount == 0) return 0.0;
+#if defined(VS_AOPROF) && VS_AOPROF == 3
+    VS_AOPROF_CUT   // stage 3: + pass 1 host selection
+#endif
 
     // Cache the claim of every host (as material OWNER) to every host (as
     // lattice), so pass 2 needs zero ship-directory fetches. Owners with
