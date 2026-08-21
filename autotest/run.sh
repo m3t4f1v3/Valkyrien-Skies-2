@@ -55,10 +55,30 @@ MC_OPTS="$RUN_DIR/options.txt"
 # Fragment-shader cost scales with pixels, and the client window defaults to 854x480 inside the
 # virtual display -- about a ninth of 1920x1080. Any per-fragment measurement taken at the default is
 # therefore not comparable to what a player sees.
+#
+# NOTE: this is only honoured if it FITS inside gamescope's nested display (AUTOTEST_W/AUTOTEST_H,
+# default 1600x900). Ask for 1200x1200 on a 900-tall display and Minecraft quietly keeps 854x480 --
+# the screenshots come out the default size with nothing in the log to say why. Raise AUTOTEST_H too.
 if [ -f "$MC_OPTS" ] && [ -n "${AUTOTEST_RES_W:-}" ]; then
     sed -i "s/^overrideWidth:.*/overrideWidth:${AUTOTEST_RES_W}/" "$MC_OPTS"
     sed -i "s/^overrideHeight:.*/overrideHeight:${AUTOTEST_RES_H}/" "$MC_OPTS"
     echo "autotest: render resolution forced to ${AUTOTEST_RES_W}x${AUTOTEST_RES_H}"
+fi
+# Field of view. NOT degrees, and not a 0..1 range either: MC stores it as a DELTA FROM 70 DEGREES
+# normalised to +/-1, so -1.0 = 30 deg, 0.0 = 70 (the default), 1.0 = 110. The dev instance ships 1.0,
+# which is why a scene sat tiny in the middle of the frame. Narrowing the FOV is the right way to fill
+# the frame with a small scene: it zooms optically, instead of flying the camera close and adding
+# perspective distortion to the very thing being looked at.
+if [ -f "$MC_OPTS" ] && [ -n "${AUTOTEST_FOV:-}" ]; then
+    sed -i "s/^fov:.*/fov:${AUTOTEST_FOV}/" "$MC_OPTS"
+    echo "autotest: fov -> $(grep -h '^fov:' "$MC_OPTS")  (-1.0 = 30 deg, 0.0 = 70, 1.0 = 110)"
+fi
+# overrideWidth/Height were tried for this and do nothing in this setup -- the client stays 854x480
+# and nothing is logged. Going fullscreen inside gamescope does work: the render then takes the
+# nested display's size, so AUTOTEST_W/AUTOTEST_H choose the resolution AND the aspect ratio.
+if [ -f "$MC_OPTS" ] && [ -n "${AUTOTEST_FULLSCREEN:-}" ]; then
+    sed -i "s/^fullscreen:.*/fullscreen:${AUTOTEST_FULLSCREEN}/" "$MC_OPTS"
+    echo "autotest: fullscreen -> $(grep -h '^fullscreen:' "$MC_OPTS") (render takes the ${AUTOTEST_W:-1600}x${AUTOTEST_H:-900} display size)"
 fi
 if [ -f "$MC_OPTS" ] && [ -n "${AUTOTEST_UNCAP_FPS:-}" ]; then
     sed -i 's/^enableVsync:.*/enableVsync:false/' "$MC_OPTS"
