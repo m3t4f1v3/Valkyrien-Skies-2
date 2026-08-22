@@ -340,6 +340,11 @@ float ws_seamAoFrag(vec3 fragWorldPos, vec3 normal, int selfShipIndex, out float
         int e = cellOC.x + i;
         int ri = floatBitsToInt(texelFetch(u_VsSeamGrid, WS_SEAM_GRID_CELLS + (e >> 2)))[e & 3];
 
+        // The meta fetch stays BEHIND the distance cull. Issuing it alongside head to break the
+        // dependent chain was measured and was 3.4% SLOWER (6.17 -> 6.37 ms/frame, against 0.3%
+        // run-to-run variance): most runs in a cell are rejected here, and in pass 2 this loop runs
+        // once per host lattice, so the speculative load is paid several times over for each one
+        // that is used. Latency-bound does not mean bandwidth is free.
         vec4 head = texelFetch(u_VsSeamRuns, ri * 2);
         float runR = head.w + WS_SEAM_SUPPORT;
         if (ws_seamDistSq(fragWorldPos, head.xyz) > runR * runR) continue;
@@ -446,6 +451,7 @@ float ws_seamAoFrag(vec3 fragWorldPos, vec3 normal, int selfShipIndex, out float
             int e = cellOC.x + i;
             int ri = floatBitsToInt(texelFetch(u_VsSeamGrid, WS_SEAM_GRID_CELLS + (e >> 2)))[e & 3];
 
+            // Kept behind the cull -- see the note in pass 1 on why hoisting it lost time.
             vec4 head = texelFetch(u_VsSeamRuns, ri * 2);
             float runR = head.w + WS_SEAM_SUPPORT;
             if (ws_seamDistSq(fragWorldPos, head.xyz) > runR * runR) continue;

@@ -537,6 +537,11 @@ float ws_seamAoFrag(vec3 fragWorldPos, vec3 normal, int selfShipIndex, out float
         int e = cellOC.x + i;
         int ri = floatBitsToInt(texelFetch(u_VsSeamGrid, WS_SEAM_GRID_CELLS + (e >> 2)))[e & 3];
 
+        // The meta fetch stays BEHIND the distance cull. Issuing it alongside head to break the
+        // dependent chain was measured and was 3.4% SLOWER (6.17 -> 6.37 ms/frame, against 0.3%
+        // run-to-run variance): most runs in a cell are rejected here, and in pass 2 this loop runs
+        // once per host lattice, so the speculative load is paid several times over for each one
+        // that is used. Latency-bound does not mean bandwidth is free.
         vec4 head = texelFetch(u_VsSeamRuns, ri * 2);
         float runR = head.w + WS_SEAM_SUPPORT;
         if (ws_seamDistSq(fragWorldPos, head.xyz) > runR * runR) continue;
@@ -643,6 +648,7 @@ float ws_seamAoFrag(vec3 fragWorldPos, vec3 normal, int selfShipIndex, out float
             int e = cellOC.x + i;
             int ri = floatBitsToInt(texelFetch(u_VsSeamGrid, WS_SEAM_GRID_CELLS + (e >> 2)))[e & 3];
 
+            // Kept behind the cull -- see the note in pass 1 on why hoisting it lost time.
             vec4 head = texelFetch(u_VsSeamRuns, ri * 2);
             float runR = head.w + WS_SEAM_SUPPORT;
             if (ws_seamDistSq(fragWorldPos, head.xyz) > runR * runR) continue;
@@ -672,6 +678,18 @@ float ws_seamAoFrag(vec3 fragWorldPos, vec3 normal, int selfShipIndex, out float
 
             int start = floatBitsToInt(meta.x);
             int cnt = floatBitsToInt(meta.y);
+            // Fetched four at a time, and all four issued BEFORE any is used. A GPU trace of this
+            // shader (autotest/ngfx_sdk.sh) showed it is latency bound, not ALU or register bound:
+            // warps inactive while the SM was active ran at 70% against 9% with the AO off, pixel
+            // shader occupancy halved, and L1TEX throughput went DOWN -- the signature of waiting on
+            // dependent fetches rather than of saturating anything. One fetch per iteration exposes
+            // its full latency every iteration; four independent ones overlap.
+            //
+            // The index is clamped rather than guarded so the loads stay unconditional (a branch
+            // around them would serialise them again); out-of-range lanes are simply not used below.
+            // Processing stays strictly in order k, k+1, k+2, k+3, so the accumulation into occ0/occ1
+            // happens in exactly the sequence it did before -- float addition is not associative, and
+            // this has to stay bit-identical.
             for (int k = 0; k < WS_SEAM_SUBRUN_LOOP_CAP; k++) {
                 if (k >= cnt) break;
                 vec4 vox = texelFetch(u_VsShipOccluders, (start + k) * 2);

@@ -122,3 +122,29 @@ Things that have gone wrong here before and cost whole runs:
 - Never threshold a colour channel loosely: grey stone reads as "green", the midnight sky reads as
   "blue".
 - Check a fixture actually shows what it claims before trusting a number out of it.
+
+## GPU profiling, and what it is worth
+
+`ngfx_capture.sh` records the client's real launch (argv, environment, cwd from `/proc`), and
+`ngfx_sdk.sh` replays that under Nsight with the `ao_trace` fixture, which starts and stops the trace
+itself through the shim in `ngfx-shim/`. `ngfx_compare.py` reads the export.
+
+Two things about the numbers, both learned the hard way:
+
+**Mask to live frames.** The trace keeps sampling after the fixture stops drawing, and about half the
+columns are dead. Dead frames write `NaN` into counter rows but a literal `0` into `.sum` rows, so
+the counters looked right while draws per frame silently averaged in hundreds of zeros -- 67.2
+reported against a true 128.0. `ngfx_compare.py` now takes one live-frame mask from the draw count
+and applies it to everything.
+
+**A/B back to back or not at all.** Two traces of the *same build* differ by 0.3%. The same build
+measured 70 minutes apart differed by 3%. A 5.8% "win" from widening a texelFetch was chased,
+mirrored into four shaders and written up before a proper A/B showed the change was worth 0.06% --
+the whole effect had been rig drift between two traces taken 5 minutes apart. Never compare against a
+stored number from an earlier session; re-measure the baseline in the same sitting as the candidate.
+
+**Prove the scenes match.** `run scene` logs rendered chunk counts and `hasRenderedAllChunks`, and
+`ngfx_compare.py` flags a draws-per-frame gap over 5%. AO-on and AO-off traces disagreed by 43% on
+draws with compute dispatches matching to three decimals -- same ship, different amount of world,
+because chunk building is asynchronous and the faster configuration reaches the trace window with
+less terrain uploaded. A fixed tick wait does not settle a scene; check that it did.

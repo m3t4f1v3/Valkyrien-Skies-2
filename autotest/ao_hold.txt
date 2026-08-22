@@ -1,0 +1,35 @@
+# Hold an AO-saturated scene steady, so an external GPU profiler can attach and trace it.
+#
+# Same lattice as ao_cover: blocks spaced so their shadows tile the ground, meaning nearly every
+# visible fragment does real seam-AO work. The difference is the long tail of waits at the end --
+# the client keeps rendering the identical frame for a couple of minutes, which is the window
+# autotest/ngfx_trace.sh attaches Nsight to.
+#
+# Nothing is screenshotted or scored here; the measurement comes out of the profiler.
+world autotest
+wait-level
+wait 100
+hud off
+cmd gamemode spectator
+cmd time set noon
+cmd gamerule doDaylightCycle false
+cmd kill @e[type=!player]
+wait 20
+
+run ao_ship 0 -12 -60 -12 0:0:0,0:0:3,0:0:6,0:0:9,0:0:12,0:0:15,0:0:18,0:0:21,0:0:24,3:0:0,3:0:3,3:0:6,3:0:9,3:0:12,3:0:15,3:0:18,3:0:21,3:0:24,6:0:0,6:0:3,6:0:6,6:0:9,6:0:12,6:0:15,6:0:18,6:0:21,6:0:24,9:0:0,9:0:3,9:0:6,9:0:9,9:0:12,9:0:15,9:0:18,9:0:21,9:0:24,12:0:0,12:0:3,12:0:6,12:0:9,12:0:12,12:0:15,12:0:18,12:0:21,12:0:24,15:0:0,15:0:3,15:0:6,15:0:9,15:0:12,15:0:15,15:0:18,15:0:21,15:0:24,18:0:0,18:0:3,18:0:6,18:0:9,18:0:12,18:0:15,18:0:18,18:0:21,18:0:24,21:0:0,21:0:3,21:0:6,21:0:9,21:0:12,21:0:15,21:0:18,21:0:21,21:0:24,24:0:0,24:0:3,24:0:6,24:0:9,24:0:12,24:0:15,24:0:18,24:0:21,24:0:24
+wait 140
+
+cmd tp @s 0 -40 0 0 90
+wait 120
+run fps SETTLED
+
+# ---- the profiling window: ~150 s of an unchanging frame ----------------
+log HOLD_BEGIN
+wait 600
+wait 600
+wait 600
+wait 600
+wait 600
+log HOLD_END
+run fps SETTLED
+quit

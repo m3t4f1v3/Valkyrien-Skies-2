@@ -713,6 +713,11 @@ float vs_seamAoFrag(vec3 fragShipyardPos, vec3 fragWorldPos, vec3 shipyardNormal
         int e = cellOC.x + i;
         int ri = floatBitsToInt(texelFetch(u_VsSeamGrid, VS_SEAM_GRID_CELLS + (e >> 2)))[e & 3];
 
+        // The meta fetch stays BEHIND the distance cull. Issuing it alongside head to break the
+        // dependent chain was measured and was 3.4% SLOWER (6.17 -> 6.37 ms/frame, against 0.3%
+        // run-to-run variance): most runs in a cell are rejected here, and in pass 2 this loop runs
+        // once per host lattice, so the speculative load is paid several times over for each one
+        // that is used. Latency-bound does not mean bandwidth is free.
         vec4 head = texelFetch(u_VsSeamRuns, ri * 2);
         float runR = head.w + VS_SEAM_SUPPORT;
         if (vs_seamDistSq(fragWorldPos, head.xyz) > runR * runR) continue;
@@ -831,6 +836,7 @@ float vs_seamAoFrag(vec3 fragShipyardPos, vec3 fragWorldPos, vec3 shipyardNormal
             int e = cellOC.x + i;
             int ri = floatBitsToInt(texelFetch(u_VsSeamGrid, VS_SEAM_GRID_CELLS + (e >> 2)))[e & 3];
 
+            // Kept behind the cull -- see the note in pass 1 on why hoisting it lost time.
             vec4 head = texelFetch(u_VsSeamRuns, ri * 2);
             float runR = head.w + VS_SEAM_SUPPORT;
             if (vs_seamDistSq(fragWorldPos, head.xyz) > runR * runR) continue;
@@ -862,6 +868,16 @@ float vs_seamAoFrag(vec3 fragShipyardPos, vec3 fragWorldPos, vec3 shipyardNormal
 
             int start = floatBitsToInt(meta.x);
             int cnt = floatBitsToInt(meta.y);
+            // One fetch per iteration, on purpose. Issuing four at a time to overlap their latency
+            // was tried here and in the world shader and is worth NOTHING: 6.354 ms/frame with it
+            // against 6.358 without, measured back to back, where repeat runs of one build differ by
+            // 0.3%. It first appeared to win 5.8% only because the before and after traces were 5
+            // minutes apart and this rig drifts ~3% over tens of minutes -- more than the effect.
+            // Any future attempt here needs an A/B run back to back, not against an older number.
+            //
+            // The counters say the loop is latency bound (warps idle on an active SM ~50% of the
+            // time against 9% with the AO off), and that is still true; it just is not fixable by
+            // widening this fetch, because the driver already schedules across the iterations.
             for (int k = 0; k < VS_SEAM_SUBRUN_LOOP_CAP; k++) {
                 if (k >= cnt) break;
                 vec4 vox = texelFetch(u_VsShipOccluders, (start + k) * 2);

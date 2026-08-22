@@ -245,6 +245,17 @@ public final class VsAutoTestHarness {
                     org.valkyrienskies.mod.common.config.VSGameConfig.CLIENT
                         .getShipAmbientOcclusionMerging());
             }
+            // Drive an Nsight GPU Trace from inside the fixture, so it covers exactly the frames the
+            // scene is settled for. See VsNsight for why the profiler's own timed trigger is not used.
+            case "ngfx" -> {
+                switch (inst[1].toLowerCase(Locale.ROOT)) {
+                    case "init" -> org.valkyrienskies.mod.compat.sodium.shader.VsNsight.init();
+                    case "start" -> org.valkyrienskies.mod.compat.sodium.shader.VsNsight.start();
+                    case "stop" -> org.valkyrienskies.mod.compat.sodium.shader.VsNsight.stop();
+                    default -> throw new IllegalArgumentException("ngfx: want init|start|stop");
+                }
+                LOGGER.info("[autotest] ngfx {}", inst[1]);
+            }
             case "hud" -> minecraft.options.hideGui = !"on".equalsIgnoreCase(inst[1]);
             // Switch the debug paint at runtime. Fixtures use this to take a masking shot (paint 0,
             // ordinary render, ships identifiable as stone) and a measuring shot (paint 5, the AO loss
@@ -281,6 +292,20 @@ public final class VsAutoTestHarness {
                 Integer.parseInt(inst[3]), Integer.parseInt(inst[4]), Integer.parseInt(inst[5]),
                 blockByName(inst[6]));
             case "fps" -> LOGGER.info("[autotest] fps {}: {}", inst.length > 2 ? inst[2] : "", minecraft.getFps());
+            // What the renderer actually submitted. A GPU trace pair is only comparable if both runs
+            // drew the same scene, and that is not automatic: chunk building is asynchronous and
+            // competes with the render thread for CPU, so a configuration that runs faster can reach
+            // the trace window with FEWER terrain sections uploaded. That showed up as the AO-on and
+            // AO-off traces disagreeing by 43% on draws per frame with identical compute dispatches
+            // -- i.e. the same ship, a different amount of world. Logging the section counts makes
+            // that visible in the log instead of leaving it to be inferred from counters.
+            case "scene" -> LOGGER.info("[autotest] scene {}: renderedChunks={} allChunksRendered={}"
+                    + " | {} | {}",
+                inst.length > 2 ? inst[2] : "",
+                minecraft.levelRenderer.countRenderedChunks(),
+                minecraft.levelRenderer.hasRenderedAllChunks(),
+                minecraft.levelRenderer.getChunkStatistics(),
+                minecraft.levelRenderer.getEntityStatistics());
             case "drag_ship" -> dragDelta = new org.joml.Vector3d(
                 Double.parseDouble(inst[2]), Double.parseDouble(inst[3]), Double.parseDouble(inst[4]));
             case "drag_stop" -> dragDelta = null;

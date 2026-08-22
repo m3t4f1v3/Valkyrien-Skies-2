@@ -1,0 +1,46 @@
+# AO-saturated scene that traces ITSELF with Nsight.
+#
+# The fixture decides when the trace runs, rather than the profiler guessing with --start-after-ms.
+# That timed trigger never completed a trace against this client (see VsNsight), and it also has to
+# be set long enough to cover world generation and chunk building, which varies run to run. Here the
+# trace brackets a known-settled scene: same lattice as ao_cover, camera parked, fps sampled first so
+# the log records what the traced frames were actually running at.
+#
+# Launch with autotest/ngfx_sdk.sh, which passes --start-with-ngfx-sdk and points -Dvs.ngfxshim at
+# the built shim. Without those the ngfx verbs are no-ops and this is just a slow ao_cover.
+world autotest
+wait-level
+wait 100
+hud off
+cmd gamemode spectator
+cmd time set noon
+cmd gamerule doDaylightCycle false
+cmd kill @e[type=!player]
+wait 20
+
+run ao_ship 0 -12 -60 -12 0:0:0,0:0:3,0:0:6,0:0:9,0:0:12,0:0:15,0:0:18,0:0:21,0:0:24,3:0:0,3:0:3,3:0:6,3:0:9,3:0:12,3:0:15,3:0:18,3:0:21,3:0:24,6:0:0,6:0:3,6:0:6,6:0:9,6:0:12,6:0:15,6:0:18,6:0:21,6:0:24,9:0:0,9:0:3,9:0:6,9:0:9,9:0:12,9:0:15,9:0:18,9:0:21,9:0:24,12:0:0,12:0:3,12:0:6,12:0:9,12:0:12,12:0:15,12:0:18,12:0:21,12:0:24,15:0:0,15:0:3,15:0:6,15:0:9,15:0:12,15:0:15,15:0:18,15:0:21,15:0:24,18:0:0,18:0:3,18:0:6,18:0:9,18:0:12,18:0:15,18:0:18,18:0:21,18:0:24,21:0:0,21:0:3,21:0:6,21:0:9,21:0:12,21:0:15,21:0:18,21:0:21,21:0:24,24:0:0,24:0:3,24:0:6,24:0:9,24:0:12,24:0:15,24:0:18,24:0:21,24:0:24
+wait 140
+cmd tp @s 0 -40 0 0 90
+wait 120
+
+# Settled: nothing is loading, the camera is fixed, and the same frame repeats from here on.
+#
+# "Settled" needs proving, not assuming. Chunk building is asynchronous and competes with the render
+# thread, so a configuration that renders faster can arrive here with fewer terrain sections built --
+# which is how the AO-on and AO-off traces came to disagree by 43% on draws per frame while their
+# compute dispatches matched to three decimals (same ship, different amount of world). The extra
+# wait gives the builders time to drain, and `run scene` records what was actually drawn so the two
+# traces can be shown comparable from the log rather than assumed to be.
+wait 200
+run scene SETTLED
+run fps SETTLED
+ngfx init
+wait 40
+ngfx start
+wait 60
+ngfx stop
+wait 60
+run scene TRACED
+run fps SETTLED
+screenshot ao_trace
+quit
