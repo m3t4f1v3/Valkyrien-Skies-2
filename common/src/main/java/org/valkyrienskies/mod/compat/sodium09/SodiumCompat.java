@@ -139,6 +139,12 @@ public class SodiumCompat {
     private static final ThreadLocal<int[]> CURRENT_RENDER_ORIGIN = new ThreadLocal<>();
     /** Per-frame occluder-list index of the ship currently being drawn; -1 when drawing anything else. */
     private static final ThreadLocal<Integer> CURRENT_SELF_SHIP_INDEX = ThreadLocal.withInitial(() -> -1);
+    /**
+     * -Pvs_seamkernel=N: which B-spline the seam AO splats occluder voxels with. 1 (or unset) is the
+     * tent and leaves the field unchanged; 2 and 3 are the quadratic and cubic and SHADE
+     * DIFFERENTLY. See VS_SEAM_KERNEL in the chunk fragment shaders.
+     */
+    private static final int SEAM_KERNEL = Integer.getInteger("vs.seamkernel", 1);
     private static final ThreadLocal<Boolean> IS_RENDERING_SHIP = ThreadLocal.withInitial(() -> false);
     private static final ThreadLocal<Boolean> IS_LAST_SHIP_IN_BATCH = ThreadLocal.withInitial(() -> true);
 
@@ -468,6 +474,11 @@ public class SodiumCompat {
         }
         if ((features & FEATURE_SEAM_NO_MERGE) != 0) {
             builder.add("VS_SEAM_NO_MERGE");
+        }
+        // Emitted on this generation too, so -Pvs_seamkernel is not a silent no-op under the
+        // backport runtime: it would otherwise compile the tent while the log claimed otherwise.
+        if (SEAM_KERNEL != 1) {
+            builder.add("VS_SEAM_KERNEL", Integer.toString(SEAM_KERNEL));
         }
         if ((features & FEATURE_DEBUG_SHIP_LIGHT) != 0) {
             builder.add("VS_DEBUG_SHIP_LIGHT", VSGameConfig.CLIENT.getDebugFloodPaint() == 4 ? "4" : "3");

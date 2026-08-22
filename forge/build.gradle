@@ -99,6 +99,15 @@ loom {
         }
     }
 
+    // `-Pvs_seamkernel=N` — which B-spline the seam AO splats occluder voxels with: 1 tent (default,
+    // the verified field), 2 quadratic, 3 cubic. 2 and 3 SHADE DIFFERENTLY; they exist to measure
+    // what a smoother kernel costs. See VS_SEAM_KERNEL in the chunk fragment shaders.
+    if (project.hasProperty('vs_seamkernel')) {
+        runs.configureEach {
+            property("vs.seamkernel", project.property('vs_seamkernel').toString())
+        }
+    }
+
     if (vsSodiumRuntime == "backport") {
         // Sodium refuses to start when the running LWJGL differs from the one it was compiled against.
         // The version pin below reaches this module's runtimeClasspath, but Forge's dev launch classpath

@@ -263,11 +263,68 @@ void ws_seamAddHost(int shipIdx, inout int hostCount,
     hostCount++;
 }
 
+// ---- splat kernel ---------------------------------------------------------
+// The occupancy field is a sum of weighted Diracs, one per source voxel,
+// convolved with a separable kernel K(x) = prod_i k(x_i), where k is a centred
+// B-spline. That is the form claude-scratchpad/seam6.py works in, and the stamp
+// below is exactly its separable splat: three tap vectors and one outer product.
+//
+// B1 (the tent) is the default and the only kernel any verified result was
+// produced with. It is not arbitrary: B1 = box * box, so it deposits exactly the
+// fraction of each lattice cell the voxel's unit cube covers, which is why the
+// axis-aligned limit reproduces vanilla AO exactly rather than approximately. A
+// wider kernel is a voxel with soft edges -- a change to the field, not a knob.
+//
+// B0 (nearest neighbour) is deliberately absent. seam6.py measures its splatted
+// mass swinging across the whole range 0..1 as a voxel slides through one cell,
+// against 1e-16 for every kernel here. It fails partition of unity, which is the
+// grid-locking drift this whole design exists to avoid.
+//
+// On evaluating the taps as cheaply as possible: these are evaluated at FIXED
+// offsets from the FRAGMENT's cell, not from the voxel's own base node. The
+// branch-free three-weight form standard in MPM -- w = (0.5*(1.5-f)^2,
+// 0.75-(f-1)^2, 0.5*(f-0.5)^2) straight from the fractional offset, no abs and
+// no select -- is cheaper per tap, but it anchors the window on the particle.
+// Here that would mean scattering through a run-time offset into occ0/occ1, i.e.
+// dynamic indexing of a mat3, which spills to local memory and costs far more
+// than the arithmetic it saves. Fragment-anchored with abs() is the right trade
+// for a register accumulator.
+//
+// The classic GPU B-spline speedup does NOT apply here at all: Sigg & Hadwiger
+// (GPU Gems 2 ch.20) collapse a cubic B-spline to 8 trilinear lookups by folding
+// the weights into the texture unit's own linear filter. That accelerates
+// GATHERING from a texture. This is a scatter into registers -- there is no
+// filtered fetch to fold anything into.
+#ifndef VS_SEAM_KERNEL
+#define VS_SEAM_KERNEL 1
+#endif
+
+vec3 ws_seamTap(vec3 d) {
+#if VS_SEAM_KERNEL == 2
+    // B2, support 1.5, C1. Clamping |d| to the support radius first makes the
+    // outer polynomial evaluate to exactly 0 there, so no separate cutoff test
+    // is needed: two polynomials and one select, all branch-free.
+    vec3 a = min(abs(d), vec3(1.5));
+    vec3 outer = vec3(1.5) - a;
+    return mix(vec3(0.75) - a * a, 0.5 * outer * outer, step(vec3(0.5), a));
+#elif VS_SEAM_KERNEL == 3
+    // B3, support 2, C2. Same clamp trick; inner is Horner'd to save a multiply.
+    vec3 a = min(abs(d), vec3(2.0));
+    vec3 outer = vec3(2.0) - a;
+    return mix(vec3(2.0 / 3.0) - a * a * (vec3(1.0) - 0.5 * a),
+               outer * outer * outer / 6.0, step(vec3(1.0), a));
+#else
+    // B1. Character-for-character the expression this shader has always used,
+    // so the default path compiles to the same code and stays bit-identical.
+    return max(vec3(0.0), vec3(1.0) - abs(d));
+#endif
+}
+
 mat3 ws_seamStamp(vec3 c, int a, int u, int v, int cu, int cv) {
     vec3 uCenter = vec3(float(cu) - 0.5, float(cu) + 0.5, float(cu) + 1.5);
     vec3 vCenter = vec3(float(cv) - 0.5, float(cv) + 0.5, float(cv) + 1.5);
-    vec3 tu = max(vec3(0.0), vec3(1.0) - abs(vec3(c[u]) - uCenter));
-    vec3 tv = max(vec3(0.0), vec3(1.0) - abs(vec3(c[v]) - vCenter));
+    vec3 tu = ws_seamTap(vec3(c[u]) - uCenter);
+    vec3 tv = ws_seamTap(vec3(c[v]) - vCenter);
     return mat3(tv * tu.x, tv * tu.y, tv * tu.z);
 }
 
@@ -481,6 +538,16 @@ float ws_seamAoFrag(vec3 fragWorldPos, vec3 normal, int selfShipIndex, out float
 
             int start = floatBitsToInt(meta.x);
             int cnt = floatBitsToInt(meta.y);
+            // One fetch per iteration, on purpose. Issuing four at a time to overlap their latency
+            // was tried here and in the ship shader and is worth NOTHING: 6.354 ms/frame with it
+            // against 6.358 without, measured back to back, where repeat runs of one build differ by
+            // 0.3%. It first appeared to win 5.8% only because the before and after traces were 5
+            // minutes apart and this rig drifts ~3% over tens of minutes -- more than the effect.
+            // Any future attempt here needs an A/B run back to back, not against an older number.
+            //
+            // The counters say the loop is latency bound (warps idle on an active SM ~50% of the
+            // time against 9% with the AO off), and that is still true; it just is not fixable by
+            // widening this fetch, because the driver already schedules across the iterations.
             for (int k = 0; k < WS_SEAM_SUBRUN_LOOP_CAP; k++) {
                 if (k >= cnt) break;
                 vec4 vox = texelFetch(u_VsShipOccluders, (start + k) * 2);
@@ -491,8 +558,12 @@ float ws_seamAoFrag(vec3 fragWorldPos, vec3 normal, int selfShipIndex, out float
                 // fold the owner->host weight into the two scalar band tents so
                 // the mat3 is scaled once per band instead of once for wBase and
                 // again for each ta.
-                float ta0 = wBase * max(0.0, 1.0 - abs(c[a] - bandC0));
-                float ta1 = wBase * max(0.0, 1.0 - abs(c[a] - bandC1));
+                // Third axis of the same separable kernel. Routed through
+                // ws_seamTap so a kernel change applies to all three axes; the
+                // default expands to the expression that was here before.
+                vec3 tb = ws_seamTap(vec3(c[a] - bandC0, c[a] - bandC1, 0.0));
+                float ta0 = wBase * tb.x;
+                float ta1 = wBase * tb.y;
                 occ0 += stamp * ta0;
                 occ1 += stamp * ta1;
             }

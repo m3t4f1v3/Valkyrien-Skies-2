@@ -53,6 +53,16 @@ for a in "${ARGV[@]:1}"; do
 done
 ARGSTR="-Dvs.ngfxshim=$(printf '%q' "$SHIM") $ARGSTR"
 
+# Extra -D properties for the traced run, e.g. NGFX_JVM_PROPS="-Dvs.seamkernel=2". The captured
+# command line comes from one gradle launch, so anything selected by a gradle property is fixed in
+# it; this is how a variant gets profiled without re-capturing. Recorded in the output directory so
+# a trace can be told apart from its baseline afterwards.
+for p in ${NGFX_JVM_PROPS:-}; do
+    ARGSTR="$(printf '%q' "$p") $ARGSTR"
+done
+echo "${NGFX_JVM_PROPS:-(none)}" > "$OUTDIR/jvm_props.txt"
+[ -n "${NGFX_JVM_PROPS:-}" ] && echo "extra JVM props: $NGFX_JVM_PROPS"
+
 ize_env() {
     # The captured environment came from a gamescope run, so its display settings point at that
     # nested Xwayland (:1) and carry no XAUTHORITY. Launching on the session's own X server with

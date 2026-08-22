@@ -112,6 +112,15 @@ public class SodiumCompat {
      */
     private static final int AO_PROF = Integer.getInteger("vs.aoprof", 0);
     /**
+     * -Pvs_seamkernel=N: which B-spline the seam AO splats its occluder voxels with. 1 (or unset) is
+     * the tent, which is what every verified result was produced with and the only value that keeps
+     * the field unchanged; 2 and 3 are the quadratic and cubic, which SHADE DIFFERENTLY and exist to
+     * measure what a smoother kernel costs. See VS_SEAM_KERNEL in the chunk fragment shaders and
+     * claude-scratchpad/seam6.py for the model. Constant for the process, so it needs no place in
+     * the shader cache key.
+     */
+    private static final int SEAM_KERNEL = Integer.getInteger("vs.seamkernel", 1);
+    /**
      * -Pvs_aogate=off disables the "no occluders in frame, so compile the AO out" gate below. Exists
      * to measure what that gate is worth: with it on, a frame with no ship in view uses the world
      * program that does not carry the seam code at all.
@@ -854,6 +863,7 @@ public class SodiumCompat {
         if ((features & FEATURE_SEAM_NO_MERGE) != 0) builder.add("VS_SEAM_NO_MERGE");
         if ((features & FEATURE_DEBUG_SEAM_AO) != 0) builder.add("VS_DEBUG_SEAM_AO");
         if (AO_PROF != 0) builder.add("VS_AOPROF", Integer.toString(AO_PROF));
+        if (SEAM_KERNEL != 1) builder.add("VS_SEAM_KERNEL", Integer.toString(SEAM_KERNEL));
         if ((features & FEATURE_DEBUG_SHIP_LIGHT) != 0) builder.add("VS_DEBUG_SHIP_LIGHT", VSGameConfig.CLIENT.getDebugFloodPaint() == 4 ? "4" : "3");
         return builder.build();
     }
@@ -930,6 +940,7 @@ public class SodiumCompat {
         if ((features & FEATURE_SEAM_NO_MERGE) != 0) builder.add("VS_SEAM_NO_MERGE");
         if ((features & FEATURE_DEBUG_SEAM_AO) != 0) builder.add("VS_DEBUG_SEAM_AO");
         if (AO_PROF != 0) builder.add("VS_AOPROF", Integer.toString(AO_PROF));
+        if (SEAM_KERNEL != 1) builder.add("VS_SEAM_KERNEL", Integer.toString(SEAM_KERNEL));
         // getOrCreateShipProgram sets this bit from debugFloodPaint, so it has to be emitted here too
         // -- without it the debug paint is silently a no-op on ship chunks.
         if ((features & FEATURE_DEBUG_SHIP_LIGHT) != 0) {
