@@ -226,7 +226,11 @@ public class VsShipEmitterList {
     }
 
     private void ensureGlObjects() {
-        if (buffer == 0) buffer = GL15.glGenBuffers();
+        if (buffer == 0) {
+            buffer = GL15.glGenBuffers();
+            GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, buffer);
+            GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, 0);
+        }
         if (texture == 0) {
             texture = GL11.glGenTextures();
             // glGenBuffers only reserves a name; the buffer object itself does not exist until the

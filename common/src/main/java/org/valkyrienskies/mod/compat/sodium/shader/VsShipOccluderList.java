@@ -96,6 +96,9 @@ public class VsShipOccluderList {
      *  3.7 (trimmed from a conservative 4.5) is drift-free while binning into
      *  fewer cells -> fewer sub-runs per fragment cell. */
     private static final float SEAM_SUPPORT = 3.7f;
+    /** Distance LOD on the merge: the near edge of the fade is this fraction of
+     *  the configured far edge, so one config number sets the whole ramp. */
+    private static final float MERGE_LOD_NEAR_FRAC = 1f / 3f;
 
     // ==== Coarse spatial grid over the occluder bounds, binning SUB-RUNS.
     // A fragment reads only the sub-runs in its own cell, so the per-fragment
@@ -115,6 +118,10 @@ public class VsShipOccluderList {
     private final long gridPtr;
     private int count = 0;
     private int headerCount = 0;
+    /** Camera position and merge-fade band, refreshed per frame by
+     *  {@link #updateMergeLod()}. mergeLodFar == 0 means the LOD is off. */
+    private float camX, camY, camZ;
+    private float mergeLodNear, mergeLodFar;
 
     private int buffer = 0;
     private int texture = 0;
@@ -127,6 +134,54 @@ public class VsShipOccluderList {
     private int shipDirByteSize = 0;
     private int gridBuffer = 0;
     private int gridTexture = 0;
+
+    // ==== Precomputed occupancy field ======================================
+    // O(cell) = sum over contributing voxels of w * K(cell centre - c), one scalar per cell of each
+    // host ship's own lattice. Every tap the fragment's pass 2 evaluates sits at a lattice cell
+    // CENTRE, so the whole per-voxel stamp is a function of the cell alone and not of the fragment
+    // -- the fragment only picks WHICH cells (b0, cu, cv) and the interpolation weights. That is the
+    // identity claude-scratchpad/seam_precompute.py verifies exactly (0.0 max error over 600 random
+    // fragments for the tent, which is the shipped kernel).
+    //
+    // Used by the WORLD shader only. The ship shader also skips its own ship's material
+    // (`owner == selfShipIndex`), which is a property of the DRAW and not of the host lattice, so one
+    // field per host cannot serve it. The world pass has no self ship, and it is also the larger
+    // half: removing world pass 2 saves 11.32 ms of a 26.55 ms frame on 200 ships at 4K against
+    // 6.94 ms for the ship pass.
+    //
+    // The splat runs on the CPU. It is voxels x targets x 8 cells -- at most 1024 x 5 x 8 -- which is
+    // small next to buildSeamData's O(ships^2) claim pass, and it keeps this first cut free of
+    // compute dispatches, SSBO aliasing and barriers. Moving it to a compute shader is a later
+    // optimisation, not a correctness question.
+    /** Per-ship dense grid over exactly the cells its contributing voxels can touch; cells outside
+     *  read 0, which is what they are, so no padding is needed. */
+    private static final int OCC_MAX_CELLS = 4 * 1024 * 1024;   // 16 MB
+    /** 2 RGBA32I texels per ship: (base, dimX, dimY, dimZ) and (originX, originY, originZ, valid). */
+    private static final int OCC_DESC_BYTES = 32;
+    private final long occPtr;
+    private final long occDescPtr;
+    private int occBuffer = 0;
+    private int occTexture = 0;
+    private int occDescBuffer = 0;
+    private int occDescTexture = 0;
+    private int occByteSize = 0;
+    private int occDescByteSize = 0;
+    private int occCellCount = 0;
+    /** Source -> target slots per ship: itself, its MAX_PARTNERS claim targets, the world lattice. */
+    private static final int OCC_PAIR_SLOTS = MAX_PARTNERS + 2;
+    /** Descriptor texel where the (source, target) pair boxes start; hosts occupy 2 texels each
+     *  below it. MUST match VS_SEAM_PAIR_DESC_BASE in the ship shader. */
+    private static final int PAIR_DESC_BASE_TEXEL = MAX_SHIPS * 2;
+    private static final int SHIP_DESC_TEXELS = PAIR_DESC_BASE_TEXEL + MAX_SHIPS * OCC_PAIR_SLOTS * 2;
+    private final long shipOccPtr;
+    private final long shipOccDescPtr;
+    private int shipOccBuffer = 0;
+    private int shipOccTexture = 0;
+    private int shipOccDescBuffer = 0;
+    private int shipOccDescTexture = 0;
+    private int shipOccByteSize = 0;
+    private int shipOccDescByteSize = 0;
+    private int shipOccCellCount = 0;
     private int gridByteSize = 0;
 
     // global bounds over all occluder voxels this frame (world space)
@@ -151,6 +206,10 @@ public class VsShipOccluderList {
         headerPtr = MemoryUtil.nmemAlloc((long) MAX_OCCLUDERS * BYTES_PER_HEADER);
         shipDirPtr = MemoryUtil.nmemAlloc((long) MAX_SHIPS * BYTES_PER_SHIP);
         gridPtr = MemoryUtil.nmemAlloc((long) GRID_TEXEL_COUNT * 16L);
+        occPtr = MemoryUtil.nmemAlloc((long) OCC_MAX_CELLS * 4L);
+        occDescPtr = MemoryUtil.nmemAlloc((long) MAX_SHIPS * OCC_DESC_BYTES);
+        shipOccPtr = MemoryUtil.nmemAlloc((long) OCC_MAX_CELLS * 4L);
+        shipOccDescPtr = MemoryUtil.nmemAlloc((long) SHIP_DESC_TEXELS * 16L);
     }
 
     public void delete() {
@@ -158,6 +217,10 @@ public class VsShipOccluderList {
         if (headerPtr != 0L) MemoryUtil.nmemFree(headerPtr);
         if (shipDirPtr != 0L) MemoryUtil.nmemFree(shipDirPtr);
         if (gridPtr != 0L) MemoryUtil.nmemFree(gridPtr);
+        if (occPtr != 0L) MemoryUtil.nmemFree(occPtr);
+        if (occDescPtr != 0L) MemoryUtil.nmemFree(occDescPtr);
+        if (shipOccPtr != 0L) MemoryUtil.nmemFree(shipOccPtr);
+        if (shipOccDescPtr != 0L) MemoryUtil.nmemFree(shipOccDescPtr);
         if (buffer != 0) { GL15.glDeleteBuffers(buffer); buffer = 0; }
         if (texture != 0) { GL11.glDeleteTextures(texture); texture = 0; }
         if (headerBuffer != 0) { GL15.glDeleteBuffers(headerBuffer); headerBuffer = 0; }
@@ -166,6 +229,16 @@ public class VsShipOccluderList {
         if (shipDirTexture != 0) { GL11.glDeleteTextures(shipDirTexture); shipDirTexture = 0; }
         if (gridBuffer != 0) { GL15.glDeleteBuffers(gridBuffer); gridBuffer = 0; }
         if (gridTexture != 0) { GL11.glDeleteTextures(gridTexture); gridTexture = 0; }
+        if (occBuffer != 0) { GL15.glDeleteBuffers(occBuffer); occBuffer = 0; }
+        if (occTexture != 0) { GL11.glDeleteTextures(occTexture); occTexture = 0; }
+        if (occDescBuffer != 0) { GL15.glDeleteBuffers(occDescBuffer); occDescBuffer = 0; }
+        if (occDescTexture != 0) { GL11.glDeleteTextures(occDescTexture); occDescTexture = 0; }
+        if (shipOccBuffer != 0) { GL15.glDeleteBuffers(shipOccBuffer); shipOccBuffer = 0; }
+        if (shipOccTexture != 0) { GL11.glDeleteTextures(shipOccTexture); shipOccTexture = 0; }
+        if (shipOccDescBuffer != 0) { GL15.glDeleteBuffers(shipOccDescBuffer); shipOccDescBuffer = 0; }
+        if (shipOccDescTexture != 0) {
+            GL11.glDeleteTextures(shipOccDescTexture); shipOccDescTexture = 0;
+        }
     }
 
     public void beginFrame() {
@@ -245,6 +318,17 @@ public class VsShipOccluderList {
      *  appendOccluder for the frame and before {@link #upload()}. */
     public void buildSeamData() {
         headerCount = 0;
+        occCellCount = 0;
+        shipOccCellCount = 0;
+        // Everything this builds -- sub-run headers, the ship directory, the pair claims, the
+        // spatial grid, the occupancy fields -- is read by the seam AO shaders and by nothing else,
+        // so with the AO off it is all thrown away. It was being built anyway: on 240 ships that is
+        // 1.8 ms per frame of an 18 ms frame, spent entirely on a feature the user has disabled, and
+        // the pair-claim pass inside it is O(ships^2) so it gets worse the more ships there are.
+        if (!org.valkyrienskies.mod.common.config.VSGameConfig.CLIENT.getShipAmbientOcclusion()
+                && !Boolean.getBoolean("vs.seamgateoff")) {
+            return;
+        }
         int shipCap = Math.min(nextShipIndex, MAX_SHIPS);
 
         // per-ship aggregates
@@ -346,6 +430,12 @@ public class VsShipOccluderList {
         MemoryUtil.memPutFloat(shipDirPtr, Float.intBitsToFloat(shipCap - 1));
         float[] bestClaim = new float[MAX_PARTNERS];
         int[] bestShip = new int[MAX_PARTNERS];
+        // Carried alongside the claim so the distance LOD can be applied AFTER
+        // ranking: the rank decides which partner is cheapest to lose, the
+        // budget decides how many survive. Ranking on the faded value instead
+        // would be circular, since the fade needs the rank.
+        float[] bestBudget = new float[MAX_PARTNERS];
+        updateMergeLod();
         // Cross-ship merging, switchable. Leaving every claim at zero is exactly "no merging" and
         // needs no shader change: responsibility r = 1/(1 + sum claims) becomes 1, no partner is added
         // as a host in pass 1 (that is gated on claims > 0), and hostClaim degenerates to the
@@ -358,22 +448,50 @@ public class VsShipOccluderList {
             if (!seen[s]) continue;
             java.util.Arrays.fill(bestClaim, 0f);
             java.util.Arrays.fill(bestShip, 0);
+            java.util.Arrays.fill(bestBudget, 0f);
             for (int t = 1; merge && t < shipCap; t++) {
                 if (t == s || !seen[t]) continue;
                 float c = pairClaim(s, t, aabb, anchor, quat);
                 if (c <= 0f) continue;
+                float b = mergeBudget(s, t, aabb);
                 // insert into the top-MAX_PARTNERS list
                 for (int k = 0; k < MAX_PARTNERS; k++) {
                     if (c > bestClaim[k]) {
                         for (int m = MAX_PARTNERS - 1; m > k; m--) {
                             bestClaim[m] = bestClaim[m - 1];
                             bestShip[m] = bestShip[m - 1];
+                            bestBudget[m] = bestBudget[m - 1];
                         }
                         bestClaim[k] = c;
                         bestShip[k] = t;
+                        bestBudget[k] = b;
                         break;
                     }
                 }
+            }
+            // ---- distance LOD ---------------------------------------------
+            // Rank k survives while the pair's budget is above k, so the WEAKEST
+            // claim is dropped first and each one leaves over a linear ramp
+            // rather than a step. Zeroing a claim here is not an approximation
+            // of switching merging off, it IS switching it off for that pair:
+            // r is recomputed from the faded claims just below, and because ship
+            // s deposits r into its own lattice and r*claim into each partner's,
+            // it still deposits r*(1 + sum claims) = 1 in total for any claim
+            // values. Fading moves mass between lattices, it never destroys it,
+            // which is why the transition holds together instead of the seam
+            // brightening as it crosses. Measured in claude-scratchpad/seam_lod.py:
+            // the whole merged->unmerged swing is 0.06-0.07 of AO loss and the
+            // fade contributes at most 0.11 AO/second at elytra speed, against
+            // the 2.5 AO/second that simply walking over a seam already shows.
+            //
+            // A slot faded to zero is still occupied, so a ship with more than
+            // MAX_PARTNERS partners could hold a dead slot while a live partner
+            // goes unrecorded. That needs 5+ ships all in contact with one hull
+            // AND spread over the fade band, and costs a little merge quality
+            // rather than correctness, so it is left alone.
+            for (int k = 0; k < MAX_PARTNERS; k++) {
+                bestClaim[k] *= clamp01(bestBudget[k] - k);
+                if (bestClaim[k] <= 0f) bestShip[k] = 0;
             }
             float sum = 0f;
             for (int k = 0; k < MAX_PARTNERS; k++) sum += bestClaim[k];
@@ -405,6 +523,19 @@ public class VsShipOccluderList {
             MemoryUtil.memPutFloat(d + 76, (float) Math.sqrt(sdx * sdx + sdy * sdy + sdz * sdz));
             MemoryUtil.memPutFloat(d + 80, Float.intBitsToFloat(shipFirstRun[s]));
             MemoryUtil.memPutFloat(d + 84, Float.intBitsToFloat(shipRunCount[s]));
+        }
+
+        // ---- precomputed occupancy field, from the directory just written ----
+        // Only when something will read it. Both field sets were being built unconditionally, so a
+        // client with the precompute switched off still paid for them every frame -- and the
+        // per-fragment side of every A/B was charged for work only the other side uses.
+        if (org.valkyrienskies.mod.common.config.VSGameConfig.CLIENT
+                .getShipAmbientOcclusionPrecompute()) {
+            buildOccField(shipCap, seen, quat, anchor);
+            buildShipOccField(shipCap, seen, quat, anchor);
+        } else {
+            occCellCount = 0;
+            shipOccCellCount = 0;
         }
 
         // ---- spatial grid: bin each SUB-RUN (support-fattened sphere) into
@@ -491,6 +622,435 @@ public class VsShipOccluderList {
         MemoryUtil.memPutFloat(h + 24, Float.intBitsToFloat(ship));
         MemoryUtil.memPutFloat(h + 28, 0f);
         headerCount++;
+    }
+
+    /**
+     * Build the per-ship occupancy field the world shader reads instead of walking voxels.
+     *
+     * <p>Two passes over (voxel x its <= MAX_PARTNERS+1 target hosts): the first sizes each host's
+     * grid from the cells its contributing voxels actually touch, the second splats. Iterating
+     * SOURCES and pushing to their targets keeps this O(voxels x 5); iterating hosts and pulling
+     * would be O(hosts x voxels), which is a million operations on a full occluder list.
+     *
+     * <p>The tent has support 1, so a voxel at lattice coordinate c touches cells
+     * {floor(c - 0.5), floor(c - 0.5) + 1} on each axis -- eight cells, not the 27 a conservative
+     * 3x3x3 window would visit.
+     *
+     * <p>Must run after the ship directory is written: the weights come from it, so that the field
+     * and anything still reading the directory cannot disagree.
+     */
+    private void buildOccField(final int shipCap, final boolean[] seen, final float[] quat,
+        final float[] anchor) {
+        occCellCount = 0;
+        MemoryUtil.memSet(occDescPtr, 0, (long) shipCap * OCC_DESC_BYTES);
+        if (count <= 0) {
+            return;
+        }
+
+        // Per-host cell bounds, in that host's own lattice. lo > hi marks "nothing landed here".
+        final int[] lo = new int[shipCap * 3];
+        final int[] hi = new int[shipCap * 3];
+        java.util.Arrays.fill(lo, Integer.MAX_VALUE);
+        java.util.Arrays.fill(hi, Integer.MIN_VALUE);
+
+        for (int pass = 0; pass < 2; pass++) {
+            if (pass == 1) {
+                // Sizes are known: lay the grids out back to back and clear them.
+                int base = 0;
+                for (int t = 1; t < shipCap; t++) {
+                    if (!seen[t] || lo[t * 3] > hi[t * 3]) continue;
+                    final int dx = hi[t * 3] - lo[t * 3] + 1;
+                    final int dy = hi[t * 3 + 1] - lo[t * 3 + 1] + 1;
+                    final int dz = hi[t * 3 + 2] - lo[t * 3 + 2] + 1;
+                    final long cells = (long) dx * dy * dz;
+                    if (base + cells > OCC_MAX_CELLS) {
+                        // Loud, not silent: the world shader has no fallback path compiled in when
+                        // the precomputed field is enabled, so a ship dropped here would simply stop
+                        // casting AO with nothing to say why.
+                        org.slf4j.LoggerFactory.getLogger("VS2-seamfield").error(
+                            "seam occupancy field out of space at ship {} ({} cells needed, {} cap)"
+                                + " -- its AO will be missing; raise OCC_MAX_CELLS", t, cells,
+                            OCC_MAX_CELLS);
+                        break;
+                    }
+                    final long d = occDescPtr + (long) t * OCC_DESC_BYTES;
+                    MemoryUtil.memPutInt(d, base);
+                    MemoryUtil.memPutInt(d + 4, dx);
+                    MemoryUtil.memPutInt(d + 8, dy);
+                    MemoryUtil.memPutInt(d + 12, dz);
+                    MemoryUtil.memPutInt(d + 16, lo[t * 3]);
+                    MemoryUtil.memPutInt(d + 20, lo[t * 3 + 1]);
+                    MemoryUtil.memPutInt(d + 24, lo[t * 3 + 2]);
+                    MemoryUtil.memPutInt(d + 28, 1);
+                    base += (int) cells;
+                }
+                occCellCount = base;
+                MemoryUtil.memSet(occPtr, 0, (long) occCellCount * 4L);
+            }
+
+            for (int i = 0; i < count; i++) {
+                final long off = arenaPtr + (long) i * BYTES_PER_OCCLUDER;
+                final float vx = MemoryUtil.memGetFloat(off);
+                final float vy = MemoryUtil.memGetFloat(off + 4);
+                final float vz = MemoryUtil.memGetFloat(off + 8);
+                final int s = Float.floatToRawIntBits(MemoryUtil.memGetFloat(off + 12)) & SHIP_INDEX_MASK;
+                if (s <= 0 || s >= shipCap || !seen[s]) continue;
+
+                final long sd = shipDirPtr + (long) s * BYTES_PER_SHIP;
+                final float rs = MemoryUtil.memGetFloat(sd + 28);
+                for (int k = -1; k < MAX_PARTNERS; k++) {
+                    final int t;
+                    final float w;
+                    if (k < 0) {
+                        t = s;                       // a ship always hosts its own material at r
+                        w = rs;
+                    } else {
+                        t = Float.floatToRawIntBits(MemoryUtil.memGetFloat(sd + 48 + k * 4));
+                        w = rs * MemoryUtil.memGetFloat(sd + 32 + k * 4);
+                    }
+                    if (t <= 0 || t >= shipCap || !seen[t] || w <= 0f) continue;
+
+                    // Voxel centre in host t's lattice, shifted so cell m spans [m, m+1).
+                    final float cx = latX(t, vx, vy, vz, quat, anchor);
+                    final float cy = latY(t, vx, vy, vz, quat, anchor);
+                    final float cz = latZ(t, vx, vy, vz, quat, anchor);
+                    final int mx = (int) Math.floor(cx - 0.5f);
+                    final int my = (int) Math.floor(cy - 0.5f);
+                    final int mz = (int) Math.floor(cz - 0.5f);
+
+                    if (pass == 0) {
+                        final int b = t * 3;
+                        lo[b] = Math.min(lo[b], mx);         hi[b] = Math.max(hi[b], mx + 1);
+                        lo[b + 1] = Math.min(lo[b + 1], my); hi[b + 1] = Math.max(hi[b + 1], my + 1);
+                        lo[b + 2] = Math.min(lo[b + 2], mz); hi[b + 2] = Math.max(hi[b + 2], mz + 1);
+                        continue;
+                    }
+
+                    final long d = occDescPtr + (long) t * OCC_DESC_BYTES;
+                    if (MemoryUtil.memGetInt(d + 28) == 0) continue;   // ship dropped for space
+                    final int tbase = MemoryUtil.memGetInt(d);
+                    final int dx = MemoryUtil.memGetInt(d + 4);
+                    final int dy = MemoryUtil.memGetInt(d + 8);
+                    final int ox = MemoryUtil.memGetInt(d + 16);
+                    final int oy = MemoryUtil.memGetInt(d + 20);
+                    final int oz = MemoryUtil.memGetInt(d + 24);
+                    for (int az = 0; az < 2; az++) {
+                        final float tz = tent(cz - (mz + az + 0.5f));
+                        if (tz == 0f) continue;
+                        for (int ay = 0; ay < 2; ay++) {
+                            final float ty = tent(cy - (my + ay + 0.5f));
+                            if (ty == 0f) continue;
+                            final float tyz = w * ty * tz;
+                            for (int ax = 0; ax < 2; ax++) {
+                                final float tx = tent(cx - (mx + ax + 0.5f));
+                                if (tx == 0f) continue;
+                                final int idx = tbase
+                                    + ((mz + az - oz) * dy + (my + ay - oy)) * dx + (mx + ax - ox);
+                                final long p = occPtr + (long) idx * 4L;
+                                MemoryUtil.memPutFloat(p, MemoryUtil.memGetFloat(p) + tyz * tx);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * The ship path's field set: one aggregate per host, plus one per (source, target) pair.
+     *
+     * <p>The ship shader cannot read the world path's field, for two independent reasons.
+     *
+     * <p>First, its WEIGHTS differ. A ship's material is shared with the world lattice as well as
+     * with its ship partners, so the shader renormalises r to
+     * {@code r_block = r / (1 + r * claimWorld)} and treats the world lattice as a host in its own
+     * right. Same voxels, different numbers.
+     *
+     * <p>Second, and the reason for the pair fields: a ship skips its OWN material
+     * ({@code owner == selfShipIndex}), because the mesher already baked that occlusion into the
+     * vertex AO. That is a property of the draw, not of the cell, so no single field per host can
+     * serve every draw. Occupancy is linear in its sources though -- the clamp only happens later,
+     * in the fragment, after this -- so the fragment can read the aggregate and subtract the one
+     * source it must not see. Hence G(host) and F(source -> host), and
+     * {@code occ = G(t) - F(self -> t)}.
+     *
+     * <p>Only pairs that can be non-zero are stored: a source reaches its own lattice, its
+     * MAX_PARTNERS claim targets and the world lattice, so six slots per ship.
+     */
+    private void buildShipOccField(final int shipCap, final boolean[] seen, final float[] quat,
+        final float[] anchor) {
+        shipOccCellCount = 0;
+        MemoryUtil.memSet(shipOccDescPtr, 0, (long) SHIP_DESC_TEXELS * 16L);
+        if (count <= 0) {
+            return;
+        }
+
+        // Per-ship world alignment and the block normaliser, mirroring vs_seamWorldAlign and the
+        // r_block line in the ship shader. If these drift apart the AO is subtly wrong everywhere
+        // rather than obviously wrong somewhere, so they are computed once here and nowhere else.
+        final float[] cw = new float[shipCap];
+        final float[] rBlock = new float[shipCap];
+        for (int s = 1; s < shipCap; s++) {
+            if (!seen[s]) continue;
+            final float r = MemoryUtil.memGetFloat(shipDirPtr + (long) s * BYTES_PER_SHIP + 28);
+            cw[s] = worldAlign(quat, anchor, s);
+            rBlock[s] = r / (1f + r * cw[s]);
+        }
+
+        final int hosts = shipCap;                 // host 0 is the WORLD lattice
+        final int[] hlo = new int[hosts * 3];
+        final int[] hhi = new int[hosts * 3];
+        final int[] plo = new int[shipCap * OCC_PAIR_SLOTS * 3];
+        final int[] phi = new int[shipCap * OCC_PAIR_SLOTS * 3];
+        java.util.Arrays.fill(hlo, Integer.MAX_VALUE);
+        java.util.Arrays.fill(hhi, Integer.MIN_VALUE);
+        java.util.Arrays.fill(plo, Integer.MAX_VALUE);
+        java.util.Arrays.fill(phi, Integer.MIN_VALUE);
+
+        for (int pass = 0; pass < 2; pass++) {
+            if (pass == 1) {
+                int base = 0;
+                for (int h = 0; h < hosts; h++) {
+                    base = layoutBox(shipOccDescPtr, h, hlo, hhi, h * 3, base);
+                }
+                for (int s = 1; s < shipCap; s++) {
+                    for (int k = 0; k < OCC_PAIR_SLOTS; k++) {
+                        final int pi = s * OCC_PAIR_SLOTS + k;
+                        base = layoutBox(shipOccDescPtr, PAIR_DESC_BASE_TEXEL / 2 + pi, plo, phi,
+                            pi * 3, base);
+                    }
+                }
+                shipOccCellCount = base;
+                MemoryUtil.memSet(shipOccPtr, 0, (long) shipOccCellCount * 4L);
+                if (Boolean.getBoolean("vs.seamfieldtrace")) {
+                    org.slf4j.LoggerFactory.getLogger("VS2-seamfield").info(
+                        "ship field: shipCap={} voxels={} cells={} host0valid={} host1valid={}",
+                        shipCap, count, shipOccCellCount,
+                        MemoryUtil.memGetInt(shipOccDescPtr + 28),
+                        shipCap > 1 ? MemoryUtil.memGetInt(shipOccDescPtr + OCC_DESC_BYTES + 28) : -1);
+                }
+            }
+
+            for (int i = 0; i < count; i++) {
+                final long off = arenaPtr + (long) i * BYTES_PER_OCCLUDER;
+                final float vx = MemoryUtil.memGetFloat(off);
+                final float vy = MemoryUtil.memGetFloat(off + 4);
+                final float vz = MemoryUtil.memGetFloat(off + 8);
+                final int s = Float.floatToRawIntBits(MemoryUtil.memGetFloat(off + 12)) & SHIP_INDEX_MASK;
+                if (s <= 0 || s >= shipCap || !seen[s]) continue;
+                final long sd = shipDirPtr + (long) s * BYTES_PER_SHIP;
+
+                for (int k = 0; k < OCC_PAIR_SLOTS; k++) {
+                    final int t;
+                    final float claim;
+                    if (k == 0) {
+                        t = s;
+                        claim = 1f;
+                    } else if (k <= MAX_PARTNERS) {
+                        t = Float.floatToRawIntBits(MemoryUtil.memGetFloat(sd + 48 + (k - 1) * 4));
+                        claim = MemoryUtil.memGetFloat(sd + 32 + (k - 1) * 4);
+                    } else {
+                        t = 0;                    // the world lattice
+                        claim = cw[s];
+                    }
+                    final float w = rBlock[s] * claim;
+                    if (t < 0 || t >= hosts || w <= 0f) continue;
+                    if (t > 0 && !seen[t]) continue;
+
+                    final float cx = latH(t, vx, vy, vz, quat, anchor, 0);
+                    final float cy = latH(t, vx, vy, vz, quat, anchor, 1);
+                    final float cz = latH(t, vx, vy, vz, quat, anchor, 2);
+                    final int mx = (int) Math.floor(cx - 0.5f);
+                    final int my = (int) Math.floor(cy - 0.5f);
+                    final int mz = (int) Math.floor(cz - 0.5f);
+                    final int pi = s * OCC_PAIR_SLOTS + k;
+
+                    if (pass == 0) {
+                        growBox(hlo, hhi, t * 3, mx, my, mz);
+                        growBox(plo, phi, pi * 3, mx, my, mz);
+                        continue;
+                    }
+                    // The same eight taps land in the host's aggregate and in this pair's own box;
+                    // the fragment subtracts the second from the first.
+                    splatBox(shipOccDescPtr, t, cx, cy, cz, mx, my, mz, w);
+                    splatBox(shipOccDescPtr, PAIR_DESC_BASE_TEXEL / 2 + pi, cx, cy, cz, mx, my, mz, w);
+                }
+            }
+        }
+    }
+
+    private static void growBox(final int[] lo, final int[] hi, final int b,
+        final int mx, final int my, final int mz) {
+        lo[b] = Math.min(lo[b], mx);         hi[b] = Math.max(hi[b], mx + 1);
+        lo[b + 1] = Math.min(lo[b + 1], my); hi[b + 1] = Math.max(hi[b + 1], my + 1);
+        lo[b + 2] = Math.min(lo[b + 2], mz); hi[b + 2] = Math.max(hi[b + 2], mz + 1);
+    }
+
+    /** Write one box's descriptor at {@code descIndex} and return the next free cell. */
+    private int layoutBox(final long descPtr, final int descIndex, final int[] lo, final int[] hi,
+        final int b, final int base) {
+        if (lo[b] > hi[b]) return base;
+        final int dx = hi[b] - lo[b] + 1;
+        final int dy = hi[b + 1] - lo[b + 1] + 1;
+        final int dz = hi[b + 2] - lo[b + 2] + 1;
+        final long cells = (long) dx * dy * dz;
+        if (base + cells > OCC_MAX_CELLS) {
+            org.slf4j.LoggerFactory.getLogger("VS2-seamfield").error(
+                "ship seam occupancy field out of space ({} cells needed, {} cap) -- AO will be"
+                    + " missing; raise OCC_MAX_CELLS", cells, OCC_MAX_CELLS);
+            return base;
+        }
+        final long d = descPtr + (long) descIndex * OCC_DESC_BYTES;
+        MemoryUtil.memPutInt(d, base);
+        MemoryUtil.memPutInt(d + 4, dx);
+        MemoryUtil.memPutInt(d + 8, dy);
+        MemoryUtil.memPutInt(d + 12, dz);
+        MemoryUtil.memPutInt(d + 16, lo[b]);
+        MemoryUtil.memPutInt(d + 20, lo[b + 1]);
+        MemoryUtil.memPutInt(d + 24, lo[b + 2]);
+        MemoryUtil.memPutInt(d + 28, 1);
+        return base + (int) cells;
+    }
+
+    private void splatBox(final long descPtr, final int descIndex, final float cx, final float cy,
+        final float cz, final int mx, final int my, final int mz, final float w) {
+        final long d = descPtr + (long) descIndex * OCC_DESC_BYTES;
+        if (MemoryUtil.memGetInt(d + 28) == 0) return;
+        final int tbase = MemoryUtil.memGetInt(d);
+        final int dx = MemoryUtil.memGetInt(d + 4);
+        final int dy = MemoryUtil.memGetInt(d + 8);
+        final int ox = MemoryUtil.memGetInt(d + 16);
+        final int oy = MemoryUtil.memGetInt(d + 20);
+        final int oz = MemoryUtil.memGetInt(d + 24);
+        for (int az = 0; az < 2; az++) {
+            final float tz = tent(cz - (mz + az + 0.5f));
+            if (tz == 0f) continue;
+            for (int ay = 0; ay < 2; ay++) {
+                final float ty = tent(cy - (my + ay + 0.5f));
+                if (ty == 0f) continue;
+                final float tyz = w * ty * tz;
+                for (int ax = 0; ax < 2; ax++) {
+                    final float tx = tent(cx - (mx + ax + 0.5f));
+                    if (tx == 0f) continue;
+                    final int idx = tbase
+                        + ((mz + az - oz) * dy + (my + ay - oy)) * dx + (mx + ax - ox);
+                    final long p = shipOccPtr + (long) idx * 4L;
+                    MemoryUtil.memPutFloat(p, MemoryUtil.memGetFloat(p) + tyz * tx);
+                }
+            }
+        }
+    }
+
+    /** Lattice coordinate for a ship host, or for host 0 -- the WORLD lattice, whose identity
+     *  rotation and (0.5, 0.5, 0.5) anchor make c the world coordinate itself, so world block
+     *  centres land exactly on cell centres. */
+    private static float latH(final int t, final float vx, final float vy, final float vz,
+        final float[] quat, final float[] anchor, final int comp) {
+        if (t == 0) {
+            return comp == 0 ? vx : (comp == 1 ? vy : vz);
+        }
+        return latComp(t, vx, vy, vz, quat, anchor, comp);
+    }
+
+    /** Mirrors vs_seamWorldAlign in the ship shader: rotation alignment times lattice alignment. */
+    private static float worldAlign(final float[] quat, final float[] anchor, final int s) {
+        final float x = quat[s * 4], y = quat[s * 4 + 1], z = quat[s * 4 + 2], w = quat[s * 4 + 3];
+        final float m = (max3(1f - 2f * (y * y + z * z), 2f * (x * y + z * w), 2f * (x * z - y * w))
+            + max3(2f * (x * y - z * w), 1f - 2f * (x * x + z * z), 2f * (y * z + x * w))
+            + max3(2f * (x * z + y * w), 2f * (y * z - x * w), 1f - 2f * (x * x + y * y))) / 3f;
+        final float oRot = clamp01((m - OROT_LO) / (1f - OROT_LO));
+        return oRot * (1f - fractDist(anchor[s * 3])) * (1f - fractDist(anchor[s * 3 + 1]))
+            * (1f - fractDist(anchor[s * 3 + 2]));
+    }
+
+    private static float max3(final float a, final float b, final float c) {
+        return Math.max(Math.max(Math.abs(a), Math.abs(b)), Math.abs(c));
+    }
+
+    private static float tent(final float d) {
+        final float a = Math.abs(d);
+        return a >= 1f ? 0f : 1f - a;
+    }
+
+    /** Component of {@code Rinv_t * (v - anchor_t) + 0.5}; mirrors the shader's fragL/c exactly. */
+    private static float latComp(final int t, final float vx, final float vy, final float vz,
+        final float[] quat, final float[] anchor, final int comp) {
+        final float dx = vx - anchor[t * 3];
+        final float dy = vy - anchor[t * 3 + 1];
+        final float dz = vz - anchor[t * 3 + 2];
+        final float qx = -quat[t * 4], qy = -quat[t * 4 + 1], qz = -quat[t * 4 + 2];
+        final float qw = quat[t * 4 + 3];
+        final float c1x = qy * dz - qz * dy + qw * dx;
+        final float c1y = qz * dx - qx * dz + qw * dy;
+        final float c1z = qx * dy - qy * dx + qw * dz;
+        switch (comp) {
+            case 0: return dx + 2f * (qy * c1z - qz * c1y) + 0.5f;
+            case 1: return dy + 2f * (qz * c1x - qx * c1z) + 0.5f;
+            default: return dz + 2f * (qx * c1y - qy * c1x) + 0.5f;
+        }
+    }
+
+    private static float latX(final int t, final float vx, final float vy, final float vz,
+        final float[] q, final float[] a) {
+        return latComp(t, vx, vy, vz, q, a, 0);
+    }
+
+    private static float latY(final int t, final float vx, final float vy, final float vz,
+        final float[] q, final float[] a) {
+        return latComp(t, vx, vy, vz, q, a, 1);
+    }
+
+    private static float latZ(final int t, final float vx, final float vy, final float vz,
+        final float[] q, final float[] a) {
+        return latComp(t, vx, vy, vz, q, a, 2);
+    }
+
+    /** Refresh the camera position and the fade band once per frame. A far edge
+     *  of 0 (or no camera yet) disables the LOD by parking the band beyond any
+     *  reachable distance, so {@link #mergeBudget} returns a full budget and the
+     *  merge behaves exactly as it did before this existed. */
+    private void updateMergeLod() {
+        mergeLodFar = (float) org.valkyrienskies.mod.common.config.VSGameConfig.CLIENT
+            .getShipAmbientOcclusionMergeDistance();
+        final net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        final net.minecraft.client.Camera cam = mc == null ? null : mc.gameRenderer.getMainCamera();
+        if (cam == null || mergeLodFar <= 0f) {
+            mergeLodFar = 0f;
+            return;
+        }
+        final net.minecraft.world.phys.Vec3 p = cam.getPosition();
+        camX = (float) p.x;
+        camY = (float) p.y;
+        camZ = (float) p.z;
+        mergeLodNear = mergeLodFar * MERGE_LOD_NEAR_FRAC;
+    }
+
+    /** How many of ship s's partners are still worth merging, as a CONTINUOUS
+     *  count, from how far the camera is from THIS pair's seam.
+     *
+     *  <p>The seam is not either ship's centre — for a long hull that can be
+     *  hundreds of blocks from where the two actually touch — so the anchor is
+     *  the overlap of the two AABBs fattened by the merge gate, which is exactly
+     *  the region where one ship's material can land in the other's lattice, and
+     *  the distance is to that BOX rather than to a point in it. A long seam
+     *  therefore stays at full fidelity as long as any part of it is close. */
+    private float mergeBudget(int s, int t, float[] aabb) {
+        if (mergeLodFar <= 0f) return MAX_PARTNERS;
+        float d2 = 0f;
+        for (int i = 0; i < 3; i++) {
+            float lo = Math.max(aabb[s * 6 + i], aabb[t * 6 + i]) - SEAM_G_ZERO;
+            float hi = Math.min(aabb[s * 6 + 3 + i], aabb[t * 6 + 3 + i]) + SEAM_G_ZERO;
+            if (hi < lo) {           // no overlap on this axis even fattened
+                float mid = 0.5f * (lo + hi);
+                lo = hi = mid;
+            }
+            float c = i == 0 ? camX : (i == 1 ? camY : camZ);
+            float e = Math.max(Math.max(lo - c, c - hi), 0f);
+            d2 += e * e;
+        }
+        float dist = (float) Math.sqrt(d2);
+        float span = Math.max(mergeLodFar - mergeLodNear, 1e-3f);
+        return MAX_PARTNERS * (1f - clamp01((dist - mergeLodNear) / span));
     }
 
     /** claim(s → t): gate(AABB gap) × o_rot(relative rotation) ×
@@ -580,6 +1140,36 @@ public class VsShipOccluderList {
                 shipDirByteSize, ships > 1);
         gridByteSize = uploadOne(gridBuffer, gridTexture, gridPtr,
                 GRID_TEXEL_COUNT * 16, gridByteSize, true);
+        // R32F, one float per cell -- not RGBA like the others, so it gets its own format.
+        occByteSize = uploadTyped(occBuffer, occTexture, occPtr,
+                Math.max(4, occCellCount * 4), occByteSize, occCellCount > 0, GL30.GL_R32F);
+        occDescByteSize = uploadTyped(occDescBuffer, occDescTexture, occDescPtr,
+                Math.max(OCC_DESC_BYTES, ships * OCC_DESC_BYTES), occDescByteSize, ships > 1,
+                GL30.GL_RGBA32I);
+        shipOccByteSize = uploadTyped(shipOccBuffer, shipOccTexture, shipOccPtr,
+                Math.max(4, shipOccCellCount * 4), shipOccByteSize, shipOccCellCount > 0,
+                GL30.GL_R32F);
+        // Fixed size, not sized to the live ship count: the shader indexes pair descriptors at
+        // PAIR_DESC_BASE_TEXEL + ..., which is a constant, so the buffer has to reach that far.
+        shipOccDescByteSize = uploadTyped(shipOccDescBuffer, shipOccDescTexture, shipOccDescPtr,
+                SHIP_DESC_TEXELS * 16, shipOccDescByteSize, true, GL30.GL_RGBA32I);
+    }
+
+    /** As {@link #uploadOne} but for a buffer texture whose internal format is not RGBA32F. */
+    private static int uploadTyped(int buf, int tex, long ptr, int needed,
+            int currentSize, boolean hasData, int internalFormat) {
+        GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, buf);
+        boolean orphaned = currentSize != needed;
+        if (orphaned || hasData) {
+            GL15.nglBufferData(GL31.GL_TEXTURE_BUFFER, needed, ptr, GL15.GL_DYNAMIC_DRAW);
+        }
+        GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, 0);
+        if (orphaned) {
+            GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, tex);
+            GL31.glTexBuffer(GL31.GL_TEXTURE_BUFFER, internalFormat, buf);
+            GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, 0);
+        }
+        return needed;
     }
 
     private static int uploadOne(int buf, int tex, long ptr, int needed,
@@ -638,6 +1228,46 @@ public class VsShipOccluderList {
         if (shipDirTexture == 0) shipDirTexture = makeBufferTexture(shipDirBuffer);
         if (gridBuffer == 0) gridBuffer = newBackedBuffer();
         if (gridTexture == 0) gridTexture = makeBufferTexture(gridBuffer);
+        if (occBuffer == 0) occBuffer = newBackedBuffer();
+        if (occTexture == 0) occTexture = makeTypedBufferTexture(occBuffer, GL30.GL_R32F);
+        if (occDescBuffer == 0) occDescBuffer = newBackedBuffer();
+        if (occDescTexture == 0) occDescTexture = makeTypedBufferTexture(occDescBuffer, GL30.GL_RGBA32I);
+        if (shipOccBuffer == 0) shipOccBuffer = newBackedBuffer();
+        if (shipOccTexture == 0) shipOccTexture = makeTypedBufferTexture(shipOccBuffer, GL30.GL_R32F);
+        if (shipOccDescBuffer == 0) shipOccDescBuffer = newBackedBuffer();
+        if (shipOccDescTexture == 0) {
+            shipOccDescTexture = makeTypedBufferTexture(shipOccDescBuffer, GL30.GL_RGBA32I);
+        }
+    }
+
+    private static int makeTypedBufferTexture(int buf, int internalFormat) {
+        int tex = GL11.glGenTextures();
+        GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, tex);
+        GL31.glTexBuffer(GL31.GL_TEXTURE_BUFFER, internalFormat, buf);
+        GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, 0);
+        return tex;
+    }
+
+    /** Bind the precomputed occupancy field (u_VsSeamOcc) and its per-ship descriptors
+     *  (u_VsSeamOccDesc). World shader only -- see the note on buildOccField. */
+    public void bindOccField(int fieldUnit, int descUnit) {
+        ensureGlObjects();
+        GlStateManager._activeTexture(GL13.GL_TEXTURE0 + fieldUnit);
+        GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, occTexture);
+        GlStateManager._activeTexture(GL13.GL_TEXTURE0 + descUnit);
+        GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, occDescTexture);
+        GlStateManager._activeTexture(GL13.GL_TEXTURE0);
+    }
+
+    /** Bind the SHIP path's field set: aggregates per host plus the (source, target) pair boxes the
+     *  fragment subtracts its own ship's material with. */
+    public void bindShipOccField(int fieldUnit, int descUnit) {
+        ensureGlObjects();
+        GlStateManager._activeTexture(GL13.GL_TEXTURE0 + fieldUnit);
+        GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, shipOccTexture);
+        GlStateManager._activeTexture(GL13.GL_TEXTURE0 + descUnit);
+        GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, shipOccDescTexture);
+        GlStateManager._activeTexture(GL13.GL_TEXTURE0);
     }
 
     /**
