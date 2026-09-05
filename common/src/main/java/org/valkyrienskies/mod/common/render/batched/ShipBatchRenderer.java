@@ -4,8 +4,6 @@ import com.mojang.blaze3d.shaders.Uniform;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexBuffer;
-import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
-import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import java.util.ArrayList;
 import java.util.List;
@@ -16,7 +14,6 @@ import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderDispatcher;
-import net.minecraft.client.renderer.block.BlockRenderDispatcher;
 import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -41,8 +38,9 @@ public final class ShipBatchRenderer {
 
     public static final ShipBatchRenderer INSTANCE = new ShipBatchRenderer();
 
-    private final Long2ObjectMap<ShipRenderObject> ships = new Long2ObjectOpenHashMap<>();
-    private final ShipSectionCompiler compiler = new ShipSectionCompiler();
+    // Geometry lives in ShipMeshCache, which this shares with anything else that draws a ship --
+    // see ShipPortraitRenderer. What is kept here is only what a frame of world rendering needs:
+    // which ships this renderer is responsible for, and in what order.
     private final LongOpenHashSet presentScratch = new LongOpenHashSet();
     private final ArrayList<ShipRenderObject> drawOrder = new ArrayList<>();
 
@@ -77,24 +75,18 @@ public final class ShipBatchRenderer {
     }
 
     public void markSectionDirty(final long shipId, final int sx, final int sy, final int sz) {
-        final ShipRenderObject renderObject;
-        synchronized (ships) {
-            renderObject = ships.get(shipId);
-        }
+        final ShipRenderObject renderObject = ShipMeshCache.INSTANCE.peek(shipId);
         if (renderObject != null) {
             renderObject.markSectionDirty(sx, sy, sz);
         }
     }
 
     public void onShipUnload(final long shipId) {
-        final ShipRenderObject removed;
-        synchronized (ships) {
-            removed = ships.remove(shipId);
-        }
+        final ShipRenderObject removed = ShipMeshCache.INSTANCE.peek(shipId);
         if (removed != null) {
             drawOrder.remove(removed);
-            removed.close();
         }
+        ShipMeshCache.INSTANCE.release(shipId);
     }
 
     public void beginFrame(final ClientLevel level) {
@@ -113,8 +105,8 @@ public final class ShipBatchRenderer {
         final VsShipEmitterList shipEmitters = VsDynamicLight.getShipEmitterList();
         shipEmitters.beginFrame();
 
-        final BlockRenderDispatcher dispatcher = Minecraft.getInstance().getBlockRenderer();
         presentScratch.clear();
+        drawOrder.clear();
 
         int reMeshBudget = MAX_SHIP_REMESH_PER_FRAME;
         for (final ClientShip ship : VSGameUtilsKt.getShipObjectWorld(level).getLoadedShips()) {
@@ -122,17 +114,14 @@ public final class ShipBatchRenderer {
                 continue;
             }
             presentScratch.add(ship.getId());
-            ShipRenderObject renderObject;
-            synchronized (ships) {
-                renderObject = ships.get(ship.getId());
-                if (renderObject == null) {
-                    renderObject = new ShipRenderObject(ship);
-                    ships.put(ship.getId(), renderObject);
-                }
-            }
-            if (renderObject.ensureCompiled(level, dispatcher, compiler, reMeshBudget > 0)) {
+            final ShipRenderObject renderObject = ShipMeshCache.INSTANCE.obtain(ship);
+            if (ShipMeshCache.INSTANCE.compile(level, renderObject, reMeshBudget > 0)) {
                 reMeshBudget--;
             }
+            // Built here rather than from the cache afterwards: the cache also holds ships this
+            // renderer is not responsible for, and drawing those into the world would draw them
+            // twice.
+            drawOrder.add(renderObject);
             final double[] shipyardEmitters = renderObject.getShipyardEmitters(level);
             if (shipyardEmitters.length != 0) {
                 shipEmitters.appendShipEmitters(ship, shipyardEmitters);
@@ -140,20 +129,7 @@ public final class ShipBatchRenderer {
         }
         shipEmitters.upload();
 
-        synchronized (ships) {
-            if (ships.size() != presentScratch.size()) {
-                final var it = ships.long2ObjectEntrySet().iterator();
-                while (it.hasNext()) {
-                    final var entry = it.next();
-                    if (!presentScratch.contains(entry.getLongKey())) {
-                        entry.getValue().close();
-                        it.remove();
-                    }
-                }
-            }
-            drawOrder.clear();
-            drawOrder.addAll(ships.values());
-        }
+        ShipMeshCache.INSTANCE.retainOnly(presentScratch);
     }
 
     public void drawLayer(final RenderType renderType, final PoseStack poseStack,
@@ -161,7 +137,7 @@ public final class ShipBatchRenderer {
         final Frustum frustum) {
 
         final int layerIndex = ShipSectionMesh.layerIndex(renderType);
-        if (layerIndex < 0 || ships.isEmpty()) {
+        if (layerIndex < 0 || drawOrder.isEmpty()) {
             return;
         }
         RenderSystem.assertOnRenderThread();
@@ -446,12 +422,7 @@ public final class ShipBatchRenderer {
     }
 
     public void freeAll() {
-        synchronized (ships) {
-            for (final ShipRenderObject renderObject : ships.values()) {
-                renderObject.close();
-            }
-            ships.clear();
-        }
+        ShipMeshCache.INSTANCE.releaseAll();
         drawOrder.clear();
         VsDynamicLight.deleteStorages();
         lastLightPopulationGameTime = Long.MIN_VALUE;

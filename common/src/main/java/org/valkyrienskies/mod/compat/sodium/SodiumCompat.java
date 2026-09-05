@@ -106,11 +106,43 @@ public class SodiumCompat {
      */
     static final int FEATURE_SEAM_NO_MERGE = 2048;
     /**
+     * Read the seam AO's occupancy from the precomputed per-ship field instead of stamping voxels
+     * per fragment. World shader only. A compile-time variant rather than a runtime branch on
+     * purpose: the point is to remove the voxel loop's registers from the shader, and a branch would
+     * keep both paths allocated.
+     */
+    static final int FEATURE_SEAM_PRECOMP = 4096;
+    /**
      * -Pvs.aoprof=N: make the per-fragment seam AO return early at stage N, so its cost can be
      * bisected in a running client. 0 (or unset) is the normal shader. Constant for the process, so
      * it needs no place in the shader cache key.
      */
     private static final int AO_PROF = Integer.getInteger("vs.aoprof", 0);
+    /**
+     * -Pvs.aocut=N: COMPILE OUT parts of the seam AO, the inverse of {@link #AO_PROF}. AO_PROF keeps
+     * every stage's register allocation identical so the stages compare as work; that is exactly why
+     * it cannot attribute the FLOOR, which is occupancy rather than work. This removes code from the
+     * compiler's view instead, so the difference between levels is register pressure. Pair it with
+     * -Pvs_aoprof=4 so nothing executes at any level. Diagnostic only: levels above 0 do not render
+     * correct AO. Constant for the process, so it needs no place in the shader cache key.
+     */
+    private static final int AO_CUT = Integer.getInteger("vs.aocut", 0);
+    /**
+     * -Pvs.aocutship=N: the same as {@link #AO_CUT} but for the SHIP shader's seam body. Separate
+     * from AO_CUT on purpose: the fleet measurements showed the AO's floor is entirely the ship
+     * program, so the two have to be cut independently to locate it rather than together.
+     */
+    private static final int AO_CUT_SHIP = Integer.getInteger("vs.aocutship", 0);
+    /**
+     * -Pvs_precompship=false: leave the SHIP program on the per-fragment path while the world one
+     * uses the precomputed field, so the two halves can be A/B'd back to back in one sitting. They
+     * have to be: the world half is a clear win and the ship half is not obviously one, and this rig
+     * drifts enough between sittings to swallow the difference.
+     */
+    private static final boolean PRECOMP_SHIP =
+        !"false".equalsIgnoreCase(System.getProperty("vs.precompship", "true"));
+    /** -Pvs_seamsub=0: diagnostic, show the precomputed aggregate without the self-subtraction. */
+    private static final String SEAM_SUB = System.getProperty("vs.seamsub", "");
     /**
      * -Pvs_seamkernel=N: which B-spline the seam AO splats its occluder voxels with. 1 (or unset) is
      * the tent, which is what every verified result was produced with and the only value that keeps
@@ -180,6 +212,17 @@ public class SodiumCompat {
     /** Coarse spatial grid binning ships to cells, so a fragment scans only
      *  its own cell's ships in pass 1 (see VsShipOccluderList spatial grid). */
     public static final int SEAM_GRID_TEXTURE_UNIT = 24;
+    /** Precomputed per-ship occupancy field (R32F, one scalar per lattice cell) and its per-ship
+     *  descriptors (RGBA32I: base/dims, origin/valid). World shader only -- see
+     *  VsShipOccluderList.buildOccField for why the ship shader cannot use one field per host. */
+    public static final int SEAM_OCC_TEXTURE_UNIT = 25;
+    public static final int SEAM_OCC_DESC_TEXTURE_UNIT = 26;
+    /** The SHIP path's field set gets its own units rather than sharing the world one's. The two
+     *  hold different data -- different weights, and the ship set adds the world lattice as a host
+     *  plus the per-pair boxes -- and the binds are elided to once per FRAME by needsListRebind(),
+     *  so sharing a unit would leave whichever program drew second reading the other's field. */
+    public static final int SEAM_SHIP_OCC_TEXTURE_UNIT = 27;
+    public static final int SEAM_SHIP_OCC_DESC_TEXTURE_UNIT = 28;
 
     private static final double WORLD_FROM_SHIP_VISIBILITY_PADDING = 32.0;
 
@@ -286,6 +329,9 @@ public class SodiumCompat {
         if (VSGameConfig.CLIENT.getShipAmbientOcclusion()) {
             bits |= FEATURE_SHIP_AO;
             if (!VSGameConfig.CLIENT.getShipAmbientOcclusionMerging()) bits |= FEATURE_SEAM_NO_MERGE;
+            if (VSGameConfig.CLIENT.getShipAmbientOcclusionPrecompute() && PRECOMP_SHIP) {
+                bits |= FEATURE_SEAM_PRECOMP;
+            }
         }
         // The seam-AO pass needs u_TransformMatrix and the world-relative varyings, which ride on
         // this bit, so it is set for any feature that draws through the ship shader.
@@ -343,6 +389,7 @@ public class SodiumCompat {
                 SEAM_SHIP_DIR_TEXTURE_UNIT,
                 getShipOccluderList().boundsCenterX(), getShipOccluderList().boundsCenterY(),
                 getShipOccluderList().boundsCenterZ(), getShipOccluderList().boundsRadius());
+        shipInterface.setSeamOccField(SEAM_SHIP_OCC_TEXTURE_UNIT, SEAM_SHIP_OCC_DESC_TEXTURE_UNIT);
         shipInterface.setSeamGrid(SEAM_GRID_TEXTURE_UNIT,
                 getShipOccluderList().gridOriginX(), getShipOccluderList().gridOriginY(),
                 getShipOccluderList().gridOriginZ(), getShipOccluderList().gridInvCellX(),
@@ -478,6 +525,22 @@ public class SodiumCompat {
      *  are only re-populated once per frame (see populateWorldFromShipsForFrame,
      *  populateLightSectionStorage, populateBiomeSectionStorage), so rebinding
      *  them per-ship or per-pass is pure waste. */
+    /**
+     * Bind BOTH precomputed field sets, from either draw branch.
+     *
+     * <p>The binds around this are elided to once per frame by {@link #needsListRebind()}, so
+     * whichever of the ship and world branches draws first is the only one that binds anything. That
+     * is fine for the buffers both branches bind identically -- occluders, runs, directory, grid --
+     * and it is exactly wrong for a buffer only one branch binds: the ship field went to units
+     * nothing had bound, the sampler read zero, and the ship AO silently disappeared while the
+     * world's kept working. Binding both sets from both branches makes the elision safe again.
+     */
+    public static void bindSeamOccFields() {
+        getShipOccluderList().bindOccField(SEAM_OCC_TEXTURE_UNIT, SEAM_OCC_DESC_TEXTURE_UNIT);
+        getShipOccluderList().bindShipOccField(SEAM_SHIP_OCC_TEXTURE_UNIT,
+            SEAM_SHIP_OCC_DESC_TEXTURE_UNIT);
+    }
+
     public static boolean needsListRebind() {
         return lastBoundListsFrame != frameToken;
     }
@@ -759,6 +822,7 @@ public class SodiumCompat {
             && (!AO_GATE || VsDynamicLight.getShipOccluderList().size() > 0)) {
             features |= FEATURE_SHIP_AO;
             if (!VSGameConfig.CLIENT.getShipAmbientOcclusionMerging()) features |= FEATURE_SEAM_NO_MERGE;
+            if (VSGameConfig.CLIENT.getShipAmbientOcclusionPrecompute()) features |= FEATURE_SEAM_PRECOMP;
         }
         if (features != 0) {
             int paint = VSGameConfig.CLIENT.getDebugFloodPaint();
@@ -813,6 +877,7 @@ public class SodiumCompat {
                 getShipOccluderList().gridOriginX(), getShipOccluderList().gridOriginY(),
                 getShipOccluderList().gridOriginZ(), getShipOccluderList().gridInvCellX(),
                 getShipOccluderList().gridInvCellY(), getShipOccluderList().gridInvCellZ());
+        wt.setSeamOccField(SEAM_OCC_TEXTURE_UNIT, SEAM_OCC_DESC_TEXTURE_UNIT);
     }
 
     private static GlProgram<WorldThing> createWorldShader(String path, ChunkShaderOptions options,
@@ -861,8 +926,12 @@ public class SodiumCompat {
         if ((features & FEATURE_DEBUG_FLOOD_2) != 0) builder.add("VS_DEBUG_FLOOD", "2");
         if ((features & FEATURE_SHIP_AO) != 0) builder.add("VS_SHIP_AO");
         if ((features & FEATURE_SEAM_NO_MERGE) != 0) builder.add("VS_SEAM_NO_MERGE");
+        if ((features & FEATURE_SEAM_PRECOMP) != 0) builder.add("VS_SEAM_PRECOMP");
         if ((features & FEATURE_DEBUG_SEAM_AO) != 0) builder.add("VS_DEBUG_SEAM_AO");
         if (AO_PROF != 0) builder.add("VS_AOPROF", Integer.toString(AO_PROF));
+        if (AO_CUT != 0) builder.add("VS_AOCUT", Integer.toString(AO_CUT));
+        if (AO_CUT_SHIP != 0) builder.add("VS_AOCUTSHIP", Integer.toString(AO_CUT_SHIP));
+        if (!SEAM_SUB.isEmpty()) builder.add("VS_SEAM_SUBTRACT", SEAM_SUB);
         if (SEAM_KERNEL != 1) builder.add("VS_SEAM_KERNEL", Integer.toString(SEAM_KERNEL));
         if ((features & FEATURE_DEBUG_SHIP_LIGHT) != 0) builder.add("VS_DEBUG_SHIP_LIGHT", VSGameConfig.CLIENT.getDebugFloodPaint() == 4 ? "4" : "3");
         return builder.build();
@@ -938,8 +1007,12 @@ public class SodiumCompat {
         // or the FSH compiles without the reader, GLSL drops the uniform, and bindUniform NPEs.
         if ((features & FEATURE_SHIP_AO) != 0) builder.add("VS_SHIP_AO");
         if ((features & FEATURE_SEAM_NO_MERGE) != 0) builder.add("VS_SEAM_NO_MERGE");
+        if ((features & FEATURE_SEAM_PRECOMP) != 0) builder.add("VS_SEAM_PRECOMP");
         if ((features & FEATURE_DEBUG_SEAM_AO) != 0) builder.add("VS_DEBUG_SEAM_AO");
         if (AO_PROF != 0) builder.add("VS_AOPROF", Integer.toString(AO_PROF));
+        if (AO_CUT != 0) builder.add("VS_AOCUT", Integer.toString(AO_CUT));
+        if (AO_CUT_SHIP != 0) builder.add("VS_AOCUTSHIP", Integer.toString(AO_CUT_SHIP));
+        if (!SEAM_SUB.isEmpty()) builder.add("VS_SEAM_SUBTRACT", SEAM_SUB);
         if (SEAM_KERNEL != 1) builder.add("VS_SEAM_KERNEL", Integer.toString(SEAM_KERNEL));
         // getOrCreateShipProgram sets this bit from debugFloodPaint, so it has to be emitted here too
         // -- without it the debug paint is silently a no-op on ship chunks.

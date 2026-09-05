@@ -67,6 +67,8 @@ public class ShipThing extends ChunkShaderInterface {
     // matches — same-ship AO is already baked into v_Color.a, so counting
     // it again would double-darken self-shadows.
     private final GlUniformInt uniformCurrentShipIndex;
+    private final GlUniformInt uniformSeamOcc;
+    private final GlUniformInt uniformSeamOccDesc;
 
     public ShipThing(ShaderBindingContext context, ChunkShaderOptions options, int features) {
         super(context, options);
@@ -112,7 +114,11 @@ public class ShipThing extends ChunkShaderInterface {
                 ? context.bindUniform("u_VsWorldFromShipLut", GlUniformInt::new) : null;
         this.uniformFloodGridValid = floodGrid
             ? context.bindUniform("u_VsFloodGridValid", GlUniformInt::new) : null;
-        this.uniformShipOccluders = seamAo
+        // With the precomputed field the voxel loop is gone, so nothing reads the occluder LIST any
+        // more and GLSL drops it -- binding it by name would throw. The COUNT survives, because the
+        // early-out at the top of vs_seamAoFrag still tests it.
+        final boolean precomp = (features & SodiumCompat.FEATURE_SEAM_PRECOMP) != 0;
+        this.uniformShipOccluders = (seamAo && !precomp)
                 ? context.bindUniform("u_VsShipOccluders", GlUniformInt::new) : null;
         this.uniformShipOccluderCount = seamAo
                 ? context.bindUniform("u_VsShipOccluderCount", GlUniformInt::new) : null;
@@ -132,6 +138,16 @@ public class ShipThing extends ChunkShaderInterface {
                 ? context.bindUniform("u_VsSeamGridInvCell", GlUniformFloat3v::new) : null;
         this.uniformCurrentShipIndex = seamAo
                 ? context.bindUniform("u_VsCurrentShipIndex", GlUniformInt::new) : null;
+        this.uniformSeamOcc = precomp
+                ? context.bindUniform("u_VsSeamOcc", GlUniformInt::new) : null;
+        this.uniformSeamOccDesc = precomp
+                ? context.bindUniform("u_VsSeamOccDesc", GlUniformInt::new) : null;
+    }
+
+    public void setSeamOccField(int fieldTextureUnit, int descTextureUnit) {
+        if (this.uniformSeamOcc == null) return;
+        this.uniformSeamOcc.setInt(fieldTextureUnit);
+        this.uniformSeamOccDesc.setInt(descTextureUnit);
     }
 
     public void setTransformMatrix(Matrix4fc matrix) {

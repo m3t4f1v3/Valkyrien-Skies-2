@@ -32,11 +32,26 @@ mkdir -p "$RUN_DIR/screenshots"
 # the log, and every screenshot then shows correct-looking vanilla lighting. Diagnosing that from the
 # images alone costs hours, so the values are asserted here instead of assumed.
 VS_CFG="$RUN_DIR/config/valkyrienskies/valkyrienskies-client.toml"
+# Every render-affecting key, at the value a run gets unless it asks for something else. This baseline
+# is applied BEFORE AUTOTEST_VS_CONFIG so each run starts from a known state.
+#
+# Without it the toml is shared mutable state between runs: the loop below only writes the keys a run
+# names, and every other key keeps whatever the PREVIOUS run left there. That produced a genuinely
+# impossible result -- a 4K run with merging on measuring faster than the same scene with merging off
+# -- because the "merging on" run inherited shipAmbientOcclusionMergeDistance=12.0 from the last row
+# of perf_aomerge.sh and was therefore fully faded, i.e. not merging at all. Nothing in the log said
+# so. Any perf script that does not name every relevant key is exposed to this, which is not a
+# property a measurement rig should have.
+VS_CFG_BASE="dynamicShipToWorldLighting=false dynamicShipLighting=false dynamicShipBiomeTinting=false"
+VS_CFG_BASE="$VS_CFG_BASE gpuDynamicLightFlood=true debugFloodPaint=0"
+VS_CFG_BASE="$VS_CFG_BASE shipAmbientOcclusion=false shipAmbientOcclusionMerging=true"
+VS_CFG_BASE="$VS_CFG_BASE shipAmbientOcclusionMergeDistance=192.0"
 if [ -f "$VS_CFG" ]; then
     # A plain space-separated string, deliberately not an array: an array cannot be exported, so
     # setting one as a command prefix silently wrote a literal "(" and ")" into the toml, which the
     # config parser then rejected by resetting the file -- turning off the feature under test.
-    for kv in "${AUTOTEST_VS_CONFIG:-dynamicShipToWorldLighting=true dynamicShipLighting=true gpuDynamicLightFlood=true}"; do
+    for kv in "$VS_CFG_BASE" \
+              "${AUTOTEST_VS_CONFIG:-dynamicShipToWorldLighting=true dynamicShipLighting=true gpuDynamicLightFlood=true}"; do
         for pair in $kv; do
             k="${pair%%=*}"; v="${pair#*=}"
             if grep -qE "^$k = " "$VS_CFG"; then
@@ -46,7 +61,15 @@ if [ -f "$VS_CFG" ]; then
             fi
         done
     done
-    echo "autotest: client config -> $(grep -hE '^(dynamicShipToWorldLighting|dynamicShipLighting|gpuDynamicLightFlood|debugFloodPaint|defaultRenderer) = ' "$VS_CFG" | tr '\n' ' ')"
+    # Echo every key the baseline covers, not a chosen few: the point is that the run's whole
+    # render configuration is on the record, so a number can be re-read later without guessing.
+    echo "autotest: client config ->"
+    for pair in $VS_CFG_BASE; do
+        grep -hE "^${pair%%=*} = " "$VS_CFG" | sed 's/^/    /'
+    done
+    # Not baselined (a fixture never changes it) but it decides which renderer runs at all, so it
+    # belongs on the record next to the rest.
+    grep -hE '^defaultRenderer = ' "$VS_CFG" | sed 's/^/    /'
 fi
 
 # Frame rate has to be uncapped for a perf run to mean anything: with vsync on, every configuration

@@ -32,6 +32,8 @@ public class WorldThing extends ChunkShaderInterface {
     private final GlUniformInt uniformSeamShipDir;
     private final GlUniformFloat4v uniformSeamBounds;
     private final GlUniformInt uniformSeamGrid;
+    private final GlUniformInt uniformSeamOcc;
+    private final GlUniformInt uniformSeamOccDesc;
     private final GlUniformFloat3v uniformSeamGridOrigin;
     private final GlUniformFloat3v uniformSeamGridInvCell;
 
@@ -46,6 +48,12 @@ public class WorldThing extends ChunkShaderInterface {
         // Seam AO is compiled out when the config is off, so its uniforms are not in the linked
         // program and binding them by name would throw.
         final boolean shipAo = (features & SodiumCompat.FEATURE_SHIP_AO) != 0;
+        // The precomputed field replaces the per-fragment voxel loop, so its samplers exist only in
+        // that variant; in the ordinary one GLSL never sees them and binding by name would throw.
+        // It cuts the other way too: with the loop gone nothing reads the OCCLUDER list any more, so
+        // u_VsShipOccluders is dropped from the precompute variant and must not be bound there.
+        // (u_VsShipOccluderCount survives -- the early-out still tests it.)
+        final boolean precomp = (features & SodiumCompat.FEATURE_SEAM_PRECOMP) != 0;
         this.uniformShipEmitters = floodGrid
             ? null : context.bindUniform("u_VsShipEmitters", GlUniformInt::new);
         this.uniformShipEmitterCount = floodGrid
@@ -56,7 +64,8 @@ public class WorldThing extends ChunkShaderInterface {
             ? context.bindUniform("u_VsWorldFromShipLut", GlUniformInt::new) : null;
         this.uniformFloodGridValid = floodGrid
             ? context.bindUniform("u_VsFloodGridValid", GlUniformInt::new) : null;
-        this.uniformShipOccluders = shipAo ? context.bindUniform("u_VsShipOccluders", GlUniformInt::new) : null;
+        this.uniformShipOccluders = (shipAo && !precomp)
+            ? context.bindUniform("u_VsShipOccluders", GlUniformInt::new) : null;
         this.uniformShipOccluderCount = shipAo ? context.bindUniform("u_VsShipOccluderCount", GlUniformInt::new) : null;
         this.uniformSeamRuns = shipAo ? context.bindUniform("u_VsSeamRuns", GlUniformInt::new) : null;
         this.uniformSeamRunCount = shipAo ? context.bindUniform("u_VsSeamRunCount", GlUniformInt::new) : null;
@@ -65,6 +74,9 @@ public class WorldThing extends ChunkShaderInterface {
         this.uniformSeamGrid = shipAo ? context.bindUniform("u_VsSeamGrid", GlUniformInt::new) : null;
         this.uniformSeamGridOrigin = shipAo ? context.bindUniform("u_VsSeamGridOrigin", GlUniformFloat3v::new) : null;
         this.uniformSeamGridInvCell = shipAo ? context.bindUniform("u_VsSeamGridInvCell", GlUniformFloat3v::new) : null;
+        this.uniformSeamOcc = precomp ? context.bindUniform("u_VsSeamOcc", GlUniformInt::new) : null;
+        this.uniformSeamOccDesc = precomp
+            ? context.bindUniform("u_VsSeamOccDesc", GlUniformInt::new) : null;
     }
 
     public void setRenderOrigin(int x, int y, int z) {
@@ -101,9 +113,16 @@ public class WorldThing extends ChunkShaderInterface {
     }
 
     public void setShipOccluders(int textureUnit, int count) {
-        if (this.uniformShipOccluders == null) return;
-        this.uniformShipOccluders.setInt(textureUnit);
-        this.uniformShipOccluderCount.setInt(count);
+        // Guarded separately, not as a pair. The precompute variant drops the occluder SAMPLER --
+        // nothing reads voxels per fragment there any more -- but keeps the COUNT, because the
+        // early-out at the top of ws_seamAoFrag still tests it. Bailing on the sampler being absent
+        // would leave that count at zero and the AO would silently never run.
+        if (this.uniformShipOccluders != null) {
+            this.uniformShipOccluders.setInt(textureUnit);
+        }
+        if (this.uniformShipOccluderCount != null) {
+            this.uniformShipOccluderCount.setInt(count);
+        }
     }
 
     public void setSeamData(int runsTextureUnit, int runCount, int shipDirTextureUnit,
@@ -121,5 +140,11 @@ public class WorldThing extends ChunkShaderInterface {
         this.uniformSeamGrid.setInt(gridTextureUnit);
         this.uniformSeamGridOrigin.set(ox, oy, oz);
         this.uniformSeamGridInvCell.set(icx, icy, icz);
+    }
+
+    public void setSeamOccField(int fieldTextureUnit, int descTextureUnit) {
+        if (this.uniformSeamOcc == null) return;
+        this.uniformSeamOcc.setInt(fieldTextureUnit);
+        this.uniformSeamOccDesc.setInt(descTextureUnit);
     }
 }

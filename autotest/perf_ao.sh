@@ -27,8 +27,16 @@ run_case() {
     # The last few fps samples, after the scene has settled; the first is always still building chunks.
     local fps
     fps=$(grep -a "\[autotest\] fps SETTLED" forge/run/logs/latest.log | tail -3 |
-          sed 's/.*: //' | tr '\n' ' ')
-    printf "  %-12s %s\n" "$label" "${fps:-<no samples>}"
+          sed 's/.*: //' | awk '{printf "%s ", $1}')
+    printf "  %-12s %s %s\n" "$label" "${fps:-<no samples>}" "$(res_seen)"
+}
+
+# The resolution the client ACTUALLY rendered at, read back out of the log rather than assumed from
+# PERF_W/PERF_H. AUTOTEST_W/H only reaches the client if fullscreen fits inside gamescope's nested
+# display; when it does not, Minecraft silently keeps 854x480 and every number here is then a
+# quarter-resolution measurement wearing a 1080p label.
+res_seen() {
+    grep -a "\[autotest\] fps " forge/run/logs/latest.log | tail -1 | sed -n 's/.*@ /@/p'
 }
 
 echo "perfscene @ ${W}x${H}, uncapped, $RUNTIME  (fps, last 3 settled samples)"

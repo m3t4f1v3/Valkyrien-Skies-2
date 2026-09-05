@@ -24,8 +24,20 @@ cmd tp @s 3 -47 3 0 90
 wait 60
 
 # ---- sub-block translation sweep: 0 / 0.25 / 0.5 of a block in x -------
+#
+# The FIRST shot is the sweep's normaliser -- every later step is scored as a ratio against it -- so
+# it is the one frame that must not be taken early, and the only one whose being wrong corrupts the
+# whole group rather than one step. It has been caught doing exactly that: a run scored
+# [1.0, 0.8787, 0.8785, 0.878, 0.8777], flagged as 0.12 of drift against a 0.06 limit, when the real
+# field is flat to 0.001. That shape -- first frame high, every later frame agreeing with every other
+# -- is a settling artefact, not drift; drift accumulates across the sweep instead. Re-running gave
+# [1.0, 1.0001, 0.9998, 0.9993, 0.999].
+#
+# Hence the longer wait and the scene log: chunk building is asynchronous, so a fixed tick count is
+# not a guarantee, and `scene` puts the rendered-chunk count next to the frame that depends on it.
 run ao_ship 0 3 -60 3 0:0:0
-wait 80
+wait 160
+run scene RIGID_BASELINE
 screenshot aor_tx_000
 run ao_pose 0 0.125 0 0 0
 wait 60

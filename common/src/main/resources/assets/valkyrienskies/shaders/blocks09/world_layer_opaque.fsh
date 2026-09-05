@@ -241,13 +241,25 @@ float ws_seamClaim(int ownerShip, int hostShip) {
     return 0.0;
 }
 
-// Host slots live in built-in mat4/ivec4/vec4 (NOT arrays), so dynamic
-// indexing stays in registers instead of spilling to local memory. hostQ /
-// hostAnchor columns are the 4 slots' quats / (anchor,0); hostShip / hostR are
-// per-slot components.
+// Host slots live in built-in ivec4/vec4 (NOT arrays), so dynamic indexing stays
+// in registers instead of spilling to local memory.
+//
+// The quaternion and anchor are DELIBERATELY NOT cached here, though pass 2 needs
+// both. They used to be, as two mat4s, and that is 32 registers held live across
+// the whole function for values pass 2 reads once per host. Occupancy is what this
+// shader is short of: on the 49-ship fleet at 4K, merely COMPILING the AO in --
+// stage 0 of -Pvs_aoprof, which returns before any of it executes -- costs ~30 ms
+// of a 100 ms frame against ~2 ms with the AO compiled out. Nothing runs in that
+// time, so it is register allocation, and it is also why the loops below are
+// latency-bound (warps idle on an active SM ~50% of the time against 9% with the
+// AO off): too few warps are resident to hide a texelFetch.
+//
+// Re-fetching the two texels per host in pass 2 costs 8 fetches per fragment,
+// outside any loop, and buys back the 32 registers. Measured on the fleet at 4K:
+// 100.00 ms -> ~40 ms, with pass 1 collapsing from +78 ms to +1.4 ms. r IS still
+// cached: it is one vec4, and pass 2 needs it per OWNER inside the run loop.
 void ws_seamAddHost(int shipIdx, inout int hostCount,
-        inout ivec4 hostShip, inout mat4 hostQ, inout mat4 hostAnchor,
-        inout vec4 hostR) {
+        inout ivec4 hostShip, inout vec4 hostR) {
     if (shipIdx <= 0) return;
     for (int h = 0; h < WS_SEAM_MAX_HOSTS; h++) {
         if (h >= hostCount) break;
@@ -255,11 +267,8 @@ void ws_seamAddHost(int shipIdx, inout int hostCount,
     }
     if (hostCount >= WS_SEAM_MAX_HOSTS) return;
 
-    vec4 ar = texelFetch(u_VsSeamShipDir, shipIdx * 6 + 1);
     hostShip[hostCount] = shipIdx;
-    hostQ[hostCount] = texelFetch(u_VsSeamShipDir, shipIdx * 6);
-    hostAnchor[hostCount] = vec4(ar.xyz, 0.0);
-    hostR[hostCount] = ar.w;               // responsibility r, cached for pass 2
+    hostR[hostCount] = texelFetch(u_VsSeamShipDir, shipIdx * 6 + 1).w;   // responsibility r
     hostCount++;
 }
 
@@ -378,8 +387,6 @@ float ws_seamAoFrag(vec3 fragWorldPos, vec3 normal, int selfShipIndex, out float
     // ONE bounding-sphere texel; a near ship (and its claim partners) becomes a
     // host lattice. No per-run cache is kept (that array hurt occupancy) --
     // pass 2 re-walks the same cheap two-level scan keyed by owner.
-    mat4 hostQ;
-    mat4 hostAnchor;
     ivec4 hostShip = ivec4(0);
     vec4 hostR = vec4(0.0);
     int hostCount = 0;
@@ -415,17 +422,17 @@ float ws_seamAoFrag(vec3 fragWorldPos, vec3 normal, int selfShipIndex, out float
         }
         if (known) continue;
 
-        ws_seamAddHost(owner, hostCount, hostShip, hostQ, hostAnchor, hostR);
+        ws_seamAddHost(owner, hostCount, hostShip, hostR);
 #ifndef VS_SEAM_NO_MERGE
         // Partner hosts exist only to receive another ship's material. With merging off nothing is
         // claimed, so this skips two directory fetches per new host plus up to four more inside the
         // addHost calls.
         vec4 claims = texelFetch(u_VsSeamShipDir, owner * 6 + 2);
         ivec4 partners = floatBitsToInt(texelFetch(u_VsSeamShipDir, owner * 6 + 3));
-        if (claims.x > 0.0) ws_seamAddHost(partners.x, hostCount, hostShip, hostQ, hostAnchor, hostR);
-        if (claims.y > 0.0) ws_seamAddHost(partners.y, hostCount, hostShip, hostQ, hostAnchor, hostR);
-        if (claims.z > 0.0) ws_seamAddHost(partners.z, hostCount, hostShip, hostQ, hostAnchor, hostR);
-        if (claims.w > 0.0) ws_seamAddHost(partners.w, hostCount, hostShip, hostQ, hostAnchor, hostR);
+        if (claims.x > 0.0) ws_seamAddHost(partners.x, hostCount, hostShip, hostR);
+        if (claims.y > 0.0) ws_seamAddHost(partners.y, hostCount, hostShip, hostR);
+        if (claims.z > 0.0) ws_seamAddHost(partners.z, hostCount, hostShip, hostR);
+        if (claims.w > 0.0) ws_seamAddHost(partners.w, hostCount, hostShip, hostR);
 #endif
     }
     if (hostCount == 0) return 0.0;
@@ -466,8 +473,10 @@ float ws_seamAoFrag(vec3 fragWorldPos, vec3 normal, int selfShipIndex, out float
     float total = 0.0;
     for (int hi = 0; hi < WS_SEAM_MAX_HOSTS; hi++) {
         if (hi >= hostCount) break;
-        vec4 q = hostQ[hi];
-        vec3 anchor = hostAnchor[hi].xyz;
+        // Fetched, not cached -- see the note on ws_seamAddHost. Two texels per host,
+        // once, against 32 registers of live state across the whole function.
+        vec4 q = texelFetch(u_VsSeamShipDir, hostShip[hi] * 6);
+        vec3 anchor = texelFetch(u_VsSeamShipDir, hostShip[hi] * 6 + 1).xyz;
         mat3 Rinv = ws_seamRotInvMat(q);   // Rinv * v == vs_quatRotateInv(q, v)
         // fragment in this lattice, shifted so VERTICES land on integers
         // (voxel centers sit at k + 0.5)

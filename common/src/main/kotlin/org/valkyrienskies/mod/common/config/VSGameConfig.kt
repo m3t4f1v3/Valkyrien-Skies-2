@@ -147,6 +147,12 @@ object VSGameConfig {
         @ConfigEntry(description = "Merge the ambient occlusion of ships that are touching, so blocks of separate ships shade like blocks of one ship. With this off, each ship's occlusion is evaluated independently and summed, so a seam between two hulls shows a visible double-darkened line where their shadows overlap. Requires shipAmbientOcclusion.")
         var shipAmbientOcclusionMerging = true
 
+        @ConfigEntry(description = "Distance (blocks) at which cross-ship AO merging is fully faded out. Every merged partner costs the fragment shader another host lattice, but the seam it fixes is only a block or two wide, so past this range it is paid for a feature too small to see. Merging fades from full at a third of this distance to none at it; the number of merged partners drops with it, weakest claim first. Lower = faster near large fleets, at the price of seams reappearing sooner. 0 disables the fade and merges at any distance.")
+        var shipAmbientOcclusionMergeDistance = 192.0
+
+        @ConfigEntry(description = "Read ship ambient occlusion for WORLD terrain from a field precomputed once per frame, instead of stamping every nearby ship voxel per fragment. The occupancy each fragment accumulates depends only on which lattice cell it is in, never on the fragment, so it can be computed once per cell and read back. Experimental: the world half only — ship blocks still use the per-fragment path, because a ship skips its own material and that is a property of the draw, not of the cell.")
+        var shipAmbientOcclusionPrecompute = false
+
         @ConfigEntry(description = "Flood ship-to-world light on the GPU with compute shaders instead of on the CPU. Runs every frame instead of every 15th, and lets hulls and terrain actually block ship light. Requires OpenGL 4.3; falls back to the CPU flood automatically when unavailable.")
         var gpuDynamicLightFlood = true
 

@@ -17,7 +17,7 @@ export AUTOTEST_VS_CONFIG="dynamicShipToWorldLighting=true dynamicShipLighting=t
 export AUTOTEST_GRADLE_ARGS="-Psodium_runtime=$RUNTIME"
 export AUTOTEST_TIMEOUT="${AUTOTEST_TIMEOUT:-900}"
 
-for f in ao_parity ao_rigid ao_merge ao_contact ao_misalign; do
+for f in ao_parity ao_rigid ao_merge ao_contact ao_misalign ao_lod; do
     echo "=== $f ($RUNTIME)"
     bash autotest/run.sh "autotest/$f.txt" | tail -1
 done

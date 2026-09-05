@@ -158,8 +158,14 @@ object BlockStateInfo {
         }
         // endregion
 
+        // A block whose shape lives in its block entity gets its own shape rather than its block
+        // state's. See VsShapedBlock: an eight-cubed voxel panel has more shapes than a block state
+        // could ever enumerate, so the sampled per-state shape is a solid cube and the physics engine
+        // sees a brick where the model shows a shell.
+        val shapedType = BlockShapes.typeAt(level, BlockPos(x, y, z), newBlockState)
+
         shipObjectWorld.onSetBlock(
-            x, y, z, level.dimensionId, prevBlockType, newBlockType, prevBlockMass,
+            x, y, z, level.dimensionId, prevBlockType, shapedType ?: newBlockType, prevBlockMass,
             newBlockMass
         )
 

@@ -1,0 +1,50 @@
+# The heavy worst case: 200 SEPARATE ships, all merging, filling a 4K frame.
+#
+# ao_fleet.txt is the 49-ship version and stays as it is, because every number recorded against it
+# (the register work that took this scene from 100 ms to 18.4 ms at 4K) was measured on it and would
+# stop being comparable if it changed.
+#
+# 200 single-block ships on a 20x10 grid at spacing 2. Spacing 2 puts the voxel-centre AABB gap at
+# 2.0, inside SEAM_G_FULL (2.2), so every axis neighbour claims at full strength; interior hulls have
+# four axis neighbours plus four diagonals at gap 2.83, i.e. eight candidate partners of which the
+# directory keeps the top MAX_PARTNERS = 4. Every interior fragment therefore builds the full four
+# host lattices and walks its grid cell's sub-run list once per host.
+#
+# What 200 changes over 49, beyond raw pixels: buildSeamData is O(ships^2) in the pair-claim pass, so
+# the CPU side goes from ~2.4k pair evaluations per frame to ~40k. Run with -Pvs_aotime to see
+# whether that has become a term worth caring about -- at 49 ships it was 0.068 ms and negligible.
+#
+# The grid spans 38x18 blocks and the AO field reaches SEAM_SUPPORT past it, so about 46x26 has to
+# fit in frame; at the default fov that is roughly 18-19 blocks of camera height.
+world autotest
+wait-level
+wait 100
+hud off
+cmd gamemode spectator
+cmd time set noon
+cmd gamerule doDaylightCycle false
+cmd kill @e[type=!player]
+wait 20
+
+run ao_grid 20 10 2 -19 -60 -9
+wait 400
+
+cmd tp @s 0 -41 0 0 90
+wait 200
+aoinfo
+run scene FLEET200
+run fps SETTLED
+wait 40
+run fps SETTLED
+wait 40
+run fps SETTLED
+wait 40
+
+# Ship fragment coverage, measured not estimated -- see ao_fleet.txt for why this matters.
+paint 3
+wait 40
+screenshot aof200_shippaint
+paint 0
+wait 40
+screenshot aof200_plain
+quit

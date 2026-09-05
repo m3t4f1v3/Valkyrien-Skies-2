@@ -1,0 +1,39 @@
+# Regression fixture for "activated redstone renders yellow on the vanilla ship backend".
+#
+# The same strip is built twice -- once left in the world, once on a ship -- so any difference
+# between the two is the ship path's doing. Alongside the dust: a torch (the clearest read on the
+# no-shade marker, four vertical faces), and chain / sea pickle / big dripleaf / spore blossom,
+# which are the vanilla models that set "shade": false while leaving ambient occlusion ON. That
+# combination is the one a magnitude-based decode cannot handle.
+#
+# Screen orientation for the top-down shot: pitch 90 with yaw 0 puts +Z at the top of the frame,
+# so the SHIP plate (z 12..20) is the upper strip and the WORLD control (z 0..8) is the lower one.
+world autotest
+wait-level
+wait 100
+hud off
+cmd gamemode spectator
+cmd time set noon
+cmd gamerule doDaylightCycle false
+cmd kill @e[type=!player]
+wait 20
+
+run rs_ship 0 -56 0 0
+wait 40
+run rs_ship 0 -56 12 1
+wait 200
+run rs_line
+wait 200
+
+cmd tp @s 4.5 -11 10.5 0 90
+wait 120
+screenshot rs_top_noon
+wait 20
+
+# Eye level down the x=8 column: the world's climbing step first, the ship's behind it. Vertical
+# no-shade quads are only visible from here, and they are the ones vanilla would shade at 0.6/0.8.
+cmd tp @s 8.5 -54.2 -4 0 3
+wait 100
+screenshot rs_side
+wait 20
+quit

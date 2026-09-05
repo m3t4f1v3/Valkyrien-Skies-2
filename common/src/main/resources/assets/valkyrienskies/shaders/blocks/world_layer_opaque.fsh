@@ -59,6 +59,15 @@ uniform vec4 u_VsSeamBounds;
 uniform samplerBuffer u_VsSeamGrid;
 uniform vec3 u_VsSeamGridOrigin;
 uniform vec3 u_VsSeamGridInvCell;
+#ifdef VS_SEAM_PRECOMP
+// The occupancy field pass 2 would otherwise accumulate per fragment, computed once per frame on
+// the CPU instead (VsShipOccluderList.buildOccField). R32F, one scalar per cell of each host ship's
+// own lattice, laid out as a dense box over exactly the cells that ship's contributing voxels can
+// touch; anything outside is genuinely zero. Descriptors are RGBA32I, two texels per ship:
+// (base, dimX, dimY, dimZ) and (originX, originY, originZ, valid).
+uniform samplerBuffer u_VsSeamOcc;
+uniform isamplerBuffer u_VsSeamOccDesc;
+#endif
 #endif // VS_SHIP_AO
 
 // External-world fluid culling for ship air pockets. These uniforms are populated by
@@ -438,13 +447,24 @@ float ws_seamClaim(int ownerShip, int hostShip) {
     return 0.0;
 }
 
-// Host slots live in built-in mat4/ivec4/vec4 (NOT arrays), so dynamic
-// indexing stays in registers instead of spilling to local memory. hostQ /
-// hostAnchor columns are the 4 slots' quats / (anchor,0); hostShip / hostR are
-// per-slot components.
+// Host slots live in built-in ivec4/vec4 (NOT arrays), so dynamic indexing stays
+// in registers instead of spilling to local memory.
+//
+// The quaternion and anchor are DELIBERATELY NOT cached here, though pass 2 needs
+// both. They used to be, as two mat4s, and that is 32 registers held live across
+// the whole function for values pass 2 reads once per host. Occupancy is what this
+// shader is short of: on the 49-ship fleet at 4K, merely COMPILING the AO in --
+// stage 0 of -Pvs_aoprof, which returns before any of it executes -- costs 32 ms
+// of a 100 ms frame against 2.7 ms with the AO compiled out. Nothing runs in that
+// 32 ms, so it is register allocation, and it is also why the loops below are
+// latency-bound (warps idle on an active SM ~50% of the time against 9% with the
+// AO off): too few warps are resident to hide a texelFetch.
+//
+// Re-fetching the two texels per host in pass 2 costs 8 fetches per fragment,
+// outside any loop, and buys back the 32 registers. r IS still cached: it is one
+// vec4, and pass 2 needs it per OWNER inside the run loop, which is the hot path.
 void ws_seamAddHost(int shipIdx, inout int hostCount,
-        inout ivec4 hostShip, inout mat4 hostQ, inout mat4 hostAnchor,
-        inout vec4 hostR) {
+        inout ivec4 hostShip, inout vec4 hostR) {
     if (shipIdx <= 0) return;
     for (int h = 0; h < WS_SEAM_MAX_HOSTS; h++) {
         if (h >= hostCount) break;
@@ -452,11 +472,8 @@ void ws_seamAddHost(int shipIdx, inout int hostCount,
     }
     if (hostCount >= WS_SEAM_MAX_HOSTS) return;
 
-    vec4 ar = texelFetch(u_VsSeamShipDir, shipIdx * 6 + 1);
     hostShip[hostCount] = shipIdx;
-    hostQ[hostCount] = texelFetch(u_VsSeamShipDir, shipIdx * 6);
-    hostAnchor[hostCount] = vec4(ar.xyz, 0.0);
-    hostR[hostCount] = ar.w;               // responsibility r, cached for pass 2
+    hostR[hostCount] = texelFetch(u_VsSeamShipDir, shipIdx * 6 + 1).w;   // responsibility r
     hostCount++;
 }
 
@@ -525,6 +542,19 @@ mat3 ws_seamStamp(vec3 c, int a, int u, int v, int cu, int cv) {
     return mat3(tv * tu.x, tv * tu.y, tv * tu.z);
 }
 
+#ifdef VS_SEAM_PRECOMP
+// One cell of a host's precomputed occupancy field, or 0 outside its box.
+//
+// The descriptor is passed in rather than fetched here: a host reads 18 cells and re-fetching two
+// descriptor texels for each of them would be 36 dependent fetches to recover values that are
+// constant for the whole host.
+float ws_seamOccAt(ivec4 d0, ivec4 d1, ivec3 cell) {
+    ivec3 r = cell - d1.xyz;
+    if (any(lessThan(r, ivec3(0))) || any(greaterThanEqual(r, d0.yzw))) return 0.0;
+    return texelFetch(u_VsSeamOcc, d0.x + (r.z * d0.z + r.y) * d0.y + r.x).x;
+}
+#endif
+
 mat3 ws_seamClampOcc(mat3 m) {
     m[0] = min(m[0], vec3(1.0));
     m[1] = min(m[1], vec3(1.0));
@@ -557,6 +587,30 @@ vec4 ws_seamCorners(mat3 occ) {
 #define VS_AOPROF_CUT if (u_VsSeamRunCount >= 0) return 0.0;
 #endif
 
+// -Pvs_aocut=N: COMPILE OUT parts of the AO. The exact inverse of VS_AOPROF above, and it exists
+// because VS_AOPROF cannot answer the question the fleet measurements raised.
+//
+// VS_AOPROF keeps every stage's register allocation IDENTICAL on purpose, so the stages are
+// comparable as work. That is what makes it useless for attributing the FLOOR -- stage 0 executes
+// nothing and still cost ~30 ms of a 100 ms frame at 4K, which is not work at all but occupancy,
+// and occupancy is set by the allocation VS_AOPROF deliberately holds constant.
+//
+// So this knob removes code from the compiler's view instead:
+//   1 = drop the per-voxel stamp (the mat3 stamp, the taps, the occ accumulation)
+//   2 = drop all of pass 2's body (Rinv, fragL, the band setup, occ0/occ1, the corner rule)
+//   3 = drop pass 1's host search as well, leaving only the early-outs
+//
+// Run it TOGETHER with -Pvs_aoprof=4, so nothing executes at any level and the only thing differing
+// between levels is how much code the compiler had to allocate registers for. Diagnostic only:
+// levels above 0 do not render correct AO.
+//
+// Eliminating a uniform this way is safe here -- WorldThing's setSeamData / setSeamGrid /
+// setShipOccluders each return early on a null uniform, so a stripped-out sampler is skipped rather
+// than throwing the way sodium's bindUniform would.
+#ifndef VS_AOCUT
+#define VS_AOCUT 0
+#endif
+
 float ws_seamAoFrag(vec3 fragWorldPos, vec3 normal, int selfShipIndex, out float dbgVertex) {
     dbgVertex = 0.0;
 #if defined(VS_AOPROF) && VS_AOPROF == 4
@@ -575,8 +629,6 @@ float ws_seamAoFrag(vec3 fragWorldPos, vec3 normal, int selfShipIndex, out float
     // ONE bounding-sphere texel; a near ship (and its claim partners) becomes a
     // host lattice. No per-run cache is kept (that array hurt occupancy) --
     // pass 2 re-walks the same cheap two-level scan keyed by owner.
-    mat4 hostQ;
-    mat4 hostAnchor;
     ivec4 hostShip = ivec4(0);
     vec4 hostR = vec4(0.0);
     int hostCount = 0;
@@ -589,6 +641,7 @@ float ws_seamAoFrag(vec3 fragWorldPos, vec3 normal, int selfShipIndex, out float
     VS_AOPROF_CUT   // stage 2: + grid cell lookup
 #endif
 
+#if VS_AOCUT < 3
     for (int i = 0; i < WS_SEAM_CELL_LOOP_CAP; i++) {
         if (i >= cellOC.y) break;
         int e = cellOC.x + i;
@@ -612,20 +665,28 @@ float ws_seamAoFrag(vec3 fragWorldPos, vec3 normal, int selfShipIndex, out float
         }
         if (known) continue;
 
-        ws_seamAddHost(owner, hostCount, hostShip, hostQ, hostAnchor, hostR);
+        ws_seamAddHost(owner, hostCount, hostShip, hostR);
 #ifndef VS_SEAM_NO_MERGE
         // Partner hosts exist only to receive another ship's material. With merging off nothing is
         // claimed, so this skips two directory fetches per new host plus up to four more inside the
         // addHost calls.
         vec4 claims = texelFetch(u_VsSeamShipDir, owner * 6 + 2);
         ivec4 partners = floatBitsToInt(texelFetch(u_VsSeamShipDir, owner * 6 + 3));
-        if (claims.x > 0.0) ws_seamAddHost(partners.x, hostCount, hostShip, hostQ, hostAnchor, hostR);
-        if (claims.y > 0.0) ws_seamAddHost(partners.y, hostCount, hostShip, hostQ, hostAnchor, hostR);
-        if (claims.z > 0.0) ws_seamAddHost(partners.z, hostCount, hostShip, hostQ, hostAnchor, hostR);
-        if (claims.w > 0.0) ws_seamAddHost(partners.w, hostCount, hostShip, hostQ, hostAnchor, hostR);
+        if (claims.x > 0.0) ws_seamAddHost(partners.x, hostCount, hostShip, hostR);
+        if (claims.y > 0.0) ws_seamAddHost(partners.y, hostCount, hostShip, hostR);
+        if (claims.z > 0.0) ws_seamAddHost(partners.z, hostCount, hostShip, hostR);
+        if (claims.w > 0.0) ws_seamAddHost(partners.w, hostCount, hostShip, hostR);
 #endif
     }
+#endif // VS_AOCUT < 3
+#if VS_AOCUT < 3
+    // Guarded: with pass 1 removed, hostCount is PROVABLY 0, so this return is provably taken and
+    // everything after it -- including the sampler keepalive at the end of the function -- is dead
+    // code the linker drops, which puts the uniforms back in the state that crashes WorldThing's
+    // constructor. Falling through instead costs nothing (every loop below trips its hostCount
+    // guard on the first iteration) and keeps the keepalive reachable.
     if (hostCount == 0) return 0.0;
+#endif
 #if defined(VS_AOPROF) && VS_AOPROF == 3
     VS_AOPROF_CUT   // stage 3: + pass 1 host selection
 #endif
@@ -633,6 +694,15 @@ float ws_seamAoFrag(vec3 fragWorldPos, vec3 normal, int selfShipIndex, out float
     // Cache the claim of every host (as material OWNER) to every host (as
     // lattice), so pass 2 needs zero ship-directory fetches. Owners with
     // nearby runs are always among these hosts (they were added as sources);
+    //
+    // This mat4 STAYS a mat4. Shrinking it to a per-host vec4 -- pass 2 only ever reads
+    // the column for the host it is on, so 4 registers carry the same information as 16 --
+    // was tried on the same reasoning that made dropping the quat/anchor caches a 2.5x win,
+    // and measured WORSE: 44.05 ms against 39.53 on the 49-ship fleet at 4K, with the floor
+    // unmoved (34.13 vs 32.26). Occupancy is quantised by register count, and the earlier
+    // 32-register cut already crossed the threshold that mattered; a further 12 buys nothing
+    // while the per-host refetches are paid in full. Register pressure is worth attacking in
+    // steps big enough to cross a threshold, not by nibbling.
 #ifdef VS_SEAM_NO_MERGE
     // No merging: every off-diagonal claim is zero, so the matrix is the identity and
     // building it would be O(hostCount^2) fetches to write constants.
@@ -661,10 +731,13 @@ float ws_seamAoFrag(vec3 fragWorldPos, vec3 normal, int selfShipIndex, out float
 
     // ---- pass 2: one vanilla field per host lattice, summed ---------------
     float total = 0.0;
+#if VS_AOCUT < 2
     for (int hi = 0; hi < WS_SEAM_MAX_HOSTS; hi++) {
         if (hi >= hostCount) break;
-        vec4 q = hostQ[hi];
-        vec3 anchor = hostAnchor[hi].xyz;
+        // Fetched, not cached -- see the note on ws_seamAddHost. Two texels per host,
+        // once, against 32 registers of live state across the whole function.
+        vec4 q = texelFetch(u_VsSeamShipDir, hostShip[hi] * 6);
+        vec3 anchor = texelFetch(u_VsSeamShipDir, hostShip[hi] * 6 + 1).xyz;
         mat3 Rinv = ws_seamRotInvMat(q);   // Rinv * v == vs_quatRotateInv(q, v)
         // fragment in this lattice, shifted so VERTICES land on integers
         // (voxel centers sit at k + 0.5)
@@ -697,6 +770,31 @@ float ws_seamAoFrag(vec3 fragWorldPos, vec3 normal, int selfShipIndex, out float
 
         mat3 occ0 = mat3(0.0);
         mat3 occ1 = mat3(0.0);
+#ifdef VS_SEAM_PRECOMP
+        // Read the 18 cells instead of stamping voxels into them.
+        //
+        // ws_seamStamp evaluates its u taps at centres cu-0.5, cu+0.5, cu+1.5, i.e. cells
+        // cu-1, cu, cu+1, and column i of the resulting mat3 is u-offset i with row j the v-offset;
+        // the two bands are a-cells b0 and b0+1. So occ0[i][j] is exactly the cell
+        // (a = b0, u = cu-1+i, v = cv-1+j), and filling it from the field reproduces the
+        // accumulation term for term. Everything after this -- the clamp, the corner rule, the
+        // interpolation -- is untouched.
+        ivec4 od0 = texelFetch(u_VsSeamOccDesc, hostShip[hi] * 2);
+        ivec4 od1 = texelFetch(u_VsSeamOccDesc, hostShip[hi] * 2 + 1);
+        if (od1.w != 0) {
+            for (int i = 0; i < 3; i++) {
+                for (int j = 0; j < 3; j++) {
+                    ivec3 cell;
+                    cell[u] = cu - 1 + i;
+                    cell[v] = cv - 1 + j;
+                    cell[a] = b0;
+                    occ0[i][j] = ws_seamOccAt(od0, od1, cell);
+                    cell[a] = b0 + 1;
+                    occ1[i][j] = ws_seamOccAt(od0, od1, cell);
+                }
+            }
+        }
+#else
         // Stamp the fragment's cell sub-runs into this host lattice, weighted
         // by owner -> host claim. Iterating the CELL's runs (not each ship's
         // whole run list) bounds the cost by nearby geometry, not ship size.
@@ -750,6 +848,7 @@ float ws_seamAoFrag(vec3 fragWorldPos, vec3 normal, int selfShipIndex, out float
                 vec4 vox = texelFetch(u_VsShipOccluders, (start + k) * 2);
                 // a voxel past SUPPORT of the fragment stamps exactly 0.
                 if (ws_seamDistSq(vox.xyz, fragWorldPos) > WS_SEAM_SUPPORT * WS_SEAM_SUPPORT) continue;
+#if VS_AOCUT < 1
                 vec3 c = Rinv * (vox.xyz - anchor) + 0.5;
                 mat3 stamp = ws_seamStamp(c, a, u, v, cu, cv);
                 // fold the owner->host weight into the two scalar band tents so
@@ -763,8 +862,10 @@ float ws_seamAoFrag(vec3 fragWorldPos, vec3 normal, int selfShipIndex, out float
                 float ta1 = wBase * tb.y;
                 occ0 += stamp * ta0;
                 occ1 += stamp * ta1;
+#endif
             }
         }
+#endif // VS_SEAM_PRECOMP
         occ0 = ws_seamClampOcc(occ0);
         occ1 = ws_seamClampOcc(occ1);
 
@@ -784,6 +885,28 @@ float ws_seamAoFrag(vec3 fragWorldPos, vec3 normal, int selfShipIndex, out float
         }
 #endif
     }
+#endif // VS_AOCUT < 2
+#if VS_AOCUT > 0
+    // Keep the stripped samplers STATICALLY referenced. Cutting code makes their fetches dead, GLSL
+    // then drops the uniforms, and WorldThing's constructor binds every one of them unconditionally
+    // -- it throws "No uniform exists with name: u_VsShipOccluders" and takes the client down. (The
+    // null guards in that class are on the SETTERS, not the constructor, which is where the bind
+    // happens.)
+    //
+    // textureSize, NOT texelFetch. Either keeps the sampler statically referenced and so active
+    // after linking, but a fetch needs a vec4 of registers per sampler, and registers are the very
+    // thing this knob is trying to measure -- a four-fetch keepalive holds ~16 of them live and can
+    // pin the shader at the same occupancy tier as the code that was just removed, which makes the
+    // cut levels read identically for the wrong reason. textureSize returns an int and touches no
+    // memory, so it costs essentially nothing and cannot mask the effect.
+    //
+    // The condition is false at runtime and not provable at compile time, so this survives linking
+    // but never executes.
+    if (textureSize(u_VsShipOccluders) + textureSize(u_VsSeamRuns)
+            + textureSize(u_VsSeamShipDir) + textureSize(u_VsSeamGrid) < -1) {
+        total += 1.0;
+    }
+#endif
     return min(total, WS_SEAM_MAX_TOTAL);
 }
 #endif // VS_SHIP_AO

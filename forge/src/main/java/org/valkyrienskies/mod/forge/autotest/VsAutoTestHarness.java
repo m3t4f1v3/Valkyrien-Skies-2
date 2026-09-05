@@ -103,8 +103,18 @@ public final class VsAutoTestHarness {
      * of one layout, a pair at sub-block lateral offsets, one ship yawed against a straight one -- so
      * they need per-ship control that the single `lightShip` slot cannot express.
      */
-    private static final ServerShip[] sceneShips = new ServerShip[8];
-    private static final org.joml.Vector3dc[] sceneSpawnPos = new org.joml.Vector3dc[8];
+    // 8 was enough while every AO fixture was one to three ships. ao_fleet.txt needs 49 of them to
+    // saturate the cross-ship merge (every interior hull holding MAX_PARTNERS claims at once), which
+    // is the configuration the per-fragment host loop is actually worst at.
+    //
+    // One constant for both arrays on purpose. Raising only sceneShips left sceneSpawnPos at 8, and
+    // because the spawn runs inside server.execute the resulting AIOOBE was logged on the server
+    // thread and swallowed -- the fixture carried on and reported a plausible-looking scene with the
+    // last few ships silently missing.
+    private static final int SCENE_SHIP_SLOTS = 256;
+    private static final ServerShip[] sceneShips = new ServerShip[SCENE_SHIP_SLOTS];
+    private static final org.joml.Vector3dc[] sceneSpawnPos =
+        new org.joml.Vector3dc[SCENE_SHIP_SLOTS];
     /** Per-tick drag delta, applied every tick while non-null; see {@link #dragShip}. */
     private static org.joml.Vector3dc dragDelta;
 
@@ -245,6 +255,27 @@ public final class VsAutoTestHarness {
                     org.valkyrienskies.mod.common.config.VSGameConfig.CLIENT
                         .getShipAmbientOcclusionMerging());
             }
+            // Read world AO from the precomputed occupancy field instead of stamping voxels per
+            // fragment. A shader feature bit, so flipping it recompiles the variant on the next draw
+            // -- which is the point: one client can shoot both paths on one scene, and a difference
+            // is then the field being wrong rather than the two runs seeing different worlds.
+            case "aoprecomp" -> {
+                org.valkyrienskies.mod.common.config.VSGameConfig.CLIENT
+                    .setShipAmbientOcclusionPrecompute("on".equalsIgnoreCase(inst[1]));
+                LOGGER.info("[autotest] shipAmbientOcclusionPrecompute -> {}",
+                    org.valkyrienskies.mod.common.config.VSGameConfig.CLIENT
+                        .getShipAmbientOcclusionPrecompute());
+            }
+            // Far edge of the merge distance LOD, in blocks. 0 turns the fade off entirely, which is
+            // the control a fixture needs: without it a camera parked far from the ships silently
+            // measures the unmerged field and every merge check passes for the wrong reason.
+            case "aomergedist" -> {
+                org.valkyrienskies.mod.common.config.VSGameConfig.CLIENT
+                    .setShipAmbientOcclusionMergeDistance(Double.parseDouble(inst[1]));
+                LOGGER.info("[autotest] shipAmbientOcclusionMergeDistance -> {}",
+                    org.valkyrienskies.mod.common.config.VSGameConfig.CLIENT
+                        .getShipAmbientOcclusionMergeDistance());
+            }
             // Drive an Nsight GPU Trace from inside the fixture, so it covers exactly the frames the
             // scene is settled for. See VsNsight for why the profiler's own timed trigger is not used.
             case "ngfx" -> {
@@ -291,7 +322,14 @@ public final class VsAutoTestHarness {
             case "light_shaft" -> spawnShaftShip(minecraft, Integer.parseInt(inst[2]),
                 Integer.parseInt(inst[3]), Integer.parseInt(inst[4]), Integer.parseInt(inst[5]),
                 blockByName(inst[6]));
-            case "fps" -> LOGGER.info("[autotest] fps {}: {}", inst.length > 2 ? inst[2] : "", minecraft.getFps());
+            // The framebuffer size is stamped on every sample on purpose. Fragment cost scales with
+            // pixels, and AUTOTEST_W/H only reaches the client if fullscreen fits inside gamescope's
+            // nested display -- when it does not, Minecraft quietly keeps 854x480 and says nothing.
+            // A perf number is meaningless without the resolution it was taken at, and this is the
+            // only way to know rather than assume.
+            case "fps" -> LOGGER.info("[autotest] fps {}: {} @ {}x{}", inst.length > 2 ? inst[2] : "",
+                minecraft.getFps(),
+                minecraft.getWindow().getWidth(), minecraft.getWindow().getHeight());
             // What the renderer actually submitted. A GPU trace pair is only comparable if both runs
             // drew the same scene, and that is not automatic: chunk building is asynchronous and
             // competes with the render thread for CPU, so a configuration that runs faster can reach
@@ -315,7 +353,13 @@ public final class VsAutoTestHarness {
             case "ao_pose" -> poseSceneShip(minecraft, Integer.parseInt(inst[2]),
                 Double.parseDouble(inst[3]), Double.parseDouble(inst[4]), Double.parseDouble(inst[5]),
                 inst.length > 6 ? Double.parseDouble(inst[6]) : 0.0);
+            case "ao_grid" -> spawnSceneShipGrid(minecraft, Integer.parseInt(inst[2]),
+                Integer.parseInt(inst[3]), Integer.parseInt(inst[4]), Integer.parseInt(inst[5]),
+                Integer.parseInt(inst[6]), Integer.parseInt(inst[7]));
             case "ao_clear" -> clearSceneShips(minecraft);
+            case "rs_line" -> layShipRedstone(minecraft);
+            case "rs_ship" -> spawnRedstoneShip(minecraft, Integer.parseInt(inst[2]),
+                Integer.parseInt(inst[3]), Integer.parseInt(inst[4]), "1".equals(inst[5]));
             case "drift_ship" -> driftShip(minecraft,
                 Double.parseDouble(inst[2]), Double.parseDouble(inst[3]), Double.parseDouble(inst[4]));
             case "move_ship" -> moveShip(minecraft,
@@ -860,6 +904,147 @@ public final class VsAutoTestHarness {
      * {@code 0:0:0,1:0:0} for a two-block ship. Stone throughout -- these fixtures measure AO, not
      * light, so no emitter is placed.
      */
+    /**
+     * A rectangular grid of single-block scene ships, one hook instead of one line per ship.
+     *
+     * <p>The AO fleet scenes need hundreds of SEPARATE ships -- the point is to saturate the
+     * cross-ship merge, which a single multi-cell ship does not exercise at all -- and writing them
+     * out individually makes the fixture unreadable and the count impossible to change. Spacing is
+     * the parameter that matters: at 2 the voxel-centre AABB gap is 2.0, inside SEAM_G_FULL, so
+     * every axis neighbour claims at full strength and the interior hulls hold MAX_PARTNERS claims.
+     */
+    private static void spawnSceneShipGrid(final Minecraft minecraft, final int nx, final int nz,
+        final int spacing, final int ox, final int oy, final int oz) {
+        final int wanted = nx * nz;
+        if (wanted > sceneShips.length) {
+            throw new IllegalArgumentException("ao_grid: " + wanted + " ships wanted but only "
+                + sceneShips.length + " slots; raise SCENE_SHIP_SLOTS");
+        }
+        int slot = 0;
+        for (int iz = 0; iz < nz; iz++) {
+            for (int ix = 0; ix < nx; ix++) {
+                spawnSceneShip(minecraft, slot++, ox + ix * spacing, oy, oz + iz * spacing, "0:0:0");
+            }
+        }
+        LOGGER.info("[autotest] ao_grid {}x{} spacing={} origin=({},{},{}) -> {} ships",
+            nx, nz, spacing, ox, oy, oz, wanted);
+    }
+
+    /**
+     * A stone plate carrying a powered redstone line, either left in the world or assembled into a
+     * ship. Diagnostic fixture for "activated redstone renders yellow on the vanilla ship backend":
+     * putting the control and the suspect side by side gets both renderings of the same block, at
+     * the same power levels, into one screenshot.
+     *
+     * <p>The line is fed from a redstone block at one end, so a single strip carries every power
+     * level from 15 down -- the tint colour is a function of power and the reported symptom is
+     * specific to the high end.
+     *
+     * <p>On the ship the redstone is laid down <em>after</em> assembly, in shipyard coordinates.
+     * Assembling a plate that already carries powered dust copies the blocks but not the redstone
+     * graph, and the dust arrives in the shipyard unpowered and disconnected -- which renders as
+     * scattered dark dots and answers nothing.
+     */
+    private static void spawnRedstoneShip(final Minecraft minecraft, final int ox, final int oy,
+        final int oz, final boolean assemble) {
+        final MinecraftServer server = minecraft.getSingleplayerServer();
+        if (server == null) {
+            throw new IllegalStateException("rs_ship: no integrated server");
+        }
+        final ResourceKey<Level> dimension = minecraft.level.dimension();
+        server.execute(() -> {
+            final ServerLevel level = server.getLevel(dimension);
+            final DenseBlockPosSet blocks = new DenseBlockPosSet();
+            for (int dx = 0; dx < 9; dx++) {
+                for (int dz = 0; dz < 9; dz++) {
+                    final BlockPos pos = new BlockPos(ox + dx, oy, oz + dz);
+                    level.setBlock(pos, Blocks.STONE.defaultBlockState(), 3);
+                    blocks.add(pos.getX(), pos.getY(), pos.getZ());
+                }
+            }
+            if (!assemble) {
+                layRedstoneLine(level, new BlockPos(ox, oy + 1, oz + 4));
+                LOGGER.info("[autotest] rs_ship control plate at ({},{},{})", ox, oy, oz);
+                return;
+            }
+            final ServerShip ship =
+                ShipAssemblyKt.createNewShipWithBlocks(new BlockPos(ox, oy, oz), blocks, level);
+            ship.setStatic(true);
+            rsShip = ship;
+            rsWorldLine = new BlockPos(ox, oy + 1, oz + 4);
+            // Slot 0 so `ao_pose 0 ...` can tilt this ship -- the tilt path is exactly what
+            // betterVanillaShipShading exists for, so it has to be in the comparison.
+            sceneShips[0] = ship;
+            sceneSpawnPos[0] = new org.joml.Vector3d(ship.getTransform().getPositionInWorld());
+            LOGGER.info("[autotest] rs_ship ship id={} origin=({},{},{})", ship.getId(), ox, oy, oz);
+        });
+    }
+
+    private static ServerShip rsShip;
+    private static BlockPos rsWorldLine;
+
+    /**
+     * Lay the redstone line on the ship spawned by the last {@code rs_ship ... 1}, in shipyard
+     * coordinates. Split out from the spawn so it runs several ticks after assembly: assembly moves
+     * the plate into freshly created shipyard chunks, and anything written into them in the same
+     * tick is liable to be overwritten by that move.
+     */
+    private static void layShipRedstone(final Minecraft minecraft) {
+        if (rsShip == null) {
+            throw new IllegalStateException("rs_line: no ship from rs_ship");
+        }
+        final MinecraftServer server = minecraft.getSingleplayerServer();
+        final ResourceKey<Level> dimension = minecraft.level.dimension();
+        final ServerShip ship = rsShip;
+        final BlockPos worldLine = rsWorldLine;
+        server.execute(() -> {
+            final ServerLevel level = server.getLevel(dimension);
+            final org.joml.Vector3d shipyard = ship.getTransform().getWorldToShip()
+                .transformPosition(new org.joml.Vector3d(
+                    worldLine.getX() + 0.5, worldLine.getY() + 0.5, worldLine.getZ() + 0.5));
+            final BlockPos origin = BlockPos.containing(shipyard.x, shipyard.y, shipyard.z);
+            LOGGER.info("[autotest] rs_line shipyard origin={} below={}",
+                origin, level.getBlockState(origin.below()));
+            layRedstoneLine(level, origin);
+            for (int dx = 0; dx < 9; dx++) {
+                LOGGER.info("[autotest] rs_line {} -> {}",
+                    origin.offset(dx, 0, 0), level.getBlockState(origin.offset(dx, 0, 0)));
+            }
+        });
+    }
+
+    /**
+     * Redstone block at {@code origin}, then seven dust running +X from it, then a step up: a stone
+     * block with dust on top. The step makes the run climb, which is the only way to get the
+     * vertical {@code redstone_dust_up} quads into frame -- those are the ones whose vanilla shade
+     * is 0.6/0.8 rather than 1.0, so they are where a shading bug would show.
+     */
+    private static void layRedstoneLine(final ServerLevel level, final BlockPos origin) {
+        level.setBlock(origin, Blocks.REDSTONE_BLOCK.defaultBlockState(), 3);
+        for (int dx = 1; dx < 8; dx++) {
+            level.setBlock(origin.offset(dx, 0, 0), Blocks.REDSTONE_WIRE.defaultBlockState(), 3);
+        }
+        level.setBlock(origin.offset(8, 0, 0), Blocks.STONE.defaultBlockState(), 3);
+        level.setBlock(origin.offset(8, 1, 0), Blocks.REDSTONE_WIRE.defaultBlockState(), 3);
+        // A lamp so the strip is still readable after `time set midnight`: at full daylight the
+        // lightmap is ~white and any lighting-dependent difference is multiplied by one.
+        level.setBlock(origin.offset(4, 0, -3), Blocks.GLOWSTONE.defaultBlockState(), 3);
+        // The other half of the shade smuggle's exposure. Redstone dust is a "shade": false model
+        // that ALSO sets "ambientocclusion": false, so its quads take the flat path and arrive at
+        // the smuggle detector as exactly 5.0. These four are "shade": false models with ambient
+        // occlusion left ON, so their brightness reaches the detector as ao * 5.0 -- below the
+        // 4.0 threshold wherever ao < 0.8. If the smuggle is the mechanism, these break and dust
+        // does not.
+        level.setBlock(origin.offset(1, 0, 2), Blocks.CHAIN.defaultBlockState(), 3);
+        level.setBlock(origin.offset(3, 0, 2), Blocks.SEA_PICKLE.defaultBlockState(), 3);
+        level.setBlock(origin.offset(5, 0, 2), Blocks.BIG_DRIPLEAF.defaultBlockState(), 3);
+        level.setBlock(origin.offset(7, 0, 2), Blocks.SPORE_BLOSSOM.defaultBlockState(), 3);
+        // A torch is the clearest read on the marker itself: "shade": false with four
+        // vertical faces, so losing the marker shades sides that vanilla leaves unshaded,
+        // and losing the decode blows it to white.
+        level.setBlock(origin.offset(2, 0, -2), Blocks.TORCH.defaultBlockState(), 3);
+    }
+
     private static void spawnSceneShip(final Minecraft minecraft, final int slot, final int ox,
         final int oy, final int oz, final String cells) {
         if (slot < 0 || slot >= sceneShips.length) {

@@ -49,6 +49,7 @@ public abstract class MixinDefaultChunkRenderer {
                 SodiumCompat.getShipOccluderList().bindHeaders(SodiumCompat.SEAM_RUN_HEADERS_TEXTURE_UNIT);
                 SodiumCompat.getShipOccluderList().bindShipDir(SodiumCompat.SEAM_SHIP_DIR_TEXTURE_UNIT);
                 SodiumCompat.getShipOccluderList().bindGrid(SodiumCompat.SEAM_GRID_TEXTURE_UNIT);
+                SodiumCompat.bindSeamOccFields();
                 SodiumCompat.recordListsBound();
             }
             return;
@@ -75,6 +76,7 @@ public abstract class MixinDefaultChunkRenderer {
                 SodiumCompat.getShipOccluderList().bindHeaders(SodiumCompat.SEAM_RUN_HEADERS_TEXTURE_UNIT);
                 SodiumCompat.getShipOccluderList().bindShipDir(SodiumCompat.SEAM_SHIP_DIR_TEXTURE_UNIT);
                 SodiumCompat.getShipOccluderList().bindGrid(SodiumCompat.SEAM_GRID_TEXTURE_UNIT);
+                SodiumCompat.bindSeamOccFields();
                 SodiumCompat.recordListsBound();
             }
             // ws_shipAo reads the world-section storage in the WORLD shader too, so this branch has to

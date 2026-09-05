@@ -1,0 +1,54 @@
+# Does the precomputed occupancy field reproduce the per-fragment field?
+#
+# The claim (claude-scratchpad/seam_precompute.py, exact to 0.0 for the tent): every tap pass 2
+# evaluates sits at a lattice cell CENTRE, so the occupancy a fragment accumulates depends only on
+# which cell it is in. Compute it once per cell per frame and the fragment just reads 18 of them.
+#
+# Both shots come from ONE client on ONE scene, with only the shader variant differing -- flipping
+# `aoprecomp` recompiles the world program on the next draw. That matters: two separate runs would
+# also differ in how much terrain had finished building, and this suite has mistaken that for a
+# rendering difference before.
+#
+# Scored by direct pixel comparison of the loss field (paint 5), not by an integral: an integral can
+# hide a field that is wrong in opposite directions in different places.
+world autotest
+wait-level
+wait 100
+hud off
+cmd gamemode spectator
+cmd time set noon
+cmd gamerule doDaylightCycle false
+cmd kill @e[type=!player]
+wait 20
+cmd tp @s 3 -47 3 0 90
+wait 60
+
+# Three touching ships, so the field carries cross-ship merged material and not just each hull's
+# own -- the merged weights are the part a per-cell field could plausibly get wrong.
+run ao_ship 1 2 -60 3 0:0:0
+run ao_ship 2 3 -60 3 0:0:0
+run ao_ship 3 4 -60 3 0:0:0
+wait 140
+
+aoprecomp off
+wait 80
+screenshot aopc_loop
+aoprecomp on
+wait 80
+screenshot aopc_field
+
+# ... and again off-lattice and rotated, where the field's cells no longer line up with the world
+# and every weight is a fraction.
+run ao_pose 2 0.37 0 0.21 17
+wait 100
+aoprecomp off
+wait 80
+screenshot aopc_loop_rot
+aoprecomp on
+wait 80
+screenshot aopc_field_rot
+
+aoprecomp off
+run ao_clear
+wait 40
+quit

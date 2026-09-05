@@ -1,0 +1,77 @@
+# The user's own worst case: `/vs perf-test jenga 20`, four of them scattered around.
+#
+# One jenga is 20 layers x 3 = 60 SEPARATE ships of 3 voxels each, stacked with ZERO gap and
+# alternating orientation per layer. Four is 240 ships / 720 occluder voxels, under the
+# MAX_OCCLUDERS cap of 1024.
+#
+# The towers STAY STANDING -- they are stable on flat ground and do not topple. So every ship here is
+# axis-aligned and grid-aligned, which is not the gentle case it sounds like: it is the case where
+# the pair claim's gate, o_rot and o_trans all saturate at exactly 1, so every neighbour is claimed
+# at full strength and every interior hull fills its MAX_PARTNERS host slots. Dense 3D contact --
+# three ships above, three below, two beside -- is what this fixture stresses, and it is the shape
+# ao_fleet200 does not have: that one is a flat grid of single voxels spaced apart, contacting in one
+# dimension rather than three.
+#
+# It is also a physics scene rather than a static one: the ships are simulated, so the occluder list,
+# the claims and the whole precomputed field are rebuilt every frame regardless of anything moving
+# far enough to see.
+world autotest
+wait-level
+wait 100
+hud off
+cmd gamemode spectator
+cmd time set noon
+cmd gamerule doDaylightCycle false
+cmd kill @e[type=!player]
+wait 20
+
+# The command raycasts 10 blocks along the look vector for its floor, so stand close and look down.
+# No leading slash: the harness's `cmd` hands the string to sendCommand, which wants it bare, and a
+# leading slash makes it silently do nothing -- the first run of this fixture reported
+# occluderListSize=0 and a comfortable 1000 fps because no tower had been built at all.
+cmd tp @s 0 -55 0 0 90
+wait 40
+cmd vs perf-test jenga 20
+wait 120
+cmd tp @s 14 -55 0 0 90
+wait 40
+cmd vs perf-test jenga 20
+wait 120
+cmd tp @s 0 -55 14 0 90
+wait 40
+cmd vs perf-test jenga 20
+wait 120
+cmd tp @s 14 -55 14 0 90
+wait 40
+cmd vs perf-test jenga 20
+wait 200
+
+# Two distances, because the AO is per-fragment and so its cost is set by how much of the screen the
+# towers and their shadows cover. FAR frames all four; the near one is standing among them, which is
+# where a player actually is.
+#
+# The near group is labelled SETTLED, not NEAR, so perf_aoprof.sh and perf_aocut.sh pick it up -- they
+# grep for that label and would otherwise report every row as 0 fps with nothing to say why.
+cmd tp @s 34 -52 7 90 15
+wait 200
+aoinfo
+run scene JENGA_FAR
+run fps FAR
+wait 40
+run fps FAR
+wait 40
+run fps FAR
+wait 40
+screenshot ao_jenga_far
+
+cmd tp @s 18 -55 7 90 5
+wait 120
+aoinfo
+run fps SETTLED
+wait 40
+run fps SETTLED
+wait 40
+run fps SETTLED
+wait 40
+screenshot ao_jenga_near
+quit

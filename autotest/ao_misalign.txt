@@ -23,6 +23,11 @@ cmd gamerule doDaylightCycle false
 cmd kill @e[type=!player]
 wait 20
 cmd tp @s 3 -47 3 0 90
+# seam5 has no distance LOD, so the merge has to be un-faded for the curves to be comparable at all.
+# The camera here is ~9.5 blocks from the seam and the default band starts at 64, so this changes
+# nothing today -- it is here so that lowering the default cannot quietly turn this into a comparison
+# between a faded merge and an unfaded reference, which would read as an algorithm regression.
+aomergedist 0
 wait 60
 
 # Two adjacent single-block ships. Slot 0 stays put and slot 1 is the one that goes off-alignment.

@@ -220,9 +220,60 @@ def contact():
     return ok
 
 
+def merge_lod():
+    """The distance LOD fades merging out instead of switching it off (seam_lod.py).
+
+    Two properties, and the first is the one worth having. Zeroing a pair's claim is not meant to
+    APPROXIMATE the unmerged field -- responsibility r = 1/(1 + sum claims) becomes 1 and every
+    off-diagonal weight is gone, which is precisely the `aomerge off` path -- so the near end of the
+    sweep has to land on that frame exactly, not merely close to it. If it only lands close, the fade
+    is doing something else and the tolerance is hiding it.
+    """
+    print("merge distance LOD (seam_lod.py)")
+    # Sweep shots are named by far edge in tenths of a block, ascending here so fs[2:] walks the
+    # fade from fully merged to fully faded.
+    names = ["aol_far", "aol_off"] + [
+        "aol_d%04d" % v for v in (1920, 320, 160, 100, 90, 85, 80, 75, 70, 65, 60, 55, 50, 10)]
+    fs = need(*names)
+    if fs is None:
+        return False
+    far, off, d192 = fs[0], fs[1], fs[2]
+    d001 = fs[-1]
+    ok = nonempty("lod: frames contain a shadow", far, off, d192)
+    # The anchors have to actually differ, or every check below passes vacuously on a build where
+    # merging never happened at all.
+    spread = area(np.abs(far - off)) / max(area(far), 1.0)
+    if spread < 0.01:
+        print(f"  FAIL  {'lod: merged and unmerged differ':34s} {spread:9.5f}  (needs >0.01) "
+              f"-- nothing to fade between, the sweep below is meaningless")
+        ok = False
+    # Off by config and off by distance must be the SAME path, to the pixel.
+    ok &= report("far edge 0 == merging on", area(np.abs(far - d192)) / max(area(far), 1.0), 0.001)
+    ok &= report("budget 0 == merging off", area(np.abs(d001 - off)) / max(area(off), 1.0), 0.001)
+    # ... and the walk between them may not jump. Measured as a fraction of the whole
+    # merged-to-unmerged distance, so a scene with a faint seam is not scored more leniently.
+    steps = fs[2:]
+    total = max(area(np.abs(far - off)), 1.0)
+    jumps = [area(np.abs(steps[i + 1] - steps[i])) / total for i in range(len(steps) - 1)]
+    print(f"        fade profile (as fraction of the full swing): {[round(j, 3) for j in jumps]}")
+    # 0.40 against a measured 0.26 at half-block spacing. The number that matters is what a
+    # REGRESSION would score: a rank dropped whole instead of faded puts the entire swing into one
+    # step and reads 1.0, so this has room to spare and still catches the failure it is for.
+    ok &= report("no step dominates the fade", max(jumps), 0.40)
+    # The fade may only ever travel FROM the merged field TOWARDS the unmerged one. A step that
+    # moves back is the tell for a rank being dropped as a block rather than faded, or for the
+    # responsibility r not being rebuilt from the faded claims -- both of which would still pass
+    # the endpoint checks above, since both endpoints are correct by construction.
+    prog = [area(np.abs(s - far)) / total for s in steps]
+    print(f"        distance travelled from merged:  {[round(p, 3) for p in prog]}")
+    ok &= report("fade never travels backwards",
+                 max([prog[i] - prog[i + 1] for i in range(len(prog) - 1)] + [0.0]), 0.05)
+    return ok
+
+
 def main():
     print(f"reading {SHOTS}\n")
-    results = [parity(), rigidity(), merging(), contact()]
+    results = [parity(), rigidity(), merging(), contact(), merge_lod()]
     print()
     if all(results):
         print("ALL GROUPS PASS")

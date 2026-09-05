@@ -1,0 +1,115 @@
+# DISTANCE LOD on the cross-ship merge.
+#
+# Each merged partner costs the fragment shader another host lattice, but the seam it fixes is a
+# block or two wide, so far from the camera it is paid for something too small to see. The LOD fades
+# merging out with distance: budget = MAX_PARTNERS * (1 - clamp01((d - near) / (far - near))), and
+# claim rank k survives while budget > k, so the weakest partner goes first and each leaves over a
+# ramp instead of a step.
+#
+# This fixture sweeps the CONFIGURED far edge with the camera parked close, rather than flying the
+# camera out. Flying out is the real situation but is untestable from screenshots: by the time the
+# LOD engages, one block covers about four pixels and there is no field left to measure. Shrinking
+# the band instead makes the LOD believe the ships are distant while they still fill the frame, so
+# what is being checked -- the fade arithmetic -- is separated from whether it is visible.
+#
+# THREE ships, not two, and that is not padding. Two ALIGNED single-block ships render identically
+# merged and unmerged, exactly: the corner rule is linear in occupancy, so two hosts each carrying
+# half the joint field sum to the same thing as two hosts each carrying their own whole field, and
+# with one voxel per ship neither the per-cell clamp nor the diagonal-pair bonus ever engages to
+# break the linearity. A sweep on that scene is ten identical screenshots. The third ship gives the
+# middle hull two partners, which populates claim rank 1 as well as rank 0 and puts enough
+# occupancy in the shared cells for the nonlinear terms to bite -- the same scene ao_merge_toggle
+# uses, where switching merging off moves 6% of the field.
+#
+# The two anchors are what make the sweep mean anything:
+#   aol_off   merging switched off outright
+#   aol_far   the fade parked beyond any reachable distance (aomergedist 0)
+# The claim under test is that the near end of the sweep reaches `aol_off` EXACTLY -- zeroing a claim
+# is not an approximation of unmerged, it is the unmerged path -- and that nothing in between jumps.
+world autotest
+wait-level
+wait 100
+hud off
+cmd gamemode spectator
+cmd time set noon
+cmd gamerule doDaylightCycle false
+cmd kill @e[type=!player]
+wait 20
+cmd tp @s 3 -52 3.5 0 90
+wait 60
+
+run ao_ship 1 2 -60 3 0:0:0
+run ao_ship 2 3 -60 3 0:0:0
+run ao_ship 3 4 -60 3 0:0:0
+wait 120
+
+# ---- anchors -----------------------------------------------------------
+aomerge on
+aomergedist 0
+wait 60
+screenshot aol_far
+
+aomerge off
+wait 80
+screenshot aol_off
+
+# ---- the sweep ---------------------------------------------------------
+# The camera sits ~4.5 blocks above the pair's fattened seam box, so a far edge of ~13.5 or more
+# leaves the near edge (a third of it) past the camera and the merge fully intact, and a far edge
+# below ~4.5 puts the budget at exactly zero. The steps bracket that band generously at the ends
+# and sample it in half-blocks through the middle. The fine spacing is the point: sampled coarsely
+# a genuine STEP -- a rank dropped whole instead of faded -- is indistinguishable from a ramp, and
+# distinguishing those two is the only reason this fixture exists.
+#
+# Shot names carry the far edge in TENTHS of a block (aol_d0085 = 8.5), so the half-steps sort in
+# order and read unambiguously.
+aomerge on
+aomergedist 192
+wait 60
+screenshot aol_d1920
+aomergedist 32
+wait 60
+screenshot aol_d0320
+aomergedist 16
+wait 60
+screenshot aol_d0160
+aomergedist 10
+wait 60
+screenshot aol_d0100
+aomergedist 9
+wait 60
+screenshot aol_d0090
+aomergedist 8.5
+wait 60
+screenshot aol_d0085
+aomergedist 8
+wait 60
+screenshot aol_d0080
+aomergedist 7.5
+wait 60
+screenshot aol_d0075
+aomergedist 7
+wait 60
+screenshot aol_d0070
+aomergedist 6.5
+wait 60
+screenshot aol_d0065
+aomergedist 6
+wait 60
+screenshot aol_d0060
+aomergedist 5.5
+wait 60
+screenshot aol_d0055
+aomergedist 5
+wait 60
+screenshot aol_d0050
+aomergedist 1
+wait 60
+screenshot aol_d0010
+
+# Leave the config as the suite expects it, so a later fixture in the same run is not silently
+# measuring a faded merge.
+aomergedist 192
+run ao_clear
+wait 40
+quit

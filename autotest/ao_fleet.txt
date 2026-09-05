@@ -1,0 +1,103 @@
+# AO-saturated scene that also SATURATES THE CROSS-SHIP MERGE.
+#
+# ao_cover.txt is deliberately one ship, which isolates the per-fragment path but means every number
+# taken on it describes the merge's cheapest case: one host lattice, no partners, no claim lookups.
+# The host loop runs once. That is not the configuration the merge is expensive in.
+#
+# Here the same kind of block lattice is split into 49 SEPARATE single-block ships spaced 2 apart.
+# A 2-block spacing puts the voxel-centre AABB gap at 2.0, inside SEAM_G_FULL (2.2), so every
+# neighbour claim saturates at 1; the four axis neighbours plus four diagonals at gap 2.83 give each
+# interior hull EIGHT candidate partners, of which the directory keeps the top MAX_PARTNERS = 4. So
+# every interior fragment builds the full four host lattices and walks the cell's sub-runs once per
+# host -- the worst case the per-fragment path has.
+#
+# Used by autotest/perf_aomerge.sh to attribute what merging costs and what the distance LOD gives
+# back. Not scored for correctness; ao_merge and ao_misalign do that.
+world autotest
+wait-level
+wait 100
+hud off
+cmd gamemode spectator
+cmd time set noon
+cmd gamerule doDaylightCycle false
+cmd kill @e[type=!player]
+wait 20
+
+run ao_ship 0 -6 -60 -6 0:0:0
+run ao_ship 1 -4 -60 -6 0:0:0
+run ao_ship 2 -2 -60 -6 0:0:0
+run ao_ship 3 0 -60 -6 0:0:0
+run ao_ship 4 2 -60 -6 0:0:0
+run ao_ship 5 4 -60 -6 0:0:0
+run ao_ship 6 6 -60 -6 0:0:0
+run ao_ship 7 -6 -60 -4 0:0:0
+run ao_ship 8 -4 -60 -4 0:0:0
+run ao_ship 9 -2 -60 -4 0:0:0
+run ao_ship 10 0 -60 -4 0:0:0
+run ao_ship 11 2 -60 -4 0:0:0
+run ao_ship 12 4 -60 -4 0:0:0
+run ao_ship 13 6 -60 -4 0:0:0
+run ao_ship 14 -6 -60 -2 0:0:0
+run ao_ship 15 -4 -60 -2 0:0:0
+run ao_ship 16 -2 -60 -2 0:0:0
+run ao_ship 17 0 -60 -2 0:0:0
+run ao_ship 18 2 -60 -2 0:0:0
+run ao_ship 19 4 -60 -2 0:0:0
+run ao_ship 20 6 -60 -2 0:0:0
+run ao_ship 21 -6 -60 0 0:0:0
+run ao_ship 22 -4 -60 0 0:0:0
+run ao_ship 23 -2 -60 0 0:0:0
+run ao_ship 24 0 -60 0 0:0:0
+run ao_ship 25 2 -60 0 0:0:0
+run ao_ship 26 4 -60 0 0:0:0
+run ao_ship 27 6 -60 0 0:0:0
+run ao_ship 28 -6 -60 2 0:0:0
+run ao_ship 29 -4 -60 2 0:0:0
+run ao_ship 30 -2 -60 2 0:0:0
+run ao_ship 31 0 -60 2 0:0:0
+run ao_ship 32 2 -60 2 0:0:0
+run ao_ship 33 4 -60 2 0:0:0
+run ao_ship 34 6 -60 2 0:0:0
+run ao_ship 35 -6 -60 4 0:0:0
+run ao_ship 36 -4 -60 4 0:0:0
+run ao_ship 37 -2 -60 4 0:0:0
+run ao_ship 38 0 -60 4 0:0:0
+run ao_ship 39 2 -60 4 0:0:0
+run ao_ship 40 4 -60 4 0:0:0
+run ao_ship 41 6 -60 4 0:0:0
+run ao_ship 42 -6 -60 6 0:0:0
+run ao_ship 43 -4 -60 6 0:0:0
+run ao_ship 44 -2 -60 6 0:0:0
+run ao_ship 45 0 -60 6 0:0:0
+run ao_ship 46 2 -60 6 0:0:0
+run ao_ship 47 4 -60 6 0:0:0
+run ao_ship 48 6 -60 6 0:0:0
+wait 200
+
+# Looking straight down from far enough that the lattice and its shadow skirt fill the frame. The
+# ships span 13 blocks and the field reaches SEAM_SUPPORT past them, so about 21 blocks has to fit:
+# 15 blocks up at the default fov covers roughly that.
+cmd tp @s 0 -45 0 0 90
+wait 140
+aoinfo
+run fps SETTLED
+wait 40
+run fps SETTLED
+wait 40
+run fps SETTLED
+wait 40
+
+# How much of the frame is actually SHIP, measured rather than estimated from block sizes. The ship
+# program's share of the AO cost only makes sense next to the number of fragments it runs on, and a
+# geometric estimate off by 10x sends the next optimisation at the wrong shader.
+#
+# debugFloodPaint=3 repaints ship chunks only, so differencing it against an ordinary frame gives
+# the ship fragment set exactly -- no colour thresholding, which this suite has been burned by.
+# Taken AFTER the fps samples so perf runs are unaffected by the extra frames.
+paint 3
+wait 40
+screenshot aof_shippaint
+paint 0
+wait 40
+screenshot aof_plain
+quit

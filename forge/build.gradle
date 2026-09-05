@@ -99,6 +99,53 @@ loom {
         }
     }
 
+    // `-Pvs_aocut=N` — COMPILE OUT parts of the seam AO, to attribute register pressure rather than
+    // work. Pair it with `-Pvs_aoprof=4` so nothing executes at any level. See VS_AOCUT in the chunk
+    // fragment shaders. Diagnostic only: levels above 0 do not render correct AO.
+    if (project.hasProperty('vs_aocut')) {
+        runs.configureEach {
+            property("vs.aocut", project.property('vs_aocut').toString())
+        }
+    }
+
+    // `-Pvs_aocutship=N` — the same for the SHIP shader's seam body. See VS_AOCUTSHIP.
+    if (project.hasProperty('vs_aocutship')) {
+        runs.configureEach {
+            property("vs.aocutship", project.property('vs_aocutship').toString())
+        }
+    }
+
+    // `-Pvs_seamgateoff=true` — build the seam AO's per-frame data even when the AO is switched off,
+    // i.e. the behaviour before that was gated. Exists so the gate's worth can be A/B'd.
+    if (project.hasProperty('vs_seamgateoff')) {
+        runs.configureEach {
+            property("vs.seamgateoff", "true")
+        }
+    }
+
+    // `-Pvs_precompship=false` — keep the SHIP program on the per-fragment path while the world one
+    // reads the precomputed field, so the two halves can be A/B'd back to back.
+    if (project.hasProperty('vs_precompship')) {
+        runs.configureEach {
+            property("vs.precompship", project.property('vs_precompship').toString())
+        }
+    }
+
+    // `-Pvs_seamfieldtrace=true` — log the precomputed field's size and descriptor validity.
+    if (project.hasProperty('vs_seamfieldtrace')) {
+        runs.configureEach {
+            property("vs.seamfieldtrace", "true")
+        }
+    }
+
+    // `-Pvs_seamsub=0` — diagnostic: show the precomputed AGGREGATE without subtracting the drawn
+    // ship's own contribution, to tell "the field is empty" apart from "the subtraction cancels it".
+    if (project.hasProperty('vs_seamsub')) {
+        runs.configureEach {
+            property("vs.seamsub", project.property('vs_seamsub').toString())
+        }
+    }
+
     // `-Pvs_seamkernel=N` — which B-spline the seam AO splats occluder voxels with: 1 tent (default,
     // the verified field), 2 quadratic, 3 cubic. 2 and 3 SHADE DIFFERENTLY; they exist to measure
     // what a smoother kernel costs. See VS_SEAM_KERNEL in the chunk fragment shaders.

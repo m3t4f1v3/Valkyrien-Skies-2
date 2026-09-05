@@ -704,7 +704,15 @@ fun LevelChunkSection.toDenseVoxelUpdate(chunkPos: Vector3ic, level: Level? = nu
             for (z in 0..15) {
                 val blockState = getBlockState(x, y, z)
                 val defaultBlockType = info.get(blockState)?.second ?: vsCore.blockTypes.air
-                update.addBlock(x, y, z, defaultBlockType)
+                // And its own shape, for a block that has one. This is the path a chunk takes when
+                // it is first given to the physics engine, so without it a ship's panels start life
+                // as cubes and only become themselves when something touches them.
+                val shaped = if (level == null) null else BlockShapes.typeAt(
+                    level,
+                    BlockPos(chunkPos.x() shl 4 or x, chunkPos.y() shl 4 or y, chunkPos.z() shl 4 or z),
+                    blockState
+                )
+                update.addBlock(x, y, z, shaped ?: defaultBlockType)
             }
         }
     }

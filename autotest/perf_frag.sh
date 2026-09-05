@@ -29,16 +29,27 @@ sample() {
         awk '{s+=$1; n++} END {if (n) printf "%.2f", s/n; else printf "0"}'
 }
 
+# The resolution the client ACTUALLY rendered at. This whole script is a slope against pixel count,
+# so taking the pixel count from the REQUESTED size is the one thing that can silently invalidate it:
+# AUTOTEST_W/H only reaches the client if fullscreen fits inside gamescope's nested display, and when
+# it does not Minecraft keeps 854x480 without a word. A run where two rows quietly rendered at the
+# same size produces a perfectly plausible straight line through the wrong points.
+res_seen() {
+    grep -a "\[autotest\] fps " forge/run/logs/latest.log | tail -1 | sed -n 's/.*@ //p'
+}
+
 echo "AO-saturated scene, uncapped, $RUNTIME"
-echo "res           px(M)    fps_aoOff  fps_aoOn   ms_off   ms_on    ms_ao"
+echo "asked         rendered     px(M)  fps_aoOff  fps_aoOn   ms_off   ms_on    ms_ao"
 for r in $RESOLUTIONS; do
     w="${r%x*}"; h="${r#*x}"
-    off=$(sample "$w" "$h" false)
-    on=$(sample "$w" "$h" true)
-    awk -v r="$r" -v w="$w" -v h="$h" -v o="$off" -v n="$on" 'BEGIN {
-        px = w*h/1e6
+    off=$(sample "$w" "$h" false); off_res="$(res_seen)"
+    on=$(sample "$w" "$h" true);   on_res="$(res_seen)"
+    [ "$off_res" = "$on_res" ] || echo "  WARNING: ao-off rendered $off_res but ao-on rendered $on_res"
+    awk -v r="$r" -v rr="$on_res" -v o="$off" -v n="$on" 'BEGIN {
+        split(rr, d, "x")
+        px = (d[1] > 0) ? d[1]*d[2]/1e6 : 0
         mo = (o>0) ? 1000/o : 0
         mn = (n>0) ? 1000/n : 0
-        printf "%-12s %6.3f   %8s  %8s   %6.2f  %6.2f  %6.2f\n", r, px, o, n, mo, mn, mn-mo
+        printf "%-12s  %-11s %6.3f   %8s  %8s   %6.2f  %6.2f  %6.2f\n", r, rr, px, o, n, mo, mn, mn-mo
     }'
 done
