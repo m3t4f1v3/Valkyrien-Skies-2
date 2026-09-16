@@ -28,6 +28,8 @@ public class ShipThing extends ChunkShaderInterface {
     // Local-to-camera-relative matrix; only needed when the VSH emits world
     // position for lighting/AO or samples world biome (uses worldPosVertex).
     private final GlUniformMatrix4f uniformLocalToCameraRel;
+    /** Where the ship was a frame ago, for the motion vectors; null unless that feature is on. */
+    private final GlUniformMatrix4f uniformPreviousModelView;
     // Integer camera origin; same conditions as u_LocalToCameraRel.
     private final GlUniformInt3v uniformRenderOrigin;
     // World light/solid buffer textures. Full light data is only used when
@@ -89,6 +91,8 @@ public class ShipThing extends ChunkShaderInterface {
                 ? context.bindUniform("u_TransformMatrix", GlUniformMatrix4f::new) : null;
         this.uniformLocalToCameraRel = wantLocalToCamera
                 ? context.bindUniform("u_LocalToCameraRel", GlUniformMatrix4f::new) : null;
+        this.uniformPreviousModelView = (features & SodiumCompat.FEATURE_MOTION_VECTORS) != 0
+                ? context.bindUniform("u_VsPreviousModelView", GlUniformMatrix4f::new) : null;
         this.uniformRenderOrigin = wantLocalToCamera
                 ? context.bindUniform("u_VsRenderOrigin", GlUniformInt3v::new) : null;
         boolean worldSolidLookup = light || shipOnShip;
@@ -156,6 +160,10 @@ public class ShipThing extends ChunkShaderInterface {
 
     public void setLocalToWorldMatrix(Matrix4fc matrix) {
         if (this.uniformLocalToCameraRel != null) this.uniformLocalToCameraRel.set(matrix);
+    }
+
+    public void setPreviousModelView(Matrix4fc matrix) {
+        if (this.uniformPreviousModelView != null) this.uniformPreviousModelView.set(matrix);
     }
 
     public void setRenderOrigin(int x, int y, int z) {

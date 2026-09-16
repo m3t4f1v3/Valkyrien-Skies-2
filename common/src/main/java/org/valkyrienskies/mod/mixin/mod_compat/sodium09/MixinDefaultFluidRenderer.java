@@ -22,6 +22,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.valkyrienskies.mod.common.config.VSGameConfig;
+import org.valkyrienskies.mod.common.render.batched.ShipMotionVectors;
 import org.valkyrienskies.mod.compat.LoadedMods;
 import org.valkyrienskies.mod.compat.iris.IrisCompat;
 import org.valkyrienskies.mod.compat.sodium.shader.VsVertexFlagPacker;
@@ -54,8 +55,11 @@ public abstract class MixinDefaultFluidRenderer {
     private void vs$captureFluidFlags(final ModelQuadViewMutable quad, final LevelSlice level, final BlockPos pos,
         final LightPipeline lighter, final Direction dir, final ModelQuadFacing facing, final float brightness,
         final ColorProvider<FluidState> colorProvider, final FluidState fluidState, final CallbackInfo ci) {
+        // Same list as MixinBlockRenderer, and for the same reason: whichever program ends up
+        // drawing a shipyard quad has to be the one its alpha was packed for.
         final boolean anyShipFeature = VSGameConfig.CLIENT.getDynamicShipBiomeTinting()
-            || VSGameConfig.CLIENT.getDynamicShipLighting();
+            || VSGameConfig.CLIENT.getDynamicShipLighting()
+            || ShipMotionVectors.isEnabled();
         final boolean worldFromShip = VSGameConfig.CLIENT.getDynamicShipToWorldLighting();
         if (!anyShipFeature && !worldFromShip) {
             this.vs$shouldPack = false;

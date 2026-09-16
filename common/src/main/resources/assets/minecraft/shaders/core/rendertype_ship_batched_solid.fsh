@@ -21,8 +21,11 @@ in vec2 v_BakedLightCoord;
 in vec3 v_CameraRelWorldPos;
 flat in vec3 v_WorldNormal;
 flat in float v_Fullbright;
+noperspective in vec2 v_VsMotion;
 
-out vec4 fragColor;
+layout(location = 0) out vec4 fragColor;
+// Ship motion vectors; only bound as a draw buffer inside ShipBatchRenderer.drawLayer.
+layout(location = 1) out vec4 vsMotion;
 
 void main() {
     vec4 tex = texture(Sampler0, texCoord0);
@@ -58,4 +61,6 @@ void main() {
     color.rgb *= lightSample.rgb;
 
     fragColor = linear_fog(color, vertexDistance, FogStart, FogEnd, FogColor);
+    // .a carries depth so the compositor can reject car pixels that were later overdrawn.
+    vsMotion = vec4(v_VsMotion, 1.0, gl_FragCoord.z);
 }

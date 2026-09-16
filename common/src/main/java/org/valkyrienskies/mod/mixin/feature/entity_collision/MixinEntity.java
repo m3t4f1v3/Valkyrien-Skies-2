@@ -19,6 +19,7 @@ import net.minecraft.world.phys.shapes.BooleanOp;
 import net.minecraft.world.phys.shapes.Shapes;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
+import org.joml.primitives.AABBd;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -29,8 +30,10 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.spongepowered.asm.mixin.injection.callback.LocalCapture;
+import org.valkyrienskies.core.api.ships.Ship;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.util.EntityDraggingInformation;
+import org.valkyrienskies.mod.common.util.EntityShipFrame;
 import org.valkyrienskies.mod.common.util.EntityShipCollisionUtils;
 import org.valkyrienskies.mod.common.util.IEntityDraggingInformationProvider;
 import org.valkyrienskies.mod.common.util.ShipPathfindingUtils;
@@ -69,6 +72,9 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider,
     @Shadow
     public abstract BlockPos getOnPos();
 
+    @Shadow
+    public abstract float getEyeHeight();
+
     /**
      * Cancel movement of entities that are colliding with unloaded ships
      */
@@ -85,6 +91,18 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider,
 
     /**
      * Will execute suffocation check for ship blocks too.
+     *
+     * <p>The ship carrying this entity is asked in its own frame and every other ship is asked
+     * through the world, and the difference matters entirely. A world round trip costs the
+     * distance the ship travelled between the transform that fixed the entity's position and the
+     * transform used to read it back -- always backwards, and three blocks a tick at sixty metres
+     * a second, so a driver arrives inside their own rear bulkhead and suffocates on it. Parked,
+     * the two transforms are the same and nothing is wrong, which is why this is a fault nobody
+     * meets until they are going somewhere. {@link EntityShipFrame} is the argument in full.
+     *
+     * <p>For a ship the entity is merely near rather than riding, there is no such frame to ask in
+     * and the round trip is the only thing there is -- but a passing ship is also not one whose
+     * motion can put the entity inside it, because the entity is not travelling with it.
      */
     @Inject(
         method = "isInWall",
@@ -93,18 +111,55 @@ public abstract class MixinEntity implements IEntityDraggingInformationProvider,
     )
     private void isInShipWall(CallbackInfoReturnable<Boolean> cir, @Local AABB aabb){
         if(cir.getReturnValue()) return;
-        VSGameUtilsKt.transformFromWorldToNearbyShipsAndWorld(level, aabb, arg -> {
-            BlockPos.betweenClosedStream(arg).forEach(
-                blockPos -> {
-                    BlockState blockState = level.getBlockState(blockPos);
-                    if(!blockState.isAir()
-                        && blockState.isSuffocating(level, blockPos)
-                        && Shapes.joinIsNotEmpty(blockState.getCollisionShape(level, blockPos).move(blockPos.getX(), blockPos.getY(), blockPos.getZ()), Shapes.create(arg), BooleanOp.AND)
-                    ) {
-                        cir.setReturnValue(true);
-                    }
-                }
-            );
+        final Entity self = Entity.class.cast(this);
+
+        final EntityShipFrame.Carried carried = EntityShipFrame.carrierOf(self);
+        long carrierId = Long.MIN_VALUE;
+        if (carried != null) {
+            carrierId = carried.getShip().getId();
+            // Built in the ship's own axes rather than transformed into them: the box is a
+            // hand's width and a millionth of a block tall, and the axis-aligned bound of that
+            // box under a rotation is a great deal bigger than the box.
+            final Vector3dc where = carried.getPosInShip();
+            final float width = this.dimensions.width * 0.8F;
+            final AABB inCarrier = AABB.ofSize(
+                new Vec3(where.x(), where.y() + getEyeHeight(), where.z()), width, 1.0E-6, width);
+            if (vs$isSuffocatedBy(inCarrier)) {
+                cir.setReturnValue(true);
+                return;
+            }
+        }
+
+        final AABBd inShip = new AABBd();
+        for (final Ship ship : VSGameUtilsKt.getShipsIntersecting(level, aabb)) {
+            if (ship.getId() == carrierId) {
+                continue;
+            }
+            inShip.setMin(aabb.minX, aabb.minY, aabb.minZ)
+                .setMax(aabb.maxX, aabb.maxY, aabb.maxZ)
+                .transform(ship.getWorldToShip());
+            if (!EntityShipCollisionUtils.mayShipIntersectLocalAabb(ship, inShip)) {
+                continue;
+            }
+            if (vs$isSuffocatedBy(new AABB(inShip.minX, inShip.minY, inShip.minZ,
+                inShip.maxX, inShip.maxY, inShip.maxZ))) {
+                cir.setReturnValue(true);
+                return;
+            }
+        }
+    }
+
+    /** Whether any block overlapping {@code box} is one you can be suffocated by. */
+    @Unique
+    private boolean vs$isSuffocatedBy(final AABB box) {
+        return BlockPos.betweenClosedStream(box).anyMatch(blockPos -> {
+            final BlockState blockState = level.getBlockState(blockPos);
+            return !blockState.isAir()
+                && blockState.isSuffocating(level, blockPos)
+                && Shapes.joinIsNotEmpty(
+                    blockState.getCollisionShape(level, blockPos)
+                        .move(blockPos.getX(), blockPos.getY(), blockPos.getZ()),
+                    Shapes.create(box), BooleanOp.AND);
         });
     }
 

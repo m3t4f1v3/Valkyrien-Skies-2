@@ -21,6 +21,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import org.valkyrienskies.mod.common.config.VSGameConfig;
+import org.valkyrienskies.mod.common.render.batched.ShipMotionVectors;
 import org.valkyrienskies.mod.compat.LoadedMods;
 import org.valkyrienskies.mod.compat.iris.IrisCompat;
 import org.valkyrienskies.mod.compat.sodium.shader.VsVertexFlagPacker;
@@ -45,8 +46,12 @@ public class MixinFluidRenderer {
                                       LightPipeline lighter, Direction dir, float brightness,
                                       ColorProvider<FluidState> colorProvider, FluidState fluidState,
                                       CallbackInfo ci) {
+        // Motion vectors belong in this list even though they need nothing from the vertex
+        // format: they force VS's ship program on by themselves, and that program decodes
+        // its flags out of the vertex alpha. Packed here and read there, or neither.
         boolean anyShipFeature = VSGameConfig.CLIENT.getDynamicShipBiomeTinting()
-                || VSGameConfig.CLIENT.getDynamicShipLighting();
+                || VSGameConfig.CLIENT.getDynamicShipLighting()
+                || ShipMotionVectors.isEnabled();
         boolean worldFromShip = VSGameConfig.CLIENT.getDynamicShipToWorldLighting();
         if (!anyShipFeature && !worldFromShip) {
             vs$shouldPack = false;

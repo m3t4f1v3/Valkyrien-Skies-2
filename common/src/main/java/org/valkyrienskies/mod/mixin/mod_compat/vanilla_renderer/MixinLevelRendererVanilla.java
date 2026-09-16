@@ -34,6 +34,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 import org.jetbrains.annotations.Nullable;
+import org.joml.Matrix4d;
 import org.joml.Matrix4f;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
@@ -62,6 +63,7 @@ import org.valkyrienskies.mod.common.hooks.VSGameEvents;
 import org.valkyrienskies.mod.common.render.ShipSectionCache;
 import org.valkyrienskies.mod.common.render.ShipSectionCandidate;
 import org.valkyrienskies.mod.common.render.batched.ShipBatchRenderer;
+import org.valkyrienskies.mod.common.render.batched.ShipMotionVectors;
 import org.valkyrienskies.mod.common.render.light.VsShipWorldLightRenderContext;
 import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
 import org.valkyrienskies.mod.compat.LoadedMods;
@@ -494,9 +496,15 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
                 return;
             }
 
+            // Scoped around the whole per-ship loop; see ShipMotionVectors for why it must not
+            // simply be left bound for the level pass.
+            final boolean vs$motionVectors = ShipMotionVectors.begin();
+
             for (int i = 0; i < renderableShips.size(); i++) {
                 final ClientShip ship = renderableShips.get(i);
                 final ObjectList<RenderChunkInfo> chunks = renderableChunkLists.get(i);
+                final Matrix4f vs$basePose = vs$motionVectors
+                    ? new Matrix4f(poseStack.last().pose()) : null;
                 poseStack.pushPose();
                 final ShipTransform shipTransform = ship.getRenderTransform();
                 final Vector3dc cameraShipSpace = shipTransform.getWorldToShip().transformPosition(new Vector3d(camX, camY, camZ));
@@ -504,15 +512,33 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
                     cameraShipSpace.x(), cameraShipSpace.y(), cameraShipSpace.z(),
                     camX, camY, camZ);
 
+                // Where the ship was a frame ago, through this frame's camera and against this
+                // frame's ship-space camera offset -- that offset is the origin the chunk vertices
+                // are drawn relative to, so the previous frame's would fold the camera's own step
+                // back into the vector.
+                Matrix4f vs$previousModelView = null;
+                if (vs$motionVectors) {
+                    final Matrix4d vs$previousRender = new Matrix4d()
+                        .translation(-camX, -camY, -camZ)
+                        .mul(ShipMotionVectors.previousShipToWorld(ship.getId(),
+                            shipTransform.getShipToWorld()))
+                        .translate(cameraShipSpace.x(), cameraShipSpace.y(), cameraShipSpace.z());
+                    vs$previousModelView = new Matrix4f(vs$basePose).mul(new Matrix4f(vs$previousRender));
+                }
+
                 final var event = new VSGameEvents.ShipRenderEvent(
                     receiver, renderType, poseStack, camX, camY, camZ, matrix4f, ship, chunks
                 );
 
                 VSGameEvents.INSTANCE.getRenderShip().emit(event);
                 RenderSystem.setShaderTexture(2, 0);
-                renderChunkLayer(renderType, poseStack, cameraShipSpace.x(), cameraShipSpace.y(), cameraShipSpace.z(), matrix4f, chunks);
+                renderChunkLayer(renderType, poseStack, cameraShipSpace.x(), cameraShipSpace.y(), cameraShipSpace.z(), matrix4f, chunks, vs$previousModelView);
                 VSGameEvents.INSTANCE.getPostRenderShip().emit(event);
                 poseStack.popPose();
+            }
+
+            if (vs$motionVectors) {
+                ShipMotionVectors.end();
             }
         }
     }
@@ -572,7 +598,8 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
     @Unique
     private void renderChunkLayer(final RenderType renderType, final PoseStack poseStack, final double d,
         final double e, final double f,
-        final Matrix4f matrix4f, final ObjectList<RenderChunkInfo> chunksToRender) {
+        final Matrix4f matrix4f, final ObjectList<RenderChunkInfo> chunksToRender,
+        final Matrix4f previousModelView) {
         RenderSystem.assertOnRenderThread();
         renderType.setupRenderState();
         this.minecraft.getProfiler().push("filterempty");
@@ -584,7 +611,10 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
 
         // Use custom shader for existing render types
         ShaderInstance shaderInstance = null;
-        if (VSGameConfig.CLIENT.getBetterVanillaShipShading()) {
+        // Motion vectors need it too: the stock terrain shader has no previous transform to project
+        // through and no second output to write, so without the swap this path silently produces
+        // nothing while every other one works.
+        if (VSGameConfig.CLIENT.getBetterVanillaShipShading() || ShipMotionVectors.isEnabled()) {
             ShaderInstance shipShader = VSRenderTypes.Companion.shipShaderFor(renderType);
             if (shipShader != null) shaderInstance = shipShader;
         }
@@ -597,6 +627,11 @@ public abstract class MixinLevelRendererVanilla implements LevelRendererDuck, Le
 
         if (shaderInstance.MODEL_VIEW_MATRIX != null) {
             shaderInstance.MODEL_VIEW_MATRIX.set(poseStack.last().pose());
+        }
+
+        final Uniform vs$previousModelView = shaderInstance.getUniform("PreviousModelViewMat");
+        if (vs$previousModelView != null && previousModelView != null) {
+            vs$previousModelView.set(previousModelView);
         }
 
         if (shaderInstance.PROJECTION_MATRIX != null) {

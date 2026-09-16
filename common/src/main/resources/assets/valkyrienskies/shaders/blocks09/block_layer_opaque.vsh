@@ -80,6 +80,13 @@ out vec2 v_FragDistance;
 // to fade the section in from the fog colour.
 out float v_FadeFactor;
 
+#ifdef VS_MOTION_VECTORS
+// Where this vertex was a frame ago, through this frame's camera, so the player's own movement
+// cancels and only the ship's travel survives.
+noperspective out vec2 v_VsMotion;
+uniform mat4 u_VsPreviousModelView;
+#endif
+
 uniform vec3 u_RegionOffset;
 uniform isamplerBuffer u_SectionTimeInfo;
 uniform int u_CurrentTime;
@@ -184,6 +191,18 @@ void main() {
     v_FadeFactor = (chunkFade < 0) ? 1.0 : fade;
 
     gl_Position = u_ProjectionMatrix * u_ModelViewMatrix * vec4(position, 1.0);
+#ifdef VS_MOTION_VECTORS
+    vec4 vsPreviousClip = u_ProjectionMatrix * u_VsPreviousModelView * vec4(position, 1.0);
+    // A vertex the camera has moved past divides by a w on its way through zero and comes back
+    // as an enormous vector -- one pixel of it is enough, because a consumer looking for the
+    // longest vector on the frame finds that one. 0.05 is Minecraft's near plane and w here is
+    // view-space depth in blocks, so this is exactly "was it in front of the camera last
+    // frame"; a small epsilon is not, and let a corner of a car that swept past the third-person
+    // camera report a vector a fifth of the screen long.
+    v_VsMotion = vsPreviousClip.w > 0.05
+        ? gl_Position.xy / gl_Position.w - vsPreviousClip.xy / vsPreviousClip.w
+        : vec2(0.0);
+#endif
 
     v_BakedLightCoord = _vert_tex_light_coord;
     // Decode the alpha layout: ao(3) | face(3) | resolver(2). AO uses a custom mapping where the integer

@@ -19,6 +19,8 @@ uniform int FogShape;
 out float vertexDistance;
 out vec4 vertexColor;
 out vec2 texCoord0;
+noperspective out vec2 v_VsMotion;
+flat out int v_VsShip;
 out vec4 normal;
 
 out vec3 valkyrienair_CamRelPos;
@@ -32,6 +34,8 @@ void main() {
     vertexDistance = fog_distance(ModelViewMat, pos, FogShape);
     vertexColor = Color * minecraft_sample_lightmap(Sampler2, UV2);
     texCoord0 = UV0;
+    v_VsMotion = vec2(0.0);
+    v_VsShip = 0;
     normal = ProjMat * ModelViewMat * vec4(Normal, 0.0);
 
     valkyrienair_CamRelPos = pos;

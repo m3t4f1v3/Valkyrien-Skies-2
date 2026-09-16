@@ -55,10 +55,14 @@ public final class ShipBatchRenderer {
     private final Matrix4d localToCameraRelScratch = new Matrix4d();
     private final Matrix4f localToCameraRelFloat = new Matrix4f();
 
+    private final Matrix4d previousRenderScratch = new Matrix4d();
+    private final Matrix4f previousRenderFloat = new Matrix4f();
+
     private static final int MAX_SHIP_REMESH_PER_FRAME = 2;
 
     private static final class ShipFrameData {
         final Matrix4f modelView = new Matrix4f();
+        final Matrix4f previousModelView = new Matrix4f();
         double camShipX, camShipY, camShipZ;
         boolean visible;
         // Slot of this ship's matrix in transformStorage (= the ShipIndex uniform value).
@@ -229,8 +233,12 @@ public final class ShipBatchRenderer {
         }
 
         final Uniform modelViewUniform = shader.MODEL_VIEW_MATRIX;
+        final Uniform previousModelViewUniform = shader.getUniform("PreviousModelViewMat");
         final Uniform chunkOffsetUniform = shader.CHUNK_OFFSET;
         final boolean translucent = renderType == RenderType.translucent();
+
+        // Motion vectors are collected only while ship geometry is on the wire; see ShipMotionVectors.
+        final boolean motionVectors = ShipMotionVectors.begin();
 
         for (int shipIdx = 0; shipIdx < frameData.size(); shipIdx++) {
             final ShipFrameData data = frameData.get(shipIdx);
@@ -247,7 +255,8 @@ public final class ShipBatchRenderer {
                         continue;
                     }
                     if (!shipTransformSet) {
-                        setShipTransform(data, usingBatchedShader, shipIndexLoc, modelViewUniform);
+                        setShipTransform(data, usingBatchedShader, shipIndexLoc, modelViewUniform,
+                            previousModelViewUniform);
                         shipTransformSet = true;
                     }
                     if (chunkOffsetUniform != null) {
@@ -266,7 +275,8 @@ public final class ShipBatchRenderer {
                 if (buffer == null) {
                     continue;
                 }
-                setShipTransform(data, usingBatchedShader, shipIndexLoc, modelViewUniform);
+                setShipTransform(data, usingBatchedShader, shipIndexLoc, modelViewUniform,
+                    previousModelViewUniform);
                 if (chunkOffsetUniform != null) {
                     chunkOffsetUniform.set(data.opaqueOffsetX, data.opaqueOffsetY, data.opaqueOffsetZ);
                     chunkOffsetUniform.upload();
@@ -274,6 +284,10 @@ public final class ShipBatchRenderer {
                 buffer.bind();
                 buffer.draw();
             }
+        }
+
+        if (motionVectors) {
+            ShipMotionVectors.end();
         }
 
         if (chunkOffsetUniform != null) {
@@ -285,7 +299,8 @@ public final class ShipBatchRenderer {
     }
 
     private static void setShipTransform(final ShipFrameData data, final boolean usingBatchedShader,
-        final int shipIndexLoc, final Uniform modelViewUniform) {
+        final int shipIndexLoc, final Uniform modelViewUniform,
+        final Uniform previousModelViewUniform) {
         if (usingBatchedShader) {
             if (shipIndexLoc >= 0) {
                 GL20.glUniform1i(shipIndexLoc, data.transformIndex);
@@ -293,6 +308,10 @@ public final class ShipBatchRenderer {
         } else if (modelViewUniform != null) {
             modelViewUniform.set(data.modelView);
             modelViewUniform.upload();
+            if (previousModelViewUniform != null) {
+                previousModelViewUniform.set(data.previousModelView);
+                previousModelViewUniform.upload();
+            }
         }
     }
 
@@ -318,6 +337,7 @@ public final class ShipBatchRenderer {
         }
 
         transformStorage.beginFrame();
+        final boolean motionVectors = ShipMotionVectors.getTexture() != 0;
         final Vector3d camScratch = new Vector3d();
         final PoseStack poseStack = levelPoseStack;
         for (int i = 0; i < drawOrder.size(); i++) {
@@ -330,6 +350,9 @@ public final class ShipBatchRenderer {
                 || (frustum != null
                     && !frustum.isVisible(VectorConversionsMCKt.toMinecraft(ship.getRenderAABB())))) {
                 data.visible = false;
+                // Its history stops here: a ship that comes back into the frustum somewhere else
+                // would otherwise smear across everything between the two positions.
+                ShipMotionVectors.forget(ship.getId());
                 continue;
             }
             data.visible = true;
@@ -352,6 +375,22 @@ public final class ShipBatchRenderer {
             data.modelView.set(poseStack.last().pose());
             poseStack.popPose();
 
+            // Where this ship's geometry was a frame ago, seen through *this* frame's camera, so
+            // the motion vector carries the car's own movement and not the player's head. The
+            // trailing offset has to be the current camShip: that is the origin the vertex data is
+            // encoded against, and decoding it against the previous frame's origin would add the
+            // camera's own step back in.
+            if (motionVectors) {
+                previousRenderScratch
+                    .translation(-camX, -camY, -camZ)
+                    .mul(ShipMotionVectors.previousShipToWorld(ship.getId(), transform.getShipToWorld()))
+                    .translate(data.camShipX, data.camShipY, data.camShipZ);
+                previousRenderFloat.set(previousRenderScratch);
+                data.previousModelView.set(poseStack.last().pose()).mul(previousRenderFloat);
+            } else {
+                data.previousModelView.set(data.modelView);
+            }
+
             final int originX = (int) Math.floor(camX);
             final int originY = (int) Math.floor(camY);
             final int originZ = (int) Math.floor(camZ);
@@ -362,7 +401,8 @@ public final class ShipBatchRenderer {
                 .translate(data.camShipX, data.camShipY, data.camShipZ);
             localToCameraRelFloat.set(localToCameraRelScratch);
 
-            data.transformIndex = transformStorage.append(data.modelView, localToCameraRelFloat);
+            data.transformIndex = transformStorage.append(data.modelView, localToCameraRelFloat,
+                data.previousModelView);
 
             final ShipMesh mesh = renderObject.getMesh();
             data.opaqueOffsetX = (float) (mesh.refX - data.camShipX);

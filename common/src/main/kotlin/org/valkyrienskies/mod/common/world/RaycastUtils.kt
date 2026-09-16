@@ -38,6 +38,24 @@ import java.util.function.Predicate
 
 private val logger = LogManager.getLogger("RaycastUtilsKt")
 
+/**
+ * How far past the ray a ship's [Ship.worldAABB] is allowed to have run and still be considered.
+ *
+ * A ship's box and a ship's picture are not in the same frame. [Ship.worldAABB] comes off
+ * [Ship.transform], which on the client is where the ship will be at the *end* of this tick;
+ * the ship is drawn through [ClientShip.renderTransform], which is the previous tick lerped
+ * towards it. So the box the broad phase tests runs ahead of the ship's own picture by up to a
+ * whole tick of travel -- millimetres parked, three blocks at sixty. Aim at the car you can see
+ * and the ray misses the box that stands for it: the ship is skipped entirely, and from the
+ * outside that is indistinguishable from there being nothing there to click on.
+ *
+ * So the broad phase is asked wide and the narrow phase is asked exactly. Eight blocks is one
+ * tick of travel at 160 m/s, which is past anything a hand can reach anyway; the cost of being
+ * generous here is a handful of extra candidates, each of which is then tested against the box
+ * the ship is really drawn in.
+ */
+private const val BROAD_PHASE_SLACK = 8.0
+
 @JvmOverloads
 fun Level.clipIncludeShips(
     ctx: ClipContext, shouldTransformHitPos: Boolean = true, skipShip: ShipId? = null, skipWorld: Boolean = false
@@ -64,10 +82,14 @@ fun Level.clipIncludeShips(
 
     // Iterate every ship, find do the raycast in ship space,
     // choose the raycast with the lowest distance to the start position.
-    for (ship in getShipsIntersecting(clipAABB)) {
+    for (ship in getShipsIntersecting(AABBd(clipAABB).expand(BROAD_PHASE_SLACK))) {
         val chopParam = Vector2d()
+        // The box the ship is *drawn* in, which is the one the player aimed at. See
+        // [BROAD_PHASE_SLACK]: taking `worldAABB` here chops the ray against a box up to a tick
+        // of travel away from the ship it stands for, and then rejects it.
+        val shipAABB = (ship as? ClientShip)?.renderAABB ?: ship.worldAABB
         // Pad AABB size to increase raycast tolerance
-        val expandedAABB = AABBd(ship.worldAABB).expand(1.0)
+        val expandedAABB = AABBd(shipAABB).expand(1.0)
         val intersectType = expandedAABB.intersectsLineSegment(clipSegment, chopParam);
         if (intersectType == Intersectionf.OUTSIDE) {
             continue
@@ -265,9 +287,13 @@ fun Level.raytraceEntities(
     val start = Vector3d()
     val end = Vector3d()
 
-    getShipsIntersecting(origBoundingBoxM.toJOML()).forEach {
-        it.worldToShip.transformPosition(origStartVec, start)
-        it.worldToShip.transformPosition(origEndVec, end)
+    // The frame the ship is *drawn* in on the client, for the reason [BROAD_PHASE_SLACK] gives:
+    // an entity standing on a ship is drawn where the ship is drawn, and a ray put through the
+    // tick transform instead misses it by however far the ship travels in a tick.
+    getShipsIntersecting(AABBd(origBoundingBoxM.toJOML()).expand(BROAD_PHASE_SLACK)).forEach {
+        val worldToShip = (it as? ClientShip)?.renderTransform?.worldToShip ?: it.worldToShip
+        worldToShip.transformPosition(origStartVec, start)
+        worldToShip.transformPosition(origEndVec, end)
 
         val scale = 1.0 / it.transform.shipToWorldScaling.x()
 
@@ -307,7 +333,8 @@ fun Level.raytraceEntitiesInflated(
             val worldClip = if (ship == null) {
                 localClip
             } else {
-                ship.transform.shipToWorld.transformPosition(localClip.toJOML()).toMinecraft()
+                val shipToWorld = (ship as? ClientShip)?.renderTransform?.shipToWorld ?: ship.shipToWorld
+                shipToWorld.transformPosition(localClip.toJOML()).toMinecraft()
             }
 
             val d = origStartVecM.distanceToSqr(worldClip)
@@ -327,9 +354,10 @@ fun Level.raytraceEntitiesInflated(
     val shipStart = Vector3d()
     val shipEnd = Vector3d()
 
-    getShipsIntersecting(origBoundingBoxM.toJOML()).forEach { ship ->
-        ship.worldToShip.transformPosition(startJoml, shipStart)
-        ship.worldToShip.transformPosition(endJoml, shipEnd)
+    getShipsIntersecting(AABBd(origBoundingBoxM.toJOML()).expand(BROAD_PHASE_SLACK)).forEach { ship ->
+        val worldToShip = (ship as? ClientShip)?.renderTransform?.worldToShip ?: ship.worldToShip
+        worldToShip.transformPosition(startJoml, shipStart)
+        worldToShip.transformPosition(endJoml, shipEnd)
         checkEntities(entities, shipStart.toMinecraft(), shipEnd.toMinecraft(), ship)
     }
 

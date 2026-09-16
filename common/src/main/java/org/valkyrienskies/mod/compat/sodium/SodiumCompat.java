@@ -44,6 +44,7 @@ import org.valkyrienskies.core.api.ships.properties.ShipTransform;
 import org.valkyrienskies.mod.common.config.ShipRendererKt;
 import org.valkyrienskies.mod.common.config.VSGameConfig;
 import org.valkyrienskies.mod.common.render.batched.ShipBatchRenderer;
+import org.valkyrienskies.mod.common.render.batched.ShipMotionVectors;
 import org.valkyrienskies.mod.common.render.light.VsDynamicLight;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 import org.valkyrienskies.mod.common.hooks.VSGameEvents;
@@ -113,6 +114,16 @@ public class SodiumCompat {
      */
     static final int FEATURE_SEAM_PRECOMP = 4096;
     /**
+     * Emit screen-space motion vectors into a second colour attachment; see {@link ShipMotionVectors}.
+     *
+     * <p>Unlike the others this is not a config flag, and unlike the others it forces the VS ship
+     * program on by itself: sodium's stock chunk shader cannot produce a motion vector, so without
+     * the swap there is nothing to blur. The mesher gates have to include it for that reason -- the
+     * ship program reads VS's flags out of the vertex alpha, and a shipyard chunk meshed without
+     * them and drawn with the ship program comes out as full-AO water.
+     */
+    static final int FEATURE_MOTION_VECTORS = 8192;
+    /**
      * -Pvs.aoprof=N: make the per-fragment seam AO return early at stage N, so its cost can be
      * bisected in a running client. 0 (or unset) is the normal shader. Constant for the process, so
      * it needs no place in the shader cache key.
@@ -162,6 +173,7 @@ public class SodiumCompat {
     static Map<ShaderCacheKey, GlProgram<ShipThing>> cachedPrograms = new HashMap<>();
     private static final ThreadLocal<Matrix4f> CURRENT_TRANSFORM = new ThreadLocal<>();
     private static final ThreadLocal<Matrix4f> CURRENT_LOCAL_TO_WORLD = new ThreadLocal<>();
+    private static final ThreadLocal<Matrix4f> CURRENT_PREVIOUS_MODEL_VIEW = new ThreadLocal<>();
     private static final ThreadLocal<int[]> CURRENT_RENDER_ORIGIN = new ThreadLocal<>();
     /** Per-frame occluder-list index of the ship currently being drawn; -1 when drawing anything else. */
     private static final ThreadLocal<Integer> CURRENT_SELF_SHIP_INDEX = ThreadLocal.withInitial(() -> -1);
@@ -344,6 +356,9 @@ public class SodiumCompat {
         if (VSGameConfig.CLIENT.getDynamicShipToWorldLighting() && VsDynamicLight.isGpuFloodActive()) {
             bits |= FEATURE_FLOOD_GRID;
         }
+        if (ShipMotionVectors.isEnabled()) {
+            bits |= FEATURE_MOTION_VECTORS;
+        }
         return bits;
     }
 
@@ -370,6 +385,10 @@ public class SodiumCompat {
         // look up world-space block/sky lighting.
         Matrix4f localToWorld = CURRENT_LOCAL_TO_WORLD.get();
         shipInterface.setLocalToWorldMatrix(localToWorld != null ? localToWorld : new Matrix4f().identity());
+        // Falls back to this frame's own model-view, which is exactly "the ship did not move" --
+        // the one wrong answer that cannot smear anything.
+        Matrix4f previousModelView = CURRENT_PREVIOUS_MODEL_VIEW.get();
+        shipInterface.setPreviousModelView(previousModelView != null ? previousModelView : matrices.modelView());
         int[] origin = CURRENT_RENDER_ORIGIN.get();
         if (origin != null) {
             shipInterface.setRenderOrigin(origin[0], origin[1], origin[2]);
@@ -422,6 +441,10 @@ public class SodiumCompat {
 
     public static void pushLocalToWorld(Matrix4f m) {
         CURRENT_LOCAL_TO_WORLD.set(m);
+    }
+
+    static void pushPreviousModelView(Matrix4f m) {
+        CURRENT_PREVIOUS_MODEL_VIEW.set(m);
     }
 
     public static void pushSelfShipIndex(final int index) {
@@ -610,11 +633,22 @@ public class SodiumCompat {
         Vector3d cameraShipSpaceScratch = new Vector3d();
 
         Matrix4d newModelViewScratch = new Matrix4d();
+        Matrix4d previousModelViewScratch = new Matrix4d();
         Matrix4d localToCameraRelScratch = new Matrix4d();
 
         Matrix4f modelViewScratch = new Matrix4f();
+        Matrix4f previousModelViewFloat = new Matrix4f();
         Matrix4f transformScratch = new Matrix4f();
         Matrix4f localToWorldScratch = new Matrix4f();
+
+        // Scoped around every ship draw of this pass rather than each one, so the attachment is
+        // hung on the framebuffer once. Nothing between the ships draws anything.
+        // Only when VS's own ship program will actually be bound. Under a shader pack the mixin
+        // that swaps it in stands down, so the geometry below is drawn by shaders that know
+        // nothing about a second attachment -- and a shader that does not write an output for
+        // which a draw buffer is bound leaves undefined values in it.
+        final boolean motionVectors = !(LoadedMods.getIris() && IrisCompat.isIrisShaderActive())
+            && ShipMotionVectors.begin();
 
         for (int i = 0; i < renderableShips.size(); i++) {
             final ClientShip ship = renderableShips.get(i);
@@ -639,6 +673,19 @@ public class SodiumCompat {
                 .mul(s)
                 .translate(cameraShipSpaceScratch);
             modelViewScratch.set(newModelViewScratch);
+
+            if (motionVectors) {
+                // Where the ship was a frame ago, through this frame's camera and with this frame's
+                // ship-space camera offset -- that offset is the origin the vertices are encoded
+                // against, so using the previous frame's would fold the camera's own step back in.
+                previousModelViewScratch
+                    .set(matrices.modelView())
+                    .translate(-x, -y, -z)
+                    .mul(ShipMotionVectors.previousShipToWorld(ship.getId(), s))
+                    .translate(cameraShipSpaceScratch);
+                previousModelViewFloat.set(previousModelViewScratch);
+                pushPreviousModelView(previousModelViewFloat);
+            }
 
             // Build a precision-friendly matrix that maps a sodium-chunk-local vertex
             // pos to (worldPos - renderOrigin), where renderOrigin is the integer
@@ -712,6 +759,10 @@ public class SodiumCompat {
             }
 
             VSGameEvents.INSTANCE.getPostRenderShipSodium().emit(new ShipRenderEventSodium(pass, matrices, x, y, z, ship, renderList));
+        }
+
+        if (motionVectors) {
+            ShipMotionVectors.end();
         }
     }
 
@@ -927,6 +978,7 @@ public class SodiumCompat {
         if ((features & FEATURE_SHIP_AO) != 0) builder.add("VS_SHIP_AO");
         if ((features & FEATURE_SEAM_NO_MERGE) != 0) builder.add("VS_SEAM_NO_MERGE");
         if ((features & FEATURE_SEAM_PRECOMP) != 0) builder.add("VS_SEAM_PRECOMP");
+        if ((features & FEATURE_MOTION_VECTORS) != 0) builder.add("VS_MOTION_VECTORS");
         if ((features & FEATURE_DEBUG_SEAM_AO) != 0) builder.add("VS_DEBUG_SEAM_AO");
         if (AO_PROF != 0) builder.add("VS_AOPROF", Integer.toString(AO_PROF));
         if (AO_CUT != 0) builder.add("VS_AOCUT", Integer.toString(AO_CUT));
@@ -960,15 +1012,19 @@ public class SodiumCompat {
                 new ResourceLocation("valkyrienskies", path + ".fsh"), constants);
 
         try {
-            return GlProgram.builder(new ResourceLocation("valkyrienskies", "chunk_shader"))
+            final GlProgram.Builder builder =
+                    GlProgram.builder(new ResourceLocation("valkyrienskies", "chunk_shader"))
                     .attachShader(vertShader)
                     .attachShader(fragShader)
                     .bindAttribute("a_Position", ChunkShaderBindingPoints.ATTRIBUTE_POSITION)
                     .bindAttribute("a_Color", ChunkShaderBindingPoints.ATTRIBUTE_COLOR)
                     .bindAttribute("a_TexCoord", ChunkShaderBindingPoints.ATTRIBUTE_TEXTURE)
                     .bindAttribute("a_LightAndData", ChunkShaderBindingPoints.ATTRIBUTE_LIGHT_MATERIAL_INDEX)
-                    .bindFragmentData("fragColor", ChunkShaderBindingPoints.FRAG_COLOR)
-                    .link((shader) -> new ShipThing(shader, options, features));
+                    .bindFragmentData("fragColor", ChunkShaderBindingPoints.FRAG_COLOR);
+            if ((features & FEATURE_MOTION_VECTORS) != 0) {
+                builder.bindFragmentData("vsMotion", 1);
+            }
+            return builder.link((shader) -> new ShipThing(shader, options, features));
         } finally {
             vertShader.delete();
             fragShader.delete();

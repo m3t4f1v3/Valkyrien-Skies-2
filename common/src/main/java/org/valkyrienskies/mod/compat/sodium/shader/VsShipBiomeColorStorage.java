@@ -254,6 +254,14 @@ public class VsShipBiomeColorStorage {
         if (sectionsBuffer == 0) {
             sectionsBuffer = GL15.glGenBuffers();
             GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, sectionsBuffer);
+            // And a data store, not merely a name. glTexBuffer against a buffer that has
+            // never seen glBufferData leaves the texture incomplete, and every draw that
+            // samples it is GL_INVALID_OPERATION -- "The required buffer is missing", which
+            // is what a client sitting in a world with no ships in it used to report on
+            // every frame. One zeroed texel is enough to make it legal; the shaders early
+            // out on the count uniforms long before they read anything here.
+            GL15.glBufferData(GL31.GL_TEXTURE_BUFFER, new float[] {0f, 0f, 0f, 0f},
+                    GL15.GL_DYNAMIC_DRAW);
             GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, 0);
         }
         if (sectionsTexture == 0) {
@@ -262,6 +270,14 @@ public class VsShipBiomeColorStorage {
             // name is first bound, and glTexBuffer against a name that is not yet a buffer object
             // raises GL_INVALID_OPERATION. Bind once here so the association below is valid.
             GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, sectionsBuffer);
+            // And a data store, not merely a name. glTexBuffer against a buffer that has
+            // never seen glBufferData leaves the texture incomplete, and every draw that
+            // samples it is GL_INVALID_OPERATION -- "The required buffer is missing", which
+            // is what a client sitting in a world with no ships in it used to report on
+            // every frame. One zeroed texel is enough to make it legal; the shaders early
+            // out on the count uniforms long before they read anything here.
+            GL15.glBufferData(GL31.GL_TEXTURE_BUFFER, new float[] {0f, 0f, 0f, 0f},
+                    GL15.GL_DYNAMIC_DRAW);
             GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, 0);
             GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, sectionsTexture);
             GL31.glTexBuffer(GL31.GL_TEXTURE_BUFFER, GL30RUI(), sectionsBuffer);
@@ -270,6 +286,14 @@ public class VsShipBiomeColorStorage {
         if (lutBuffer == 0) {
             lutBuffer = GL15.glGenBuffers();
             GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, lutBuffer);
+            // And a data store, not merely a name. glTexBuffer against a buffer that has
+            // never seen glBufferData leaves the texture incomplete, and every draw that
+            // samples it is GL_INVALID_OPERATION -- "The required buffer is missing", which
+            // is what a client sitting in a world with no ships in it used to report on
+            // every frame. One zeroed texel is enough to make it legal; the shaders early
+            // out on the count uniforms long before they read anything here.
+            GL15.glBufferData(GL31.GL_TEXTURE_BUFFER, new float[] {0f, 0f, 0f, 0f},
+                    GL15.GL_DYNAMIC_DRAW);
             GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, 0);
         }
         if (lutTexture == 0) {
@@ -278,6 +302,14 @@ public class VsShipBiomeColorStorage {
             // name is first bound, and glTexBuffer against a name that is not yet a buffer object
             // raises GL_INVALID_OPERATION. Bind once here so the association below is valid.
             GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, lutBuffer);
+            // And a data store, not merely a name. glTexBuffer against a buffer that has
+            // never seen glBufferData leaves the texture incomplete, and every draw that
+            // samples it is GL_INVALID_OPERATION -- "The required buffer is missing", which
+            // is what a client sitting in a world with no ships in it used to report on
+            // every frame. One zeroed texel is enough to make it legal; the shaders early
+            // out on the count uniforms long before they read anything here.
+            GL15.glBufferData(GL31.GL_TEXTURE_BUFFER, new float[] {0f, 0f, 0f, 0f},
+                    GL15.GL_DYNAMIC_DRAW);
             GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, 0);
             GL11.glBindTexture(GL31.GL_TEXTURE_BUFFER, lutTexture);
             GL31.glTexBuffer(GL31.GL_TEXTURE_BUFFER, GL30RUI(), lutBuffer);

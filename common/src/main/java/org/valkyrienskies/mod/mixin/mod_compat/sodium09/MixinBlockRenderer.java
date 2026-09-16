@@ -14,6 +14,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.valkyrienskies.mod.common.config.VSGameConfig;
+import org.valkyrienskies.mod.common.render.batched.ShipMotionVectors;
 import org.valkyrienskies.mod.compat.LoadedMods;
 import org.valkyrienskies.mod.compat.iris.IrisCompat;
 import org.valkyrienskies.mod.compat.sodium.shader.VsVertexFlagPacker;
@@ -50,9 +51,14 @@ public abstract class MixinBlockRenderer {
                 + "push([Lnet/caffeinemc/mods/sodium/client/render/chunk/vertex/format/ChunkVertexEncoder$Vertex;I)V"))
     private void vs$packVertexFlags(final MutableQuadViewImpl quad, final float[] brightnesses,
         final Material material, final CallbackInfo ci) {
+        // Motion vectors belong in this list even though they need nothing from the vertex format:
+        // they force VS's ship program on by themselves, and that program decodes its flags out of
+        // the vertex alpha. Packed here and read there, or neither -- a shipyard chunk meshed
+        // without them and drawn with the ship program comes out as full-AO water.
         final boolean anyShipFeature = VSGameConfig.CLIENT.getDynamicShipBiomeTinting()
             || VSGameConfig.CLIENT.getDynamicShipLighting()
-            || VSGameConfig.CLIENT.getBetterVanillaShipShading();
+            || VSGameConfig.CLIENT.getBetterVanillaShipShading()
+            || ShipMotionVectors.isEnabled();
         final boolean worldFromShip = VSGameConfig.CLIENT.getDynamicShipToWorldLighting();
         if (!anyShipFeature && !worldFromShip) {
             return;

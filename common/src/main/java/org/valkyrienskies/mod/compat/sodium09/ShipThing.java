@@ -31,6 +31,8 @@ public class ShipThing extends DefaultShaderInterface {
     // Local-to-camera-relative matrix; only needed when the VSH emits world position for lighting/AO or
     // samples world biome (uses worldPosVertex).
     private final GlUniformMatrix4f uniformLocalToCameraRel;
+    /** Where the ship was a frame ago, for the motion vectors; null unless that feature is on. */
+    private final GlUniformMatrix4f uniformPreviousModelView;
     // Integer camera origin; same conditions as u_LocalToCameraRel.
     private final GlUniformInt3v uniformRenderOrigin;
     // World-light buffer textures; only when VS_DYNAMIC_LIGHT.
@@ -79,6 +81,8 @@ public class ShipThing extends DefaultShaderInterface {
             ? context.bindUniform("u_TransformMatrix", GlUniformMatrix4f::new) : null;
         this.uniformLocalToCameraRel = needsLocalToCameraRel
             ? context.bindUniform("u_LocalToCameraRel", GlUniformMatrix4f::new) : null;
+        this.uniformPreviousModelView = (features & SodiumCompat.FEATURE_MOTION_VECTORS) != 0
+            ? context.bindUniform("u_VsPreviousModelView", GlUniformMatrix4f::new) : null;
         this.uniformRenderOrigin = needsLocalToCameraRel
             ? context.bindUniform("u_VsRenderOrigin", GlUniformInt3v::new) : null;
 
@@ -135,6 +139,12 @@ public class ShipThing extends DefaultShaderInterface {
     public void setLocalToWorldMatrix(final Matrix4fc matrix) {
         if (this.uniformLocalToCameraRel != null) {
             this.uniformLocalToCameraRel.set(matrix);
+        }
+    }
+
+    public void setPreviousModelView(final Matrix4fc matrix) {
+        if (this.uniformPreviousModelView != null) {
+            this.uniformPreviousModelView.set(matrix);
         }
     }
 

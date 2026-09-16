@@ -22,6 +22,7 @@ uniform vec3 u_VsCameraFrac;
 out float vertexDistance;
 out vec4 vertexColor;
 out vec2 texCoord0;
+noperspective out vec2 v_VsMotion;
 
 out vec3 v_CameraRelWorldPos;   // worldPos - floor(camera); + u_VsRenderOrigin == abs world pos
 flat out vec3 v_WorldNormal;    // tilt-correct world-space face normal
@@ -29,7 +30,7 @@ out vec2 v_BakedLightCoord;     // ship-internal baked lightmap UV (from UV2)
 flat out float v_Fullbright;    // 1.0 if the quad was baked emissive (UV2 == FULL_BRIGHT)
 
 mat4 vs_shipModelView() {
-    int b = ShipIndex * 8;
+    int b = ShipIndex * 12;
     return mat4(
         texelFetch(ShipTransforms, b + 0),
         texelFetch(ShipTransforms, b + 1),
@@ -38,7 +39,16 @@ mat4 vs_shipModelView() {
 }
 
 mat4 vs_shipLocalToCameraRel() {
-    int b = ShipIndex * 8 + 4;
+    int b = ShipIndex * 12 + 4;
+    return mat4(
+        texelFetch(ShipTransforms, b + 0),
+        texelFetch(ShipTransforms, b + 1),
+        texelFetch(ShipTransforms, b + 2),
+        texelFetch(ShipTransforms, b + 3));
+}
+
+mat4 vs_shipPreviousModelView() {
+    int b = ShipIndex * 12 + 8;
     return mat4(
         texelFetch(ShipTransforms, b + 0),
         texelFetch(ShipTransforms, b + 1),
@@ -49,7 +59,18 @@ mat4 vs_shipLocalToCameraRel() {
 void main() {
     mat4 modelView = vs_shipModelView();
     vec3 pos = Position + ChunkOffset;
-    gl_Position = ProjMat * modelView * vec4(pos, 1.0);
+    vec4 currentClip = ProjMat * modelView * vec4(pos, 1.0);
+    vec4 previousClip = ProjMat * vs_shipPreviousModelView() * vec4(pos, 1.0);
+    gl_Position = currentClip;
+    // A vertex the camera has moved past divides by a w on its way through zero and comes back
+    // as an enormous vector -- one pixel of it is enough, because a consumer looking for the
+    // longest vector on the frame finds that one. 0.05 is Minecraft's near plane and w here is
+    // view-space depth in blocks, so this is exactly "was it in front of the camera last
+    // frame"; a small epsilon is not, and let a corner of a car that swept past the third-person
+    // camera report a vector a fifth of the screen long.
+    v_VsMotion = previousClip.w > 0.05
+        ? currentClip.xy / currentClip.w - previousClip.xy / previousClip.w
+        : vec2(0.0);
 
     vertexDistance = fog_distance(modelView, pos, FogShape);
     texCoord0 = UV0;

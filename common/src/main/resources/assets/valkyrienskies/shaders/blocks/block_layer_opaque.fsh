@@ -194,6 +194,13 @@ float vsf_floodTrilinear(vec3 worldPos) {
 #endif // VS_FLOOD_GRID
 
 out vec4 fragColor;
+#ifdef VS_MOTION_VECTORS
+// Screen-space motion vectors for this ship, into a second colour attachment bound around the ship
+// pass only (see ShipMotionVectors). .b marks the fragment as ship and .a is its depth, which is
+// what lets the consumer notice that something nearer has been drawn over it since.
+out vec4 vsMotion;
+noperspective in vec2 v_VsMotion;
+#endif
 
 #define MINECRAFT_LIGHT_X (0.6)
 #define MINECRAFT_LIGHT_Z (0.8)
@@ -1412,5 +1419,9 @@ void main() {
                          0.20, 1.0) + fragColor * 1.0e-4;
 #endif
     }
+#endif
+
+#ifdef VS_MOTION_VECTORS
+    vsMotion = vec4(v_VsMotion, 1.0, gl_FragCoord.z);
 #endif
 }
